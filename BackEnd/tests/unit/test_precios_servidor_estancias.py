@@ -86,6 +86,8 @@ def checkin(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     monkeypatch.setattr(m, "registro_update_total", AsyncMock())
     monkeypatch.setattr(m, "change_registro_estado", mocks["activar"])
     monkeypatch.setattr(m.manager, "broadcast", AsyncMock())
+    # A17: el check-in emite el código del portal de padres (fuera de este test).
+    monkeypatch.setattr(m, "emitir_codigo_acceso", AsyncMock(return_value="codigo-prueba"))
     return mocks
 
 
