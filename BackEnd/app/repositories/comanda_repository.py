@@ -172,6 +172,28 @@ async def crear_comanda_con_detalles(
     return comanda
 
 
+_SELECT_ESTADO = """
+    SELECT id, estado_actual, activo, sucursal_id
+    FROM public.comandas
+    WHERE id = $1
+"""
+
+
+async def get_estado_comanda(conn: asyncpg.Connection, comanda_id: str) -> dict[str, Any] | None:
+    """Estado y bandera activo de la comanda, sin bloquearla."""
+    row = await conn.fetchrow(_SELECT_ESTADO, uuid.UUID(comanda_id))
+    return dict(row) if row else None
+
+
+async def bloquear_comanda(conn: asyncpg.Connection, comanda_id: str) -> dict[str, Any] | None:
+    """Como get_estado_comanda, pero con la fila bloqueada (FOR UPDATE) hasta
+    el fin de la transacción en curso (el llamador DEBE estar dentro de
+    `conn.transaction()`). Serializa los cambios de estado: dos cancelaciones
+    simultáneas no pueden revertir el stock dos veces (A2)."""
+    row = await conn.fetchrow(_SELECT_ESTADO + " FOR UPDATE", uuid.UUID(comanda_id))
+    return dict(row) if row else None
+
+
 async def actualizar_estado_comanda(
     conn: asyncpg.Connection,
     comanda_id: str,
@@ -240,6 +262,12 @@ async def modificar_comanda_parcial(
     uid = uuid.UUID(usuario_id) if usuario_id else None
 
     async with conn.transaction():
+        # Bajo el bloqueo de la fila, igual que los cambios de estado: una
+        # cancelación simultánea no puede leer detalles que se están borrando.
+        fila = await bloquear_comanda(conn, comanda_id)
+        if fila is None or fila["estado_actual"] != "P" or not fila["activo"]:
+            return None
+
         # 1) Eliminar físicamente los detalles seleccionados
         ids_validos: list[uuid.UUID] = []
         for detalle_id in detalles_a_eliminar:
@@ -381,6 +409,7 @@ async def get_comandas_pendientes(
         LEFT JOIN public.detalles_comanda dc ON dc.comanda_id = c.id
         LEFT JOIN public.productos p ON p.id = dc.producto_id
         WHERE c.estado_actual IN ('P', 'E', 'L')
+          AND c.activo = TRUE
         {filtro_sucursal}
         ORDER BY c.fecha_hora ASC
         """,

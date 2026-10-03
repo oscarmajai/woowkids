@@ -46,6 +46,13 @@ class ComandaCreate(BaseModel):
     mesa: str | None = Field(default=None, max_length=20)
 
 
+# PATCH /comandas/{id}/estado. A2: estado_actual es el enum, así que un valor
+# fuera de P/E/L/T/C ("X", "") es 422 antes de llegar al service.
+class CambioEstadoRequest(BaseModel):
+    estado_actual: EstadoComanda
+    motivo_cancelacion: str | None = None
+
+
 # Esquema para cancelación parcial (eliminar productos de una comanda Pendiente)
 class ComandaModifyRequest(BaseModel):
     detalles_ids_a_eliminar: list[str] = Field(..., min_length=1)
