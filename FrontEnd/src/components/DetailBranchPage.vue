@@ -18,7 +18,7 @@ import { cajaAdminService } from '@/services/cajaAdminService'
 import { horarioService } from '@/services/horarioService'
 import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
-import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
+import { fechaEnZona, primerDiaDelMesEnZona, rangoFechasInvertido } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
 import type { Branch, IndicadoresSucursal } from '@/types/branch'
@@ -55,9 +55,17 @@ const indicadores = ref<IndicadoresSucursal | null>(null)
 const indicadoresCargando = ref(false)
 const indicadoresError = ref('')
 const exportando = ref(false)
+// B1: con el rango invertido el backend responde 422; no se pide ni se exporta.
+const rangoInvertido = computed(() => rangoFechasInvertido(periodoDesde.value, periodoHasta.value))
+const MENSAJE_RANGO_INVERTIDO = 'La fecha «Desde» no puede ser posterior a «Hasta».'
 
 async function cargarIndicadores() {
   if (!id.value) return
+  if (rangoInvertido.value) {
+    indicadores.value = null
+    indicadoresError.value = MENSAJE_RANGO_INVERTIDO
+    return
+  }
   indicadoresCargando.value = true
   indicadoresError.value = ''
   try {
@@ -74,7 +82,7 @@ async function cargarIndicadores() {
 }
 
 async function exportarIndicadores() {
-  if (!id.value) return
+  if (!id.value || rangoInvertido.value) return
   exportando.value = true
   try {
     await branchService.exportarIndicadores(id.value, periodoDesde.value, periodoHasta.value)
@@ -339,6 +347,8 @@ const horariosColumns: QTableColumn[] = [
                   outlined
                   type="date"
                   label="Hasta"
+                  :error="rangoInvertido"
+                  hide-bottom-space
                   @update:model-value="cargarIndicadores"
                 />
                 <q-btn
@@ -346,6 +356,7 @@ const horariosColumns: QTableColumn[] = [
                   icon="download"
                   label="Exportar"
                   :loading="exportando"
+                  :disable="rangoInvertido"
                   @click="exportarIndicadores"
                 />
               </div>

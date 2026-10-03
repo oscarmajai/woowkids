@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
+import { fechaEnZona, primerDiaDelMesEnZona, rangoFechasInvertido } from '@/utils/fechaZona'
 
 // 3 oct 2026 a las 19:00 en Ciudad de México (UTC-6) = 4 oct 01:00 UTC.
 const NOCHE_MX = new Date('2026-10-04T01:00:00Z')
@@ -26,5 +26,18 @@ describe('primerDiaDelMesEnZona', () => {
     const momento = new Date('2026-11-01T00:30:00Z')
     expect(primerDiaDelMesEnZona('America/Mexico_City', momento)).toBe('2026-10-01')
     expect(primerDiaDelMesEnZona('UTC', momento)).toBe('2026-11-01')
+  })
+})
+
+describe('rangoFechasInvertido (B1)', () => {
+  it('detecta desde posterior a hasta', () => {
+    expect(rangoFechasInvertido('2026-10-31', '2026-10-01')).toBe(true)
+  })
+
+  it('acepta el mismo día, un rango normal o fechas vacías', () => {
+    expect(rangoFechasInvertido('2026-10-01', '2026-10-01')).toBe(false)
+    expect(rangoFechasInvertido('2026-10-01', '2026-10-31')).toBe(false)
+    expect(rangoFechasInvertido('', '2026-10-01')).toBe(false)
+    expect(rangoFechasInvertido('2026-10-01', null)).toBe(false)
   })
 })
