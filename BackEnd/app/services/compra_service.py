@@ -316,6 +316,13 @@ async def recibir(
         # Se valida TODA la recepción antes de mover stock: una línea inválida
         # no deja aplicadas a medias las anteriores.
         a_recibir = cantidades_a_recibir(detalles, lineas)
+        # N3: bloquear de una vez los insumos a mover, en orden de id. Antes el
+        # bloqueo lo tomaba cada UPDATE de stock en el orden de las líneas (por
+        # nombre del insumo) y dos recepciones con los mismos insumos podían
+        # bloquearlos en orden distinto y trabarse (deadlock).
+        await insumo_repository.bloquear_por_ids(
+            conn, [d["insumo_id"] for d in detalles if d["id"] in a_recibir]
+        )
         for detalle in detalles:
             recibir_ahora = a_recibir.get(detalle["id"])
             if recibir_ahora is None:
