@@ -21,6 +21,7 @@ from app.schemas.registros import DetalleIn, OnboardingRequest
 from app.schemas.tutores import TutorIn
 from app.services import estancias, pagos_estancia
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 SUCURSAL = uuid4()
 EFECTIVO = uuid4()
@@ -186,3 +187,17 @@ async def test_n4_si_falla_una_subida_borra_las_anteriores(checkin: dict[str, An
         await _registrar(_onboarding())
     primera = checkin["upload"].await_args_list[0].args[0]
     checkin["delete"].assert_awaited_once_with([primera])
+
+
+# --- N6 ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("horas", [0, -1])
+def test_n6_el_checkin_no_acepta_cero_horas(horas: int) -> None:
+    with pytest.raises(ValidationError):
+        DetalleIn(nino=NinoIn(nombreCompleto="Leo", edad=5), cantidad=horas, pulseraId=uuid4())
+
+
+def test_n6_una_hora_es_valida() -> None:
+    detalle = DetalleIn(nino=NinoIn(nombreCompleto="Leo", edad=5), cantidad=1, pulseraId=uuid4())
+    assert detalle.cantidad == 1

@@ -14,7 +14,9 @@ from app.schemas.tutores import TutorIn
 class DetalleIn(BaseModel):
     nino: NinoIn
     productoId: UUID | None = None  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
-    cantidad: int = Field(default=0, ge=0)
+    # N6: horas contratadas; con 0 se registraba una estancia de 0 h (y $0).
+    # En modo evento el servidor toma las horas del evento y la ignora.
+    cantidad: int = Field(default=1, ge=1)
     pulseraId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
 
 
