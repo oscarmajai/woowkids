@@ -34,7 +34,7 @@ from app.core.scope import sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
 from app.schemas.comanda import ComandaCreate, ComandaModifyRequest
-from app.services import comanda_service
+from app.services import alcance_service, comanda_service
 from app.services.permission_service import has_permission
 
 logger = logging.getLogger("mercury.ws")
@@ -107,6 +107,7 @@ async def cambiar_estado(
     ),
 ) -> Any:
     """Actualiza el estado de una comanda con auditoría."""
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     try:
         comanda = await comanda_service.cambiar_estado(
             conn,
@@ -149,6 +150,7 @@ async def modificar_detalles(
     Si se eliminan todos los productos, cancela automáticamente la comanda
     y requiere motivo_cancelacion en el body.
     """
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     usuario_id = str(UUID(current_user.sub))
     try:
         comanda = await comanda_service.modificar_comanda_parcial(

@@ -19,7 +19,7 @@ import asyncpg
 from app.core.scope import asegurar_misma_sucursal, es_sistema
 from app.exceptions import NoEncontrado
 from app.repositories import alcance_repository
-from app.repositories.alcance_repository import TipoRecurso
+from app.repositories.alcance_repository import TipoRecurso as TipoRecurso
 from app.schemas.auth import TokenData
 
 NOMBRE_RECURSO: dict[str, str] = {
