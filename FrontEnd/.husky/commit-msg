@@ -1,2 +1,8 @@
 # Conventional Commits para todo el monorepo (config en FrontEnd/commitlint.config.js).
-cd FrontEnd && npx --no-install commitlint --edit "../$1"
+# Git pasa la ruta del mensaje relativa a la raíz; commitlint la resolvería
+# contra otro directorio, así que se pasa absoluta.
+case "$1" in
+  /*) mensaje="$1" ;;
+  *) mensaje="$(pwd)/$1" ;;
+esac
+cd FrontEnd && npx --no-install commitlint --edit "$mensaje"
