@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { postOnboarding, type OnboardingDetalle, type OnboardingPago } from '@/api/onboardingClient'
+import {
+  fetchEstadoPulsera,
+  postOnboarding,
+  type OnboardingDetalle,
+  type OnboardingPago,
+} from '@/api/onboardingClient'
 import { productosApi } from '@/api/productosApi'
 import { useAuthStore } from '@/stores/auth'
 import { useAccessControlStore } from '@/stores/accessControl'
@@ -41,6 +46,8 @@ const HOUR_OPTIONS: Record<string, number> = {
 }
 
 export type RegistrationStep = 'form' | 'rfid' | 'complete'
+
+export type ResultadoPulsera = { ok: true; pulseraId: string } | { ok: false; mensaje: string }
 export type RegistrationMode = 'normal' | 'evento'
 
 export const useRegistrationStore = defineStore('registration', () => {
@@ -260,6 +267,80 @@ export const useRegistrationStore = defineStore('registration', () => {
     return pulseras.value.filter(
       (p) => !usedBracelets.value.includes(p.id) || p.id === child?.rfidBracelet,
     )
+  }
+
+  function pulseraAsignadaAOtroNino(childId: string, pulseraId: string): boolean {
+    return savedChildren.value.some((c) => c.id !== childId && c.rfidBracelet === pulseraId)
+  }
+
+  /**
+   * Valida una pulsera escaneada para un niño (B14). Si no está entre las
+   * libres que tiene la página, se consulta al servidor para distinguir una
+   * pulsera inexistente de una ya asignada a otro niño o desactivada.
+   */
+  async function validarPulseraEscaneada(
+    childId: string,
+    rfidEscaneado: string,
+  ): Promise<ResultadoPulsera> {
+    const rfid = rfidEscaneado.trim()
+    const local = pulseras.value.find((p) => p.pulseraRfid === rfid)
+    if (local) {
+      if (pulseraAsignadaAOtroNino(childId, local.id)) {
+        return {
+          ok: false,
+          mensaje: `La pulsera "${rfid}" ya está asignada a otro niño de este registro.`,
+        }
+      }
+      return { ok: true, pulseraId: local.id }
+    }
+
+    if (!authStore.currentBranchId) {
+      return { ok: false, mensaje: 'No hay una sucursal activa en la sesión.' }
+    }
+
+    try {
+      const pulsera = await fetchEstadoPulsera(authStore.currentBranchId, rfid)
+      if (pulsera.estado === 'usada') {
+        return { ok: false, mensaje: `La pulsera "${rfid}" ya está asignada a otro niño.` }
+      }
+      if (pulsera.estado === 'inactiva') {
+        return { ok: false, mensaje: `La pulsera "${rfid}" está desactivada.` }
+      }
+      // Libre en el servidor pero no en la lista local (se dio de alta después
+      // de cargarla): se incorpora para poder mostrarla y asignarla.
+      if (!pulseras.value.some((p) => p.id === pulsera.id)) {
+        accessControlStore.pulserasDisponibles.push({
+          id: pulsera.id,
+          pulseraRfid: pulsera.pulseraRfid,
+        })
+      }
+      if (pulseraAsignadaAOtroNino(childId, pulsera.id)) {
+        return {
+          ok: false,
+          mensaje: `La pulsera "${rfid}" ya está asignada a otro niño de este registro.`,
+        }
+      }
+      return { ok: true, pulseraId: pulsera.id }
+    } catch (err: unknown) {
+      if ((err as { statusCode?: number } | null)?.statusCode === 404) {
+        return { ok: false, mensaje: `La pulsera "${rfid}" no existe en esta sucursal.` }
+      }
+      console.error(err)
+      return { ok: false, mensaje: `No se pudo verificar la pulsera "${rfid}". Intenta de nuevo.` }
+    }
+  }
+
+  /** Valida y, si procede, asigna la pulsera escaneada al niño. */
+  async function asignarPulseraEscaneada(
+    childId: string,
+    rfidEscaneado: string,
+  ): Promise<ResultadoPulsera> {
+    const resultado = await validarPulseraEscaneada(childId, rfidEscaneado)
+    if (resultado.ok) {
+      const child = children.value.find((c) => c.id === childId)
+      if (child) child.rfidBracelet = resultado.pulseraId
+    }
+    return resultado
   }
 
   const allChildrenHaveBracelet = computed(
@@ -560,6 +641,8 @@ export const useRegistrationStore = defineStore('registration', () => {
     reset,
     loadProductos,
     cargarDatosIniciales,
+    validarPulseraEscaneada,
+    asignarPulseraEscaneada,
     cargarEventoProximo,
     cambiarModo,
     seleccionarEvento,
