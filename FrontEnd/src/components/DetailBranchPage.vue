@@ -247,6 +247,7 @@ const horariosColumns: QTableColumn[] = [
   { name: 'nombre', label: 'Horario', field: 'nombre', align: 'left', sortable: true },
   { name: 'rango', label: 'Horario', field: 'horaInicio', align: 'left' },
   { name: 'dias', label: 'Días', field: 'dias', align: 'left' },
+  { name: 'alcance', label: 'Alcance', field: 'sucursalId', align: 'left' },
   { name: 'activo', label: 'Estado', field: 'activo', align: 'left' },
 ]
 </script>
@@ -510,6 +511,15 @@ const horariosColumns: QTableColumn[] = [
               </template>
               <template #body-cell-dias="props">
                 <q-td :props="props">{{ diasLabel(props.row.dias) }}</q-td>
+              </template>
+              <template #body-cell-alcance="props">
+                <q-td :props="props">
+                  <!-- M19: /horarios devuelve los de la sucursal y los globales -->
+                  <StatusBadge
+                    :tone="props.row.sucursalId ? 'info' : 'pink'"
+                    :label="props.row.sucursalId ? 'Esta sucursal' : 'Todas las sucursales'"
+                  />
+                </q-td>
               </template>
               <template #body-cell-activo="props">
                 <q-td :props="props">
