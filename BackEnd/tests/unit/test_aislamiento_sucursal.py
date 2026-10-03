@@ -223,6 +223,20 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ("POST", "/api/pulseras", {"json": {"sucursal_id": A, "pulsera_rfid": "WK-0000001"}}),
     ("POST", "/api/extras", {"json": {"sucursal_id": A, "nombre": "E", "precio": 1}}),
     ("POST", "/api/tipos-evento", {"json": {"sucursal_id": A, "nombre": "T"}}),
+    # Cajas y arqueos
+    ("GET", f"/api/turnos-caja/cajas?sucursal_id={A}", {}),
+    ("GET", f"/api/turnos-caja/historial?sucursal_id={A}", {}),
+    ("GET", f"/api/turnos-caja/historial/resumen?sucursal_id={A}", {}),
+    ("GET", f"/api/turnos-caja/historial/export?sucursal_id={A}", {}),
+    ("GET", f"/api/cajas?sucursal_id={A}", {}),
+    # Horarios: catálogo global, solo AdministradorSistema lo modifica.
+    (
+        "POST",
+        "/api/horarios",
+        {"json": {"nombre": "Matutino", "hora_inicio": "08:00", "hora_fin": "14:00"}},
+    ),
+    ("PATCH", f"/api/horarios/{RID}", {"json": {"nombre": "x"}}),
+    ("DELETE", f"/api/horarios/{RID}", {}),
 ]
 
 CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
@@ -332,6 +346,8 @@ CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/api/tipos-evento/{RID}", {}),
     ("PATCH", f"/api/tipos-evento/{RID}", {"json": {"nombre": "x"}}),
     ("DELETE", f"/api/tipos-evento/{RID}", {}),
+    # Cajas
+    ("GET", f"/api/turnos-caja/{RID}/retiros", {}),
 ]
 
 

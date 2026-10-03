@@ -268,9 +268,12 @@ import type { FilterChip } from '@/types/ui'
 const $q = useQuasar()
 const auth = useAuthStore()
 
-const puedeCrear = computed(() => auth.hasPermission('horarios:crear'))
-const puedeEditar = computed(() => auth.hasPermission('horarios:editar'))
-const puedeEliminar = computed(() => auth.hasPermission('horarios:eliminar'))
+// C1: los horarios son un catálogo global (sin sucursal); el backend solo deja
+// modificarlos a AdministradorSistema para que un admin de sucursal no cambie
+// los de todas. El resto los ve en solo lectura.
+const puedeCrear = computed(() => auth.isSistema && auth.hasPermission('horarios:crear'))
+const puedeEditar = computed(() => auth.isSistema && auth.hasPermission('horarios:editar'))
+const puedeEliminar = computed(() => auth.isSistema && auth.hasPermission('horarios:eliminar'))
 
 // ── Lista ─────────────────────────────────────────────────────────────────────
 

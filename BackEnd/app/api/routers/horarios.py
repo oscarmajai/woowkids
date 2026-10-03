@@ -43,6 +43,27 @@ _FORBIDDEN_SUCURSAL = HTTPException(
 )
 
 
+_SOLO_SISTEMA = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={
+        "code": "FORBIDDEN",
+        "message": (
+            "Los horarios son compartidos por todas las sucursales; solo el "
+            "Administrador del Sistema puede crearlos, editarlos o desactivarlos."
+        ),
+    },
+)
+
+
+def _solo_sistema(current_user: TokenData) -> None:
+    """C1: la tabla `turnos` no tiene `sucursal_id` (catálogo global, ver M19),
+    así que un Administrador de sucursal que la edita cambia los horarios de
+    TODAS las sucursales. Mientras no exista horario por sucursal, solo
+    AdministradorSistema puede escribirla; el resto solo la lee."""
+    if current_user.role != ROL_SISTEMA:
+        raise _SOLO_SISTEMA
+
+
 def _validar_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> None:
     """D1.1: los horarios son un catálogo global (tabla `turnos`, sin
     `sucursal_id`), así que el parámetro no filtra datos, pero se valida el
@@ -76,6 +97,7 @@ async def crear(
     current_user: TokenData = Depends(require_permission("horarios:crear")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> HorarioResponse:
+    _solo_sistema(current_user)
     try:
         row = await crear_horario(
             conn,
@@ -103,6 +125,7 @@ async def editar(
     current_user: TokenData = Depends(require_permission("horarios:editar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> HorarioResponse:
+    _solo_sistema(current_user)
     try:
         row = await actualizar_horario(
             conn,
@@ -135,6 +158,7 @@ async def eliminar(
     current_user: TokenData = Depends(require_permission("horarios:eliminar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> None:
+    _solo_sistema(current_user)
     found = await eliminar_horario(conn, horario_id=horario_id, modificado_por=current_user.sub)
     if not found:
         raise _NOT_FOUND
