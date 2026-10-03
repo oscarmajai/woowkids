@@ -14,12 +14,30 @@ from app.core import ws_manager
 from app.models.comanda import Comanda
 from app.repositories import caja_repository, comanda_repository
 from app.schemas.pagos import PagoCompletoRequest, PaymentItem
-from app.services import comanda_service, inventario_service, pago_service
+from app.services import comanda_service, inventario_service, pago_service, precios_venta
 
 from tests.integration.conftest import EFECTIVO_ID
 
 SUCURSAL_ID = "5e16533e-8d60-453a-9708-306bd64ad326"
 CAJERO_ID = "0c81cb1e-8627-469b-abc2-f4198526e2a8"
+
+
+# C2: completar_pago recalcula los precios con el catálogo. Estas pruebas son
+# de caja (cambio), no de precios: el catálogo se simula con un subtotal fijo.
+_DETALLE = {
+    "producto_id": "00000000-0000-0000-0000-0000000000aa",
+    "nombre": "Producto de prueba",
+    "cantidad": 1,
+    "precio_unitario": "1",
+    "subtotal": "1",
+}
+
+
+def _parchar_precios(monkeypatch, total: Decimal) -> None:
+    async def fake_calcular_venta(_conn, _sucursal_id, detalles):
+        return precios_venta.VentaCalculada(detalles=list(detalles), subtotal=total)
+
+    monkeypatch.setattr(precios_venta, "calcular_venta", fake_calcular_venta)
 
 
 async def test_completar_pago_registra_el_cambio_cuando_excede_el_total(
@@ -59,11 +77,12 @@ async def test_completar_pago_registra_el_cambio_cuando_excede_el_total(
     monkeypatch.setattr(
         comanda_service, "expandir_detalles_comanda", fake_expandir_detalles_comanda
     )
+    _parchar_precios(monkeypatch, Decimal("120.00"))
 
     body = PagoCompletoRequest(
         ticket_numero="TICK-TEST",
         total_final=Decimal("120.00"),
-        detalles_comanda=[],
+        detalles_comanda=[_DETALLE],
         pagos=[PaymentItem(metodo_pago_id=UUID(EFECTIVO_ID), monto=Decimal("200.00"))],
         cambio=Decimal("80.00"),
     )

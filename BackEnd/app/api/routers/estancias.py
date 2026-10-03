@@ -67,6 +67,15 @@ async def get_activos(
     return await get_activos_estancia_by_sucursal_id(conn, sucursal_id)
 
 
+def _exigir_sucursal_de_la_sesion(current_user: TokenData, sucursal_id: UUID) -> None:
+    scope = sucursal_scope(current_user)
+    if scope is not None and str(sucursal_id) != scope:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puede registrar cobros de estancia en otra sucursal.",
+        )
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -89,6 +98,10 @@ async def onboarding(
         data = OnboardingRequest.model_validate_json(payload)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
+
+    # C2: los tramos (precios) son los del producto de estancia de la
+    # sucursal; no se puede cobrar con los de otra.
+    _exigir_sucursal_de_la_sesion(current_user, data.sucursalId)
 
     usuario_id = UUID(current_user.sub)
 
@@ -117,6 +130,7 @@ async def pago_estancia_extra(
     current_user: TokenData = Depends(require_permission("estancias:gestionar_pagos")),
     apertura_id: str = Depends(apertura_operando_id),
 ) -> None:
+    _exigir_sucursal_de_la_sesion(current_user, sucursal_id)
     usuario_id = UUID(current_user.sub)
     return await pago_create_service(conn, body, sucursal_id, registro_id, usuario_id, apertura_id)
 
