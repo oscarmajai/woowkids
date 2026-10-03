@@ -12,6 +12,7 @@ from app.exceptions import (
     Conflicto,
     DatosInvalidos,
     IdempotenciaConflictoError,
+    IdempotenciaEnCursoError,
     NoEncontrado,
     PedidoInvalidoError,
 )
@@ -100,6 +101,26 @@ async def procesar_pagos(
     return [PaymentOut.model_validate(r) for r in rows]
 
 
+async def _comanda_idempotente(
+    conn: asyncpg.Connection, clave: str, hash_payload: str | None
+) -> Comanda | None:
+    """La comanda que ya se cobró con `clave` (con sus combos expandidos), o
+    None si la clave no se ha usado. 409 IDEMPOTENCIA_CONFLICTO si se usó con
+    otros datos."""
+    from app.services.comanda_service import expandir_detalles_comanda
+
+    existente = await pago_repository.obtener_idempotencia(conn, clave)
+    if not existente:
+        return None
+    if existente["hash_payload"] != hash_payload:
+        raise IdempotenciaConflictoError()
+    comanda = await comanda_repository.get_comanda_por_id(conn, str(existente["comanda_id"]))
+    if comanda is None:
+        return None
+    comanda.detalles = await expandir_detalles_comanda(conn, comanda.detalles)
+    return comanda
+
+
 async def completar_pago(
     conn: asyncpg.Connection,
     body: PagoCompletoRequest,
@@ -127,18 +148,9 @@ async def completar_pago(
     hash_payload = _hash_payload(body) if idempotency_key else None
 
     if idempotency_key:
-        existente = await pago_repository.obtener_idempotencia(conn, idempotency_key)
-        if existente:
-            if existente["hash_payload"] != hash_payload:
-                raise IdempotenciaConflictoError()
-            comanda_original = await comanda_repository.get_comanda_por_id(
-                conn, str(existente["comanda_id"])
-            )
-            if comanda_original is not None:
-                comanda_original.detalles = await expandir_detalles_comanda(
-                    conn, comanda_original.detalles
-                )
-                return comanda_original
+        original = await _comanda_idempotente(conn, idempotency_key, hash_payload)
+        if original is not None:
+            return original
 
     await _validar_metodos_pago(conn, sucursal_id, body.pagos)
 
@@ -186,6 +198,16 @@ async def completar_pago(
         )
 
     async with conn.transaction():
+        if idempotency_key:
+            # M3: dos cobros simultáneos con la misma clave pasaban los dos la
+            # revisión de arriba y el segundo chocaba con la llave primaria de
+            # pagos_idempotencia (500). Ahora el segundo espera aquí a que el
+            # primero termine y devuelve su venta.
+            await pago_repository.bloquear_clave_idempotencia(conn, idempotency_key)
+            original = await _comanda_idempotente(conn, idempotency_key, hash_payload)
+            if original is not None:
+                return original
+
         # Folio de ticket secuencial por sucursal (QA #21): el backend asigna
         # ticket_numero de forma atómica dentro de esta transacción.
         # body.ticket_numero (lo que mande el front, si manda algo) queda solo
@@ -229,14 +251,20 @@ async def completar_pago(
             usuario_id=usuario_id,
         )
         if idempotency_key and hash_payload:
-            await pago_repository.registrar_idempotencia(
-                conn,
-                clave=idempotency_key,
-                sucursal_id=sucursal_id,
-                usuario_id=usuario_id,
-                hash_payload=hash_payload,
-                comanda_id=UUID(comanda.id),
-            )
+            try:
+                await pago_repository.registrar_idempotencia(
+                    conn,
+                    clave=idempotency_key,
+                    sucursal_id=sucursal_id,
+                    usuario_id=usuario_id,
+                    hash_payload=hash_payload,
+                    comanda_id=UUID(comanda.id),
+                )
+            except asyncpg.UniqueViolationError:
+                # No debería pasar con el candado de arriba; si pasa, nada se
+                # cobra dos veces (la transacción se revierte) y el cliente
+                # recibe un 409 claro en vez de un 500.
+                raise IdempotenciaEnCursoError() from None
         for pago in body.pagos:
             await registrar_movimiento_caja(
                 conn,

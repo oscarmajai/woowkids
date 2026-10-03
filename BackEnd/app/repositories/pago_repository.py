@@ -184,6 +184,14 @@ _INSERT_IDEMPOTENCIA = """
 """
 
 
+async def bloquear_clave_idempotencia(conn: asyncpg.Connection, clave: str) -> None:
+    """M3: serializa los cobros con la misma Idempotency-Key. Candado de
+    sesión de transacción (se suelta al terminarla): el llamador DEBE estar
+    dentro de `conn.transaction()`. El segundo cobro espera a que el primero
+    termine y después ve su registro en pagos_idempotencia."""
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", clave)
+
+
 async def obtener_idempotencia(
     conn: asyncpg.Connection,
     clave: str,
