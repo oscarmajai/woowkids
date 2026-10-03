@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   calcularPulseras,
   dentroDePlazo,
+  diasParaEvento,
+  exigeLiquidacionAlReservar,
   fechaLimiteLiquidacion,
+  montoPorPorcentaje,
+  porcentajeAnticipoMinimo,
   recalcularReservacion,
   sumarHoras,
 } from './reservacionPrecio'
@@ -134,5 +138,33 @@ describe('plazo de liquidación', () => {
   it('bloquea el mismo día del límite y después', () => {
     expect(dentroDePlazo('2027-02-25', new Date(2027, 1, 18))).toBe(false)
     expect(dentroDePlazo('2027-02-25', new Date(2027, 1, 24))).toBe(false)
+  })
+})
+
+describe('reglas de anticipo (iguales a las del servidor)', () => {
+  it('el mínimo es 30 % o el del paquete si es mayor', () => {
+    expect(porcentajeAnticipoMinimo(null)).toBe(30)
+    expect(porcentajeAnticipoMinimo('40.00')).toBe(40)
+    expect(porcentajeAnticipoMinimo('20.00')).toBe(30)
+  })
+
+  it('redondea a pesos con mitades hacia arriba, sin ruido de flotante', () => {
+    // R-0008: 30 % de 7615 = 2284.5 -> 2285, como el servidor.
+    expect(montoPorPorcentaje(7615, 30)).toBe(2285)
+    expect(montoPorPorcentaje(13815, 40)).toBe(5526)
+    expect(montoPorPorcentaje(1234.5, 50)).toBe(617)
+  })
+
+  it('cuenta los días al evento en fecha local', () => {
+    const hoy = new Date(2026, 9, 3, 23, 30)
+    expect(diasParaEvento('2026-10-03', hoy)).toBe(0)
+    expect(diasParaEvento('2026-10-10', hoy)).toBe(7)
+    expect(diasParaEvento('2026-10-11', hoy)).toBe(8)
+  })
+
+  it('a 7 días o menos se liquida al reservar', () => {
+    expect(exigeLiquidacionAlReservar(0)).toBe(true)
+    expect(exigeLiquidacionAlReservar(7)).toBe(true)
+    expect(exigeLiquidacionAlReservar(8)).toBe(false)
   })
 })

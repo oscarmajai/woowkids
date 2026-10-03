@@ -74,15 +74,14 @@ export interface ReservacionesUpdate {
   hora_inicio?: string | null
   hora_fin?: string | null
   numero_personas?: number | null
-  precio_base?: string | null
-  precio_personas_extra?: string | null
   horas_reservadas?: number | null
-  precio_horas?: string | null
-  precio_productos?: string | null
-  precio_extras?: string | null
-  descuento?: string | null
+  /**
+   * Al cambiar invitados u horas el servidor recalcula pulseras y total; estos
+   * dos solo se comparan (409 si no coinciden). El resto del precio y el
+   * anticipo ya no se editan por aquí.
+   */
+  precio_personas_extra?: string | null
   precio_total?: string | null
-  anticipo?: string | null
   estado?: EstadoReservacion | null
   notas?: string | null
   activo?: boolean

@@ -22,6 +22,50 @@ export function dentroDePlazo(fechaEvento: string, hoy = new Date()): boolean {
 
 const num = (v: string | number): number => (typeof v === 'number' ? v : parseFloat(v) || 0)
 
+/** Piso de anticipo del negocio; un paquete puede pedir más (`anticipo_porcentaje`). */
+export const PORCENTAJE_ANTICIPO_MINIMO = 30
+
+/**
+ * Porcentaje mínimo de anticipo de un paquete: el 30 % del negocio o el del
+ * paquete si es mayor (M16). Misma regla que valida el servidor.
+ */
+export function porcentajeAnticipoMinimo(
+  anticipoPorcentajePaquete?: string | number | null,
+): number {
+  const pct = Number(anticipoPorcentajePaquete ?? NaN)
+  return Number.isFinite(pct)
+    ? Math.max(PORCENTAJE_ANTICIPO_MINIMO, pct)
+    : PORCENTAJE_ANTICIPO_MINIMO
+}
+
+/**
+ * Monto de un porcentaje del total, redondeado a pesos completos (mitades hacia
+ * arriba), igual que el servidor. Se calcula en centavos enteros para que un
+ * caso como 30 % de $7,615 (= $2,284.50) no caiga en $2,284.4999… por el
+ * redondeo binario y dé un mínimo distinto al del backend.
+ */
+export function montoPorPorcentaje(total: number, porcentaje: number): number {
+  const centavos = Math.round(total * 100)
+  return Math.round((centavos * porcentaje) / 10000)
+}
+
+/** Días completos de hoy (fecha local) a la fecha del evento ('YYYY-MM-DD'). */
+export function diasParaEvento(fechaEvento: string, hoy = new Date()): number {
+  const [y, m, d] = fechaEvento.slice(0, 10).split('-').map(Number)
+  const evento = Date.UTC(y!, m! - 1, d!)
+  const inicioDeHoy = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  return Math.round((evento - inicioDeHoy) / 86_400_000)
+}
+
+/**
+ * A 7 días o menos del evento ya no hay plazo para "liquidar después": se cobra
+ * el 100 % al reservar. Si no, la reservación se cancelaría sola por falta de
+ * pago en menos de una hora (C3). El servidor aplica la misma regla.
+ */
+export function exigeLiquidacionAlReservar(dias: number): boolean {
+  return dias <= DIAS_LIMITE_LIQUIDACION
+}
+
 /**
  * Recalcula el total de una reservación a partir de sus partes.
  *
