@@ -8,6 +8,7 @@ import asyncpg
 from app.core.roles import ROL_ADMINISTRADOR, ROL_SISTEMA, ROLES_SIN_SUCURSAL_FIJA
 from app.core.security import hash_password, verify_password
 from app.repositories.permission_repository import get_rol_by_nombre
+from app.repositories.refresh_token_repository import revoke_all_user_refresh_tokens
 from app.repositories.user_repository import (
     UsuarioRecord,
     assign_usuario_to_branch,
@@ -225,6 +226,10 @@ async def update_user(
             raise UserNotFoundError
         if branch_changed:
             await update_usuario_branch(conn, user_id, branch_id, editor_id)
+        if data.is_active is False and target["activo"]:
+            # A11: al desactivar, sus sesiones no se pueden renovar (ni
+            # revivir si después se reactiva la cuenta).
+            await revoke_all_user_refresh_tokens(conn, user_id)
 
     record = await get_usuario_by_id(conn, user_id)
     if record is None:
@@ -239,9 +244,11 @@ async def delete_user(conn: asyncpg.Connection, user_id: UUID, current_user: Tok
     if target["rol"] == ROL_SISTEMA:
         raise InsufficientPermissionsError
     _assert_admin_scope(current_user, target)
-    deleted = await delete_usuario(conn, user_id, UUID(current_user.sub))
-    if not deleted:
-        raise UserNotFoundError
+    async with conn.transaction():
+        deleted = await delete_usuario(conn, user_id, UUID(current_user.sub))
+        if not deleted:
+            raise UserNotFoundError
+        await revoke_all_user_refresh_tokens(conn, user_id)
 
 
 async def cambiar_mi_pin(

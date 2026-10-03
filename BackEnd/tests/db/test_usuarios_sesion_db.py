@@ -224,3 +224,63 @@ async def test_eliminado_tambien_se_puede_reactivar(entorno: Any) -> None:
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["is_active"] is True
+
+
+# ── A11 ─────────────────────────────────────────────────────────────────────
+
+
+async def test_token_de_usuario_desactivado_es_401(entorno: Any) -> None:
+    client, _conn = entorno
+    h_cajero = _h("cajero_a")
+    assert (await client.get("/api/metodos-pago", headers=h_cajero)).status_code == 200
+
+    await _desactivar_cajero(client)
+
+    resp = await client.get("/api/metodos-pago", headers=h_cajero)
+    assert resp.status_code == 401, resp.text
+    assert resp.json()["detail"]["code"] == "ACCOUNT_DISABLED"
+
+
+async def test_token_de_usuario_eliminado_es_401(entorno: Any) -> None:
+    client, _conn = entorno
+    h_cajero = _h("cajero_a")
+    resp = await client.delete(f"/api/usuarios/{USUARIOS['cajero_a'][0]}", headers=_h("admin_a"))
+    assert resp.status_code == 204
+    assert (await client.get("/api/metodos-pago", headers=h_cajero)).status_code == 401
+
+
+async def test_token_de_usuario_inexistente_es_401(entorno: Any) -> None:
+    client, _conn = entorno
+    token = token_para("cajero_a", sub="a8000000-0000-0000-0000-999999999999")
+    resp = await client.get("/api/metodos-pago", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+async def test_refresh_de_usuario_desactivado_no_renueva(entorno: Any) -> None:
+    client, conn = entorno
+    login = await client.post(
+        "/api/auth/login", json={"email": USUARIOS["cajero_a"][1], "password": PASSWORD}
+    )
+    assert login.status_code == 200, login.text
+    cookie = login.cookies.get("refresh_token")
+    assert cookie
+    client.cookies.clear()
+
+    await _desactivar_cajero(client)
+    # Al desactivar se revocan sus refresh tokens.
+    assert not await conn.fetchval(
+        "SELECT count(*) FROM public.refresh_tokens WHERE usuario_id = $1 AND NOT revocado",
+        UUID(USUARIOS["cajero_a"][0]),
+    )
+
+    resp = await client.post("/api/auth/refresh", cookies={"refresh_token": cookie})
+    assert resp.status_code == 401
+    # Ni reactivando la cuenta revive la sesión vieja.
+    resp = await client.put(
+        f"/api/usuarios/{USUARIOS['cajero_a'][0]}",
+        json=_cuerpo_cajero_a(is_active=True),
+        headers=_h("admin_a"),
+    )
+    assert resp.status_code == 200
+    resp = await client.post("/api/auth/refresh", cookies={"refresh_token": cookie})
+    assert resp.status_code == 401
