@@ -16,6 +16,10 @@ concurrency:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    # Un workflow reutilizable no puede pedir más permisos que su llamador.
+    permissions:
+      contents: read
+      pull-requests: read
     with:
       completo: true
 
