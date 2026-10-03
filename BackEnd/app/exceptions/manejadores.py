@@ -19,7 +19,10 @@ from dataclasses import dataclass
 import asyncpg
 from asyncpg.exceptions._base import DataError as ErrorDeArgumentoAsyncpg
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+from app.exceptions.validacion import manejar_error_validacion
 
 logger = logging.getLogger("mercury.errores_bd")
 
@@ -185,6 +188,7 @@ async def manejar_error_bd(request: Request, exc: Exception) -> JSONResponse:
 
 
 def registrar_manejadores(app: FastAPI) -> None:
+    app.add_exception_handler(RequestValidationError, manejar_error_validacion)
     app.add_exception_handler(asyncpg.IntegrityConstraintViolationError, manejar_error_bd)
     app.add_exception_handler(asyncpg.DataError, manejar_error_bd)
     app.add_exception_handler(ErrorDeArgumentoAsyncpg, manejar_error_bd)
