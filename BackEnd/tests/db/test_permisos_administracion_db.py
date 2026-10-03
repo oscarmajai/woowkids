@@ -2,6 +2,12 @@
 
 - M19: horarios por sucursal (globales = sucursal_id NULL).
 - M20: desactivar por PATCH exige el mismo permiso que DELETE.
+- M3: usuario con sucursal inexistente → 422.
+- B2: activar métodos de pago con la sucursal elegida.
+- B3: tiene_pin en login y refresh.
+- N14: cajas desde "Todas las sucursales".
+- N17: historial de ventas del AdministradorSistema.
+- B20: lectura de /productos/catalogo y /productos/admin por rol.
 
 Cada test corre en una transacción que se revierte al final (mismo patrón
 que ``test_aislamiento_sucursal_db.py``).
@@ -554,3 +560,25 @@ async def test_historial_de_ventas_con_sucursal_elegida_o_propia(entorno: Any) -
             assert resp.status_code == 200, (ruta, query, resp.text)
         otra = await client.get(f"{ruta}?sucursal_id={SUC_B}", headers=_h("admin_a"))
         assert otra.status_code == 403, (ruta, otra.text)
+
+
+# ── B20: catálogo de productos solo para quien vende o los gestiona ────────
+
+
+@pytest.mark.parametrize(
+    ("clave", "catalogo", "admin"),
+    [
+        ("atencion_a", 403, 403),
+        ("inventario_a", 403, 403),
+        ("cajero_a", 200, 403),
+        ("admin_a", 200, 200),
+    ],
+)
+async def test_lectura_del_catalogo_de_productos_por_rol(
+    entorno: Any, clave: str, catalogo: int, admin: int
+) -> None:
+    client, _conn = entorno
+    resp = await client.get("/api/productos/catalogo", headers=_h(clave))
+    assert resp.status_code == catalogo, (clave, resp.text)
+    resp = await client.get("/api/productos/admin", headers=_h(clave))
+    assert resp.status_code == admin, (clave, resp.text)
