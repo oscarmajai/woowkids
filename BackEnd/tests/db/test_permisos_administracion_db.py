@@ -403,3 +403,47 @@ async def test_editar_usuario_a_una_sucursal_inexistente_da_422(entorno: Any) ->
         UUID(uid),
     )
     assert str(sucursal) == SUC_A
+
+
+# ── B2: activar métodos de pago desde "Todas las sucursales" ───────────────
+
+
+async def _activo_en(conn: asyncpg.Connection, metodo: UUID, sucursal: str) -> bool | None:
+    activo: bool | None = await conn.fetchval(
+        "SELECT activo FROM public.sucursal_metodos_pago "
+        "WHERE metodo_pago_id = $1 AND sucursal_id = $2",
+        metodo,
+        UUID(sucursal),
+    )
+    return activo
+
+
+async def test_activacion_de_metodo_de_pago_por_sucursal(entorno: Any) -> None:
+    client, conn = entorno
+    metodo = await conn.fetchval("SELECT id FROM public.metodos_pago WHERE nombre = 'Tarjeta'")
+    url = f"/api/metodos-pago/{metodo}/activacion"
+
+    # Sistema sin sucursal elegida: 422 con mensaje claro (antes, un texto suelto).
+    resp = await client.patch(url, json={"activo": False}, headers=_h("sistema"))
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "SUCURSAL_REQUERIDA"
+
+    # Sistema con la sucursal explícita o con el selector.
+    resp = await client.patch(
+        f"{url}?sucursal_id={SUC_A}", json={"activo": False}, headers=_h("sistema")
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _activo_en(conn, metodo, SUC_A) is False
+    resp = await client.patch(url, json={"activo": False}, headers=_h("sistema", vista=SUC_B))
+    assert resp.status_code == 200, resp.text
+    assert await _activo_en(conn, metodo, SUC_B) is False
+
+    # Rol con sucursal fija: la suya sí, otra no (C1).
+    resp = await client.patch(
+        f"{url}?sucursal_id={SUC_A}", json={"activo": True}, headers=_h("admin_b")
+    )
+    assert resp.status_code == 403, resp.text
+    assert await _activo_en(conn, metodo, SUC_A) is False
+    resp = await client.patch(url, json={"activo": True}, headers=_h("admin_a"))
+    assert resp.status_code == 200, resp.text
+    assert await _activo_en(conn, metodo, SUC_A) is True

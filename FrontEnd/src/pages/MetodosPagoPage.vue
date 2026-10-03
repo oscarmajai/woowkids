@@ -4,7 +4,11 @@
       <template #actions> </template>
     </PageHeader>
 
-    <div class="list-page__note">
+    <div v-if="sinSucursal" class="list-page__note list-page__note--warn">
+      <q-icon name="info" size="19px" />
+      Elige una sucursal en el selector para activar o desactivar sus métodos de pago.
+    </div>
+    <div v-else class="list-page__note">
       <q-icon name="info" size="19px" />
       Los cambios de activación aplican solo a {{ sucursalNombre }}.
     </div>
@@ -57,7 +61,7 @@
             <q-toggle
               :model-value="props.row.activo"
               dense
-              :disable="toggleando === props.row.id"
+              :disable="sinSucursal || toggleando === props.row.id"
               :aria-label="props.row.activo ? 'Desactivar' : 'Activar'"
               @update:model-value="toggleActivo(props.row)"
             />
@@ -211,6 +215,9 @@ const TONO_TIPO: Record<TipoMetodoPago, 'info' | 'pink' | 'warn' | 'ok' | 'off'>
   O: 'off',
 }
 const sucursalNombre = computed(() => authStore.currentBranchName ?? 'esta sucursal')
+// B2: la activación es por sucursal; en "Todas las sucursales" (Administrador
+// del Sistema sin sucursal elegida) los toggles respondían 422.
+const sinSucursal = computed(() => !authStore.currentBranchId)
 
 const columns: QTableColumn[] = [
   { name: 'nombre', label: 'Nombre', field: 'nombre', align: 'left', sortable: true },
