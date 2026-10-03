@@ -68,9 +68,6 @@ function onCancelSucursal(): void {
       <div class="auth-brand__art">
         <img src="/woow-kids-logo.png" alt="" aria-hidden="true" />
       </div>
-      <p class="auth-brand__tagline">
-        Caja, estancias, eventos e inventario de tu sucursal en un solo lugar.
-      </p>
     </aside>
 
     <section class="auth-panel">
@@ -267,12 +264,9 @@ function onCancelSucursal(): void {
   &__art {
     flex: 1;
     min-height: 0;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 32px;
     overflow: hidden;
 
     img {
@@ -280,13 +274,6 @@ function onCancelSucursal(): void {
       height: 100%;
       object-fit: contain;
     }
-  }
-
-  &__tagline {
-    margin: 0;
-    font-size: 15px;
-    line-height: 1.5;
-    color: #c9d0f2;
   }
 }
 
