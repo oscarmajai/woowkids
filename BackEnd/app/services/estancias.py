@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import asyncpg
 from fastapi import HTTPException, UploadFile
 
-from app.core.object_storage import PREFIJOS, upload_bytes, validar_y_leer
+from app.core.object_storage import PREFIJOS, delete_objects, upload_bytes, validar_y_leer
 from app.core.ws_manager import manager
 from app.repositories import metodos_pago_repository
 from app.repositories.caja_repository import registrar_cambio_caja, registrar_movimiento_caja
@@ -60,6 +60,27 @@ def _a_centavos(valor: Decimal) -> Decimal:
     return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+async def _registrar_fotos(
+    conn: asyncpg.Connection,
+    registro_id: UUID,
+    data_ine: bytes,
+    data_llegadas: list[bytes],
+    usuario_id: UUID,
+) -> list[tuple[str, bytes]]:
+    """Inserta las filas de fotos del registro y devuelve los archivos que hay
+    que subir (llave, bytes). N4: no sube nada; la subida se hace al final de
+    la transacción, cuando ya pasaron todas las validaciones."""
+    ruta_ine = f"{PREFIJOS['identificaciones']}/{registro_id}.jpg"
+    await foto_create(conn, registro_id, TipoFoto.INE, ruta_ine, usuario_id)
+    archivos = [(ruta_ine, data_ine)]
+    for data_llegada in data_llegadas:
+        foto_id = uuid4()
+        ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
+        await foto_create(conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id)
+        archivos.append((ruta_llegada, data_llegada))
+    return archivos
+
+
 async def create_estancia(
     conn: asyncpg.Connection,
     data: OnboardingRequest,
@@ -76,6 +97,49 @@ async def create_estancia(
         ids_efectivo,
     )
 
+    data_ine = await validar_y_leer(foto_ine)
+    data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
+
+    # N4: las fotos se suben al final de la transacción (después de todos los
+    # INSERT y validaciones). Si algo falla después de subirlas (incluida la
+    # confirmación de la transacción), se borran para no dejar archivos
+    # huérfanos en MinIO.
+    subidos: list[str] = []
+    try:
+        resultado, registro_id = await _crear_estancia_tx(
+            conn, data, data_ine, data_llegadas, usuario_id, apertura_caja_id, cambio, subidos
+        )
+    except BaseException:
+        await delete_objects(subidos)
+        raise
+
+    # Se notifica ya fuera de la transacción, para no avisar a los clientes
+    # de datos que todavía podrían revertirse por un rollback.
+    await manager.broadcast(
+        str(data.sucursalId),
+        {
+            "type": "estancia_creada",
+            "sucursalId": str(data.sucursalId),
+            "registroId": str(registro_id),
+        },
+    )
+
+    return resultado
+
+
+async def _crear_estancia_tx(
+    conn: asyncpg.Connection,
+    data: OnboardingRequest,
+    data_ine: bytes,
+    data_llegadas: list[bytes],
+    usuario_id: UUID,
+    apertura_caja_id: str,
+    cambio: Decimal,
+    subidos: list[str],
+) -> tuple[dict[str, Any], UUID]:
+    """Toda la escritura del check-in en una transacción. `subidos` se va
+    llenando con las llaves que ya se subieron a MinIO, para que el llamador
+    las borre si la transacción no llega a confirmarse."""
     async with conn.transaction():
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
@@ -104,16 +168,6 @@ async def create_estancia(
 
             registro_id = uuid4()
 
-            # --- GUARDAR FOTOS FÍSICAMENTE ---
-            nombre_archivo = f"{registro_id}.jpg"
-
-            data_ine = await validar_y_leer(foto_ine)
-            data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
-
-            ruta_bd_ine = f"{PREFIJOS['identificaciones']}/{nombre_archivo}"
-
-            await upload_bytes(ruta_bd_ine, data_ine, "image/jpeg")
-
             # 2. registro (Un solo INSERT limpio)
             await registro_create(
                 conn,
@@ -125,15 +179,10 @@ async def create_estancia(
                 evento.id,
             )
 
-            # 3. fotos
-            await foto_create(conn, registro_id, TipoFoto.INE, ruta_bd_ine, usuario_id)
-            for data_llegada in data_llegadas:
-                foto_id = uuid4()
-                ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
-                await upload_bytes(ruta_llegada, data_llegada, "image/jpeg")
-                await foto_create(
-                    conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id
-                )
+            # 3. fotos (solo las filas; los archivos se suben al final)
+            archivos = await _registrar_fotos(
+                conn, registro_id, data_ine, data_llegadas, usuario_id
+            )
 
             total = Decimal(0)
 
@@ -217,16 +266,6 @@ async def create_estancia(
 
             registro_id = uuid4()
 
-            # --- GUARDAR FOTOS FÍSICAMENTE ---
-            nombre_archivo = f"{registro_id}.jpg"
-
-            data_ine = await validar_y_leer(foto_ine)
-            data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
-
-            ruta_bd_ine = f"{PREFIJOS['identificaciones']}/{nombre_archivo}"
-
-            await upload_bytes(ruta_bd_ine, data_ine, "image/jpeg")
-
             # 2. registro (Un solo INSERT limpio)
             await registro_create(
                 conn, registro_id, data.sucursalId, tutor_id, usuario_id, data.nombreSegundoTutor
@@ -234,15 +273,10 @@ async def create_estancia(
 
             total = Decimal(0)
 
-            # 3. fotos
-            await foto_create(conn, registro_id, TipoFoto.INE, ruta_bd_ine, usuario_id)
-            for data_llegada in data_llegadas:
-                foto_id = uuid4()
-                ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
-                await upload_bytes(ruta_llegada, data_llegada, "image/jpeg")
-                await foto_create(
-                    conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id
-                )
+            # 3. fotos (solo las filas; los archivos se suben al final)
+            archivos = await _registrar_fotos(
+                conn, registro_id, data_ine, data_llegadas, usuario_id
+            )
 
             # 4. detalles
             producto_estancia = await get_producto_estancia_by_branch_id(conn, str(data.sucursalId))
@@ -416,18 +450,14 @@ async def create_estancia(
         # de la transacción: si el registro se revierte, el código también.
         resultado["codigoAccesoPadres"] = await emitir_codigo_acceso(conn, registro_id, usuario_id)
 
-    # Se notifica ya fuera de la transacción, para no avisar a los clientes
-    # de datos que todavía podrían revertirse por un rollback.
-    await manager.broadcast(
-        str(data.sucursalId),
-        {
-            "type": "estancia_creada",
-            "sucursalId": str(data.sucursalId),
-            "registroId": str(registro_id),
-        },
-    )
+        # N4 — los archivos se suben al final, cuando todo lo anterior ya
+        # pasó; si una subida o la confirmación fallan, el llamador borra lo
+        # que ya se haya subido.
+        for llave, contenido in archivos:
+            await upload_bytes(llave, contenido, "image/jpeg")
+            subidos.append(llave)
 
-    return resultado
+    return resultado, registro_id
 
 
 async def get_activos_estancia_by_sucursal_id(
