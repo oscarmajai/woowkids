@@ -14,7 +14,7 @@ import { branchService } from '@/services/branchService'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { rolTono } from '@/utils/rolTono'
-import type { UserListItem } from '@/types/user'
+import type { EstadoUsuarios, UserListItem } from '@/types/user'
 import type { Branch } from '@/types/branch'
 import type { FilterChip } from '@/types/ui'
 
@@ -30,7 +30,7 @@ const error = ref('')
 const search = ref('')
 const roleFilter = ref<string | null>(null)
 
-type Estado = 'todos' | 'activos' | 'inactivos'
+type Estado = EstadoUsuarios
 const FILTROS: FilterChip<Estado>[] = [
   { label: 'Todos', value: 'todos' },
   { label: 'Activos', value: 'activos' },
@@ -87,7 +87,8 @@ async function fetchUsers(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    allUsers.value = await userService.listUsers()
+    // A10: se piden activos e inactivos; los chips filtran en el cliente.
+    allUsers.value = await userService.listUsers('todos')
   } catch {
     error.value = 'No se pudieron cargar los usuarios.'
   } finally {

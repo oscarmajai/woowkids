@@ -527,7 +527,7 @@ async def _verificar_credenciales_usuario(
         SELECT u.id, u.email, u.password_hash, u.pin_hash, u.nombre_completo, us.sucursal_id
         FROM public.usuarios u
         LEFT JOIN public.usuarios_sucursal us ON us.usuario_id = u.id AND us.activo = TRUE
-        WHERE u.email = $1 AND u.activo = TRUE
+        WHERE lower(u.email) = lower(btrim($1)) AND u.activo = TRUE
         LIMIT 1
         """,
         email,
@@ -665,7 +665,7 @@ async def validar_pin_admin(
         SELECT u.id, u.pin_hash, u.password_hash, u.nombre_completo, us.sucursal_id
         FROM public.usuarios u
         LEFT JOIN public.usuarios_sucursal us ON us.usuario_id = u.id AND us.activo = TRUE
-        WHERE u.email = $1 AND u.activo = TRUE
+        WHERE lower(u.email) = lower(btrim($1)) AND u.activo = TRUE
         LIMIT 1
         """,
         admin_email,

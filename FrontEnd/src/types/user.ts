@@ -38,3 +38,6 @@ export interface UpdateUserPayload {
   /** PIN de caja de 4 dígitos. null/omitido = no cambiar. */
   pin?: string | null
 }
+
+/** Filtro de estado de GET /usuarios (A10). Sin él, el backend lista solo activos. */
+export type EstadoUsuarios = 'activos' | 'inactivos' | 'todos'

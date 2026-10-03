@@ -92,9 +92,14 @@ async def test_update_user_pasa_apellidos_telefono_y_activo_al_repositorio():
         patch(
             "app.services.user_service.update_usuario", AsyncMock(return_value=True)
         ) as mock_update,
+        patch(
+            "app.services.user_service.revoke_all_user_refresh_tokens", AsyncMock()
+        ) as mock_revocar,
     ):
         result = await user_service.update_user(conn, target["id"], body, current_user)
 
+    # A11: desactivar revoca sus refresh tokens.
+    mock_revocar.assert_awaited_once_with(conn, target["id"])
     assert mock_update.await_args.kwargs["apellidos"] == "Pérez"
     assert mock_update.await_args.kwargs["telefono"] == "5551234567"
     assert mock_update.await_args.kwargs["activo"] is False
