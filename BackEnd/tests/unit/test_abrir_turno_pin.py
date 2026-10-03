@@ -290,3 +290,40 @@ async def test_abrir_turno_sin_sucursal_no_valida_pin(entorno: dict[str, AsyncMo
             await _abrir(_payload(sucursal_id=None))
     assert exc_info.value.detail["code"] == "SUCURSAL_REQUERIDA"
     verificar.assert_not_called()
+
+
+async def test_abrir_turno_carrera_identica_por_la_caja_devuelve_el_ganador(
+    entorno: dict[str, AsyncMock],
+) -> None:
+    """Doble clic: la otra petición del mismo cajero ganó la caja entre las
+    lecturas (o saltó primero el índice de la caja); no es CAJA_OCUPADA."""
+    entorno["crear_apertura_caja"].side_effect = _violacion("uq_apertura_caja_activa")
+    entorno["get_apertura_activa_por_usuario"].side_effect = [None, _activa()]
+
+    resultado = await _abrir(_payload())
+
+    assert resultado is entorno["obtener_turno_activo"].return_value
+
+
+async def test_abrir_turno_caja_ocupada_por_el_mismo_cajero_devuelve_el_existente(
+    entorno: dict[str, AsyncMock],
+) -> None:
+    entorno["get_apertura_activa_por_caja"].return_value = {"id": uuid4()}
+    entorno["get_apertura_activa_por_usuario"].side_effect = [None, _activa()]
+
+    resultado = await _abrir(_payload())
+
+    assert resultado is entorno["obtener_turno_activo"].return_value
+    entorno["crear_apertura_caja"].assert_not_called()
+
+
+async def test_abrir_turno_caja_ocupada_por_otro_cajero_responde_409(
+    entorno: dict[str, AsyncMock],
+) -> None:
+    entorno["get_apertura_activa_por_caja"].return_value = {"id": uuid4()}
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _abrir(_payload())
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "CAJA_OCUPADA"

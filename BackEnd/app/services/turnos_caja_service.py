@@ -323,8 +323,13 @@ async def abrir_turno(
     if activa:
         return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
 
-    # RN-APE-002: un turno activo por caja física.
+    # RN-APE-002: un turno activo por caja física. Si quien la ocupa es este
+    # mismo cajero (otra petición suya ganó entre las dos lecturas), se aplica
+    # la regla del turno existente.
     if await get_apertura_activa_por_caja(conn, caja_id):
+        activa = await get_apertura_activa_por_usuario(conn, user_id)
+        if activa:
+            return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
         raise CajaOcupadaError()
 
     try:
@@ -337,15 +342,17 @@ async def abrir_turno(
             creado_por=user_id,
         )
     except asyncpg.UniqueViolationError as exc:
-        # N2: otra petición abrió entre la verificación y el INSERT.
-        if exc.constraint_name == "uq_apertura_cajero_activo":
-            activa = await get_apertura_activa_por_usuario(conn, user_id)
-            if activa:
-                return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
-            raise TurnoYaAbiertoError(payload.terminal or "otra caja") from exc
+        # N2: otra petición abrió entre la verificación y el INSERT. Si fue
+        # del mismo cajero (cualquiera de los dos índices puede saltar
+        # primero), se aplica la regla del turno existente.
+        if exc.constraint_name not in ("uq_apertura_cajero_activo", "uq_apertura_caja_activa"):
+            raise
+        activa = await get_apertura_activa_por_usuario(conn, user_id)
+        if activa:
+            return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
         if exc.constraint_name == "uq_apertura_caja_activa":
             raise CajaOcupadaError() from exc
-        raise
+        raise TurnoYaAbiertoError(payload.terminal or "otra caja") from exc
 
     return TurnoActivoResponse(
         id=str(nueva["id"]),
