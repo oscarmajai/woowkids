@@ -167,9 +167,23 @@ async def listar(conn: asyncpg.Connection, sucursal_id: UUID | None = None) -> l
 
 
 async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpdate) -> CompraOut:
-    await obtener(conn, compra_id)
     updates = body.model_dump(exclude_unset=True)
-    row = await compra_repository.actualizar(conn, compra_id, updates)
+    async with conn.transaction():
+        # Bajo el mismo bloqueo que recibir/cancelar (C5): el estado que se
+        # revisa abajo no puede cambiar antes del UPDATE.
+        compra = await compra_repository.bloquear(conn, compra_id)
+        if not compra:
+            raise NoEncontrado("Compra")
+        # B10: `activo=false` sobre una compra con mercancía recibida respondía
+        # 200 sin efecto (la compra seguía en el listado y el stock no se
+        # revertía). Una compra recibida no se desactiva; una pendiente se
+        # cancela con POST /compras/{id}/cancelar.
+        if "activo" in updates and compra["estado"] in ("R", "PARCIAL"):
+            raise Conflicto(
+                "Una compra recibida o con recepción parcial no se puede desactivar: "
+                "su mercancía ya entró al inventario."
+            )
+        row = await compra_repository.actualizar(conn, compra_id, updates)
     if not row:
         raise NoEncontrado("Compra")
     return await _construir_out(conn, row)
