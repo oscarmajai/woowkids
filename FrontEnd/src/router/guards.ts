@@ -1,16 +1,42 @@
-import type { Router } from 'vue-router'
+import type { RouteLocationNormalized, Router } from 'vue-router'
 import { Notify } from 'quasar'
 import { useAuthStore } from '@/stores/auth'
 import { useAccessControlStore } from '@/stores/accessControl'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
 
+/** Rutas de la caja que exigen una sucursal (AdministradorSistema debe elegirla). */
+const RUTAS_CAJA = new Set(['pos-caja', 'pos-cierre'])
+
+function avisar(message: string): void {
+  Notify.create({ type: 'warning', message, position: 'top-right' })
+}
+
+/**
+ * B21: al rebotar por falta de permiso se dice por qué, en vez de mandar a
+ * Inicio en silencio.
+ */
+export function mensajeSinPermiso(to: Pick<RouteLocationNormalized, 'meta'>): string {
+  const titulo = to.meta.title
+  return titulo
+    ? `No tienes permiso para abrir «${titulo}».`
+    : 'No tienes permiso para abrir esa página.'
+}
+
+export const MENSAJE_SIN_TURNO_REGISTRO =
+  'Se requiere un turno de caja abierto para registrar una entrada, y tu usuario no abre caja.'
+
+export const MENSAJE_SISTEMA_SIN_SUCURSAL =
+  'Elige una sucursal en el selector del menú lateral para usar la caja.'
+
 export function setupRouterGuards(router: Router): void {
-  router.beforeEach(async (to) => {
+  router.beforeEach(async (to, from) => {
     const auth = useAuthStore()
 
     if (to.meta.requiresAuth && !auth.isAuthenticated) {
       const refreshed = await auth.tryRefresh()
       if (!refreshed) {
+        // Una ruta inexistente no se guarda como destino tras el login.
+        if (to.name === 'not-found') return { name: 'login' }
         return { name: 'login', query: { redirect: to.fullPath } }
       }
     }
@@ -22,8 +48,16 @@ export function setupRouterGuards(router: Router): void {
     if (to.meta.permissions?.length && auth.currentUser) {
       const allowed = to.meta.permissions.some((p) => auth.hasPermission(p))
       if (!allowed) {
+        avisar(mensajeSinPermiso(to))
         return { name: 'home' }
       }
+    }
+
+    // AdministradorSistema no tiene sucursal propia: sin elegir una en el
+    // selector, la caja no tiene dónde abrirse.
+    if (RUTAS_CAJA.has(String(to.name)) && auth.isSistema && !auth.currentBranchId) {
+      avisar(MENSAJE_SISTEMA_SIN_SUCURSAL)
+      return { name: 'home' }
     }
 
     if (to.meta.requiresTurno) {
@@ -81,7 +115,12 @@ export function setupRouterGuards(router: Router): void {
     if (to.name === 'estancias-registro-infantes') {
       const turno = useTurnoCajaStore()
       if (!turno.estaOperando) {
-        return { name: 'pos-cierre' }
+        if (auth.hasPermission('pos:acceder')) return { name: 'pos-cierre' }
+        // Sin pos:acceder no puede abrir caja: rebotarlo a Apertura y Cierre
+        // terminaba en Inicio sin explicación (B21).
+        avisar(MENSAJE_SIN_TURNO_REGISTRO)
+        // Entrando por URL no hay pantalla de la cual no moverse.
+        return from.matched.length ? false : { name: 'estancias-control-acceso' }
       }
     }
   })
