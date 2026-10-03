@@ -77,7 +77,9 @@ async def crear_comanda(
     )
 
     try:
-        comanda = await comanda_service.crear_comanda(conn, comanda_in, current_user, apertura_id)
+        comanda = await comanda_service.crear_comanda_pos(
+            conn, comanda_in, current_user, apertura_id
+        )
         return asdict(comanda)
     except HTTPException:
         # Preserva el status code y el {code, message} estructurado de

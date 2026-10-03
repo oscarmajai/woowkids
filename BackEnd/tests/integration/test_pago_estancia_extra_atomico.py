@@ -15,10 +15,7 @@ from tests.integration.conftest import CAJERO_ID, TARJETA_ID
 
 
 async def test_rechaza_cambio_no_respaldado_por_efectivo(conn, apertura_prueba, monkeypatch):
-    async def fake_exists_registro(*_args, **_kwargs):
-        return True
-
-    monkeypatch.setattr(pagos_estancia, "exists_registro", fake_exists_registro)
+    # validar_cambio corre antes de tocar el registro: no hace falta uno real.
 
     body = PagoEstanciaExtraRequest(
         pagos=[PagoIn(metodoPagoId=UUID(TARJETA_ID), monto=200.0)],

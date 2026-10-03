@@ -291,7 +291,7 @@
       persistent
       primary-label="Guardar cambios"
       :loading="guardando"
-      :primary-disabled="!previewPersonalizar || previewPersonalizar.anticipoExcede"
+      :primary-disabled="!previewPersonalizar || previewPersonalizar.anticipoExcede || cupoInvalido"
       @confirm="confirmarPersonalizar"
     >
       <div class="dlg-stack">
@@ -332,7 +332,7 @@
           <q-icon name="error_outline" size="16px" />
           <span>
             El nuevo total quedaría por debajo de los
-            {{ fmt(Number(seleccionada?.anticipo ?? 0)) }} ya pagados. Reduce menos el evento o
+            {{ fmt(Number(seleccionada?.monto_pagado ?? 0)) }} ya pagados. Reduce menos el evento o
             devuelve la diferencia antes de bajarlo.
           </span>
         </div>
@@ -446,7 +446,8 @@ const desgloseHoras = computed(() => {
 
   const n = (v: string) => parseFloat(v) || 0
   const totalDespues = Number(nuevo.precio_total)
-  const pagado = n(r.anticipo)
+  // Todo lo cobrado (anticipo + abonos - cambio), no solo el anticipo (C3).
+  const pagado = n(r.monto_pagado)
   const ajuste = nuevo.horas_reservadas - r.horas_reservadas
 
   return {
@@ -492,6 +493,15 @@ const fueraDeRango = computed(() => {
   return invitadosEdit.value < pkg.min_invitados || invitadosEdit.value > pkg.max_invitados
 })
 
+/**
+ * El servidor rechaza (422) cambiar a un número de invitados fuera del rango
+ * del paquete. Si la reservación ya estaba fuera de rango y no se cambian los
+ * invitados, se deja guardar la duración.
+ */
+const cupoInvalido = computed(
+  () => fueraDeRango.value && invitadosEdit.value !== seleccionada.value?.numero_personas,
+)
+
 const abrirAgregarHoras = (r: Reservaciones) => {
   seleccionada.value = r
   horasExtra.value = 1
@@ -522,6 +532,16 @@ const aplicarCambios = async (cambios: Record<string, unknown>, mensaje: string)
       position: 'top-right',
       timeout: 6000,
     })
+    // 409: el servidor calculó otro precio (p. ej. cambió la tarifa de pulsera
+    // del paquete) o ya se pagó más. Se recargan reservaciones y paquetes para
+    // que la vista previa muestre lo que el servidor va a cobrar.
+    if ((err as { statusCode?: number }).statusCode === 409 && authStore.currentBranchId) {
+      await Promise.all([
+        store.cargar(authStore.currentBranchId),
+        paquetesStore.cargar(authStore.currentBranchId),
+      ])
+      seleccionada.value = store.reservaciones.find((x) => x.id === r.id) ?? seleccionada.value
+    }
   } finally {
     guardando.value = false
   }

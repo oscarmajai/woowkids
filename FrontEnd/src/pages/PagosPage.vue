@@ -340,14 +340,13 @@ const porCobrar = computed(() =>
   ),
 )
 
-// Total pagado por reservacion (suma de todos los pagos registrados)
-const pagosPorReservacion = computed(() => {
-  const map = new Map<string, number>()
-  for (const p of pagosStore.pagos_reservacion) {
-    map.set(p.reservacion_id, (map.get(p.reservacion_id) ?? 0) + parseFloat(p.monto))
-  }
-  return map
-})
+/**
+ * Lo que falta por cobrar de una reservación, según el servidor: desde la
+ * migración 075 `saldo_pendiente` descuenta todos los pagos y el cambio
+ * devuelto. Nunca negativo.
+ */
+const saldoDe = (res: { saldo_pendiente: string } | undefined): number =>
+  Math.max(0, parseFloat(res?.saldo_pendiente ?? '0') || 0)
 
 const filas = computed(() =>
   pagosStore.pagos_reservacion.map((p) => {
@@ -356,8 +355,7 @@ const filas = computed(() =>
     const tipoEvento = tiposEventoStore.activos.find((t) => t.id === res?.tipo_evento_id)
 
     const total = parseFloat(res?.precio_total ?? '0')
-    const totalPagado = pagosPorReservacion.value.get(p.reservacion_id) ?? 0
-    const restante = Math.max(0, total - totalPagado)
+    const restante = saldoDe(res)
 
     return {
       ...p,
@@ -385,15 +383,12 @@ const form = ref({
 })
 
 /** Lo que falta por cobrar de una reservación. Nunca negativo. */
-const saldoDeReservacion = (reservacionId: string): number => {
-  const res = resStore.reservaciones.find((r) => r.id === reservacionId)
-  const total = parseFloat(res?.precio_total ?? '0')
-  const pagado = pagosPorReservacion.value.get(reservacionId) ?? 0
-  return Math.max(0, total - pagado)
-}
+const saldoDeReservacion = (reservacionId: string): number =>
+  saldoDe(resStore.reservaciones.find((r) => r.id === reservacionId))
 
 /**
- * Reservaciones ofrecidas en el diálogo: sólo las que deben algo.
+ * Reservaciones ofrecidas en el diálogo: sólo las vigentes que deben algo. Una
+ * cancelada no tiene adeudo que cobrar aunque su saldo no sea cero (Bug 18).
  *
  * Registrar un pago sobre un evento liquidado no tiene sentido —el saldo ya es
  * cero y la BD rechazaría un anticipo mayor que el total—, así que no se
@@ -402,6 +397,7 @@ const saldoDeReservacion = (reservacionId: string): number => {
  */
 const todasReservaciones = computed(() =>
   resStore.reservaciones
+    .filter((r) => r.estado !== 'cancelada')
     .map((r) => {
       const nombre = `${r.nombre_cliente}${r.apellidos_cliente ? ' ' + r.apellidos_cliente : ''}`
       return {

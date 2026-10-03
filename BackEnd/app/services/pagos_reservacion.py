@@ -91,44 +91,55 @@ async def crear(
     usuario_id: UUID,
     apertura_caja_id: str,
 ) -> PagosReservacionOut:
-    if await reservaciones_repository.obtener(conn, body.reservacion_id) is None:
-        raise NoEncontrado("Reservación")
-    await _validar_metodo_pago(conn, body.metodo_pago_id)
-    tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
-    row = await pagos_reservacion_repository.crear(
-        conn,
-        reservacion_id=body.reservacion_id,
-        metodo_pago_id=body.metodo_pago_id,
-        monto=body.monto,
-        fecha_pago=datetime.now(UTC),
-        notas=body.notas,
-        tipo=tipo,
-        # Sin esto la columna quedaba siempre en NULL y el historial no podía
-        # decir quién cobró el evento, a diferencia de las ventas de mostrador.
-        creado_por=usuario_id,
-    )
-
-    await registrar_movimiento_caja(
-        conn,
-        apertura_caja_id=apertura_caja_id,
-        tipo_movimiento="R",
-        referencia_id=str(row["id"]),
-        metodo_pago_id=str(body.metodo_pago_id),
-        monto=body.monto,
-        creado_por=str(usuario_id),
-    )
-
-    reservacion = await reservaciones_repository.obtener(conn, body.reservacion_id)
-    celular = (reservacion["telefono_cliente"] or "").strip() if reservacion else ""
-    if reservacion and celular:
-        await lealtad_service.otorgar_puntos(
-            conn,
-            reservacion["sucursal_id"],
-            celular,
-            body.monto,
-            usuario_id,
-            reservacion_id=body.reservacion_id,
+    # Transacción propia (o savepoint si ya hay una, p. ej. desde completar()):
+    # pago, movimiento de caja, puntos y monto_pagado quedan juntos o no quedan.
+    async with conn.transaction():
+        # Bloquea la reservación: dos cobros simultáneos se aplican en orden y el
+        # segundo recalcula monto_pagado viendo el primero (C3).
+        bloqueada = await reservaciones_repository.obtener_para_actualizar(
+            conn, body.reservacion_id
         )
+        if bloqueada is None:
+            raise NoEncontrado("Reservación")
+        await _validar_metodo_pago(conn, body.metodo_pago_id)
+        tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
+        row = await pagos_reservacion_repository.crear(
+            conn,
+            reservacion_id=body.reservacion_id,
+            metodo_pago_id=body.metodo_pago_id,
+            monto=body.monto,
+            fecha_pago=datetime.now(UTC),
+            notas=body.notas,
+            tipo=tipo,
+            # Sin esto la columna quedaba siempre en NULL y el historial no podía
+            # decir quién cobró el evento, a diferencia de las ventas de mostrador.
+            creado_por=usuario_id,
+        )
+
+        await registrar_movimiento_caja(
+            conn,
+            apertura_caja_id=apertura_caja_id,
+            tipo_movimiento="R",
+            referencia_id=str(row["id"]),
+            metodo_pago_id=str(body.metodo_pago_id),
+            monto=body.monto,
+            creado_por=str(usuario_id),
+        )
+
+        reservacion = await reservaciones_repository.obtener(conn, body.reservacion_id)
+        celular = (reservacion["telefono_cliente"] or "").strip() if reservacion else ""
+        if reservacion and celular:
+            await lealtad_service.otorgar_puntos(
+                conn,
+                reservacion["sucursal_id"],
+                celular,
+                body.monto,
+                usuario_id,
+                reservacion_id=body.reservacion_id,
+            )
+
+        # El saldo de la reservación refleja todos los pagos, no solo el anticipo.
+        await reservaciones_repository.recalcular_monto_pagado(conn, body.reservacion_id)
 
     return PagosReservacionOut.model_validate(row)
 
@@ -178,6 +189,8 @@ async def completar(
                 monto=cambio,
                 creado_por=str(usuario_id),
             )
+            # El cambio devuelto no es ingreso del evento: se descuenta de lo pagado.
+            await reservaciones_repository.recalcular_monto_pagado(conn, body.reservacion_id)
 
     return PagosReservacionCompletarResponse(pagos=pagos_creados, cambio=cambio)
 
@@ -185,16 +198,23 @@ async def completar(
 async def actualizar(
     conn: asyncpg.Connection, pago_id: UUID, body: PagosReservacionUpdate
 ) -> PagosReservacionOut:
-    await obtener(conn, pago_id)
-    updates = body.model_dump(exclude_unset=True)
-    if updates.get("metodo_pago_id") is not None:
-        await _validar_metodo_pago(conn, updates["metodo_pago_id"])
-    row = await pagos_reservacion_repository.actualizar(conn, pago_id, updates)
-    if not row:
-        raise NoEncontrado("Pago")
+    async with conn.transaction():
+        pago = await obtener(conn, pago_id)
+        await reservaciones_repository.obtener_para_actualizar(conn, pago.reservacion_id)
+        updates = body.model_dump(exclude_unset=True)
+        if updates.get("metodo_pago_id") is not None:
+            await _validar_metodo_pago(conn, updates["metodo_pago_id"])
+        row = await pagos_reservacion_repository.actualizar(conn, pago_id, updates)
+        if not row:
+            raise NoEncontrado("Pago")
+        # Corregir el monto de un pago cambia el saldo de la reservación.
+        await reservaciones_repository.recalcular_monto_pagado(conn, pago.reservacion_id)
     return PagosReservacionOut.model_validate(row)
 
 
 async def eliminar(conn: asyncpg.Connection, pago_id: UUID) -> None:
-    await obtener(conn, pago_id)
-    await pagos_reservacion_repository.eliminar(conn, pago_id)
+    async with conn.transaction():
+        pago = await obtener(conn, pago_id)
+        await reservaciones_repository.obtener_para_actualizar(conn, pago.reservacion_id)
+        await pagos_reservacion_repository.eliminar(conn, pago_id)
+        await reservaciones_repository.recalcular_monto_pagado(conn, pago.reservacion_id)
