@@ -392,3 +392,45 @@ async def test_indice_unico_sin_distinguir_mayusculas(entorno: Any) -> None:
                 "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
                 "VALUES ('P8.CAJERO.A@woowkids.dev', 'x', 'dup', 3)"
             )
+
+
+# ── M2 ──────────────────────────────────────────────────────────────────────
+
+
+async def test_password_corta_se_rechaza_en_alta_y_edicion(entorno: Any) -> None:
+    client, _conn = entorno
+    resp = await client.post(
+        "/api/usuarios",
+        json={
+            "email": "corta.p8@woowkids.dev",
+            "full_name": "Corta",
+            "password": "1",
+            "role": "Cajero",
+            "branch_id": SUC_A,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 422
+    assert "al menos 8" in resp.text
+
+    resp = await client.put(
+        f"/api/usuarios/{USUARIOS['cajero_a'][0]}",
+        json=_cuerpo_cajero_a(password="1234567"),
+        headers=_h("admin_a"),
+    )
+    assert resp.status_code == 422
+
+
+async def test_login_con_password_corta_vieja_sigue_funcionando(entorno: Any) -> None:
+    client, conn = entorno
+    from app.core.security import hash_password
+
+    await conn.execute(
+        "UPDATE public.usuarios SET password_hash = $1 WHERE id = $2",
+        hash_password("1"),
+        UUID(USUARIOS["cajero_a"][0]),
+    )
+    resp = await client.post(
+        "/api/auth/login", json={"email": USUARIOS["cajero_a"][1], "password": "1"}
+    )
+    assert resp.status_code == 200, resp.text
