@@ -26,7 +26,7 @@
       <KpiCard
         label="Por cobrar"
         :value="fmt(porCobrar)"
-        :note="`${reservacionesPorCobrar.length} eventos`"
+        :note="`${resumenCobro.eventos} eventos`"
         note-tone="warn"
       />
       <KpiCard label="Pagos registrados" :value="pagosStore.pagos_reservacion.length" />
@@ -234,6 +234,7 @@ import type { AppliedPayment } from '@/types/payments'
 import type { TicketPagoEventoProps } from '@/types/ticketPagoEvento'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import TicketPagoEvento from '@/components/eventos/TicketPagoEvento.vue'
+import { resumenPorCobrar } from '@/utils/reservacionPrecio'
 import {
   descontarCambio,
   resolverMetodoPagoId,
@@ -330,16 +331,15 @@ const pagosMes = computed(() =>
   pagosStore.pagos_reservacion.filter((p) => new Date(p.fecha_pago) >= inicioMes),
 )
 const cobradoMes = computed(() => pagosMes.value.reduce((s, p) => s + parseFloat(p.monto), 0))
-const reservacionesPorCobrar = computed(() => {
-  const ids = new Set(filas.value.filter((f) => f.restante > 0).map((f) => f.reservacion_id))
-  return [...ids]
-})
-const porCobrar = computed(() =>
-  reservacionesPorCobrar.value.reduce(
-    (s, id) => s + (filas.value.find((f) => f.reservacion_id === id)?.restante ?? 0),
-    0,
+// Reservaciones con pagos que aún deben algo; las canceladas no cuentan (N13).
+const resumenCobro = computed(() =>
+  resumenPorCobrar(
+    pagosStore.pagos_reservacion
+      .map((p) => resStore.reservaciones.find((r) => r.id === p.reservacion_id))
+      .filter((r): r is NonNullable<typeof r> => !!r),
   ),
 )
+const porCobrar = computed(() => resumenCobro.value.total)
 
 /**
  * Lo que falta por cobrar de una reservación, según el servidor: desde la

@@ -234,3 +234,24 @@ export function sumarHoras(horaFin: string, horas: number): string {
   const mm = String(minutosTotales % 60).padStart(2, '0')
   return `${hh}:${mm}:00`
 }
+
+/**
+ * Lo que falta por cobrar de un conjunto de reservaciones, una vez cada una
+ * (N13). Una reservación cancelada no tiene adeudo que cobrar aunque tenga
+ * pagos y su saldo no sea cero, así que no cuenta (igual que en el diálogo de
+ * Registrar pago, B16).
+ */
+export function resumenPorCobrar(
+  reservaciones: Pick<Reservaciones, 'id' | 'estado' | 'saldo_pendiente'>[],
+): { eventos: number; total: number } {
+  const vistas = new Set<string>()
+  let total = 0
+  for (const r of reservaciones) {
+    if (vistas.has(r.id) || r.estado === 'cancelada') continue
+    const saldo = Math.max(0, num(r.saldo_pendiente))
+    if (saldo <= 0) continue
+    vistas.add(r.id)
+    total += saldo
+  }
+  return { eventos: vistas.size, total }
+}

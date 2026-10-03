@@ -11,6 +11,7 @@ import {
   montoPorPorcentaje,
   porcentajeAnticipoMinimo,
   recalcularReservacion,
+  resumenPorCobrar,
   sumarHoras,
   totalExtras,
 } from './reservacionPrecio'
@@ -136,6 +137,19 @@ describe('recalcularReservacion', () => {
   it('sin extras guardados conserva el precio_extras de la reservación', () => {
     const legado = { ...RESERVACION, precio_extras: '485' } as Reservaciones
     expect(recalcularReservacion(legado, 50, { invitados: 20 }).precio_extras).toBe('485')
+  })
+})
+
+describe('resumenPorCobrar (N13)', () => {
+  it('no suma las reservaciones canceladas aunque tengan pagos y saldo', () => {
+    const r = [
+      { id: 'a', estado: 'confirmada', saldo_pendiente: '5330.00' },
+      { id: 'a', estado: 'confirmada', saldo_pendiente: '5330.00' }, // segundo pago
+      { id: 'b', estado: 'cancelada', saldo_pendiente: '1.00' },
+      { id: 'c', estado: 'completada', saldo_pendiente: '0.00' },
+      { id: 'd', estado: 'pendiente', saldo_pendiente: '-40.00' }, // sobrepago
+    ] as Reservaciones[]
+    expect(resumenPorCobrar(r)).toEqual({ eventos: 1, total: 5330 })
   })
 })
 
