@@ -10,6 +10,19 @@ from app.schemas.comanda import DetalleCreate
 class PagoIn(BaseModel):
     metodoPagoId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
     monto: float = Field(..., gt=0)
+    # N8: folio del voucher o referencia de la transferencia. Opcional en el
+    # contrato; el servicio la exige si el método de pago tiene
+    # `requiere_referencia` (misma regla que M11 en el POS). Se guarda en
+    # pagos_estancia.notas_pago.
+    referencia: str | None = Field(default=None, max_length=120)
+
+    @field_validator("referencia")
+    @staticmethod
+    def _limpiar_referencia(v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class PagoEstanciaExtraRequest(BaseModel):

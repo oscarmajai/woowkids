@@ -66,6 +66,9 @@ export interface OnboardingDetalle {
 export interface OnboardingPago {
   metodoPagoId: string
   monto: number
+  // N8: folio del voucher o referencia de la transferencia. El backend la exige
+  // (422 REFERENCIA_REQUERIDA) si el método de pago tiene `requiere_referencia`.
+  referencia?: string
 }
 
 export interface OnboardingPayload {
@@ -219,15 +222,55 @@ export async function checkout(
   return data
 }
 
-// POST /estancias/{registro_id}/pago
+export interface NinoComprobanteDto {
+  nombre: string
+  edad: number
+  notas: string | null
+  pulsera: string
+  horas: number
+  salidaEsperada: string
+}
+
+export interface ComprobanteEstanciaDto {
+  registroId: string
+  // Código nuevo del portal de padres: el del comprobante anterior ya no vale.
+  codigoAccesoPadres: string
+  sucursal: string
+  cajero: string | null
+  tutor: string
+  telefono: string
+  entrada: string
+  total: number
+  ninos: NinoComprobanteDto[]
+}
+
+// POST /estancias/registros/{registroId}/comprobante (N5)
+// Re-emite el código del QR del portal de padres (revoca el anterior) y
+// devuelve los datos para reimprimir el comprobante. 409 si ya no hay niños
+// dentro del registro.
+export async function reimprimirComprobante(registroId: string): Promise<ComprobanteEstanciaDto> {
+  const { data } = await onboardingClient.post<ComprobanteEstanciaDto>(
+    `/estancias/registros/${registroId}/comprobante`,
+  )
+  return data
+}
+
+// POST /estancias/{registro_id}/pagos
+// N9: el backend espera un objeto PagoEstanciaExtraRequest ({ pagos, cambio }),
+// no la lista de pagos suelta (con la lista respondía 422).
 export async function pagarExtra(
   registroId: string,
   sucursalId: string,
   pagos: OnboardingPago[],
+  cambio = 0,
 ): Promise<void> {
-  await onboardingClient.post(`/estancias/${registroId}/pagos`, pagos, {
-    params: {
-      sucursal_id: sucursalId,
+  await onboardingClient.post(
+    `/estancias/${registroId}/pagos`,
+    { pagos, cambio },
+    {
+      params: {
+        sucursal_id: sucursalId,
+      },
     },
-  })
+  )
 }

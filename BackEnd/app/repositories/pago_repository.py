@@ -78,7 +78,7 @@ _UNION_VENTAS = """
             r.total                            AS total_real,
             pe.metodos_pago_id                 AS metodo_pago_id,
             mp.nombre                          AS metodo_pago_nombre,
-            NULL                               AS notas_pago,
+            pe.notas_pago                      AS notas_pago,
             pe.creado                          AS creado,
             pe.creado_por                      AS creado_por
         FROM pagos_estancia pe
@@ -421,9 +421,9 @@ _SELECT_DETALLE_ESTANCIA = """
 
 _SELECT_DETALLE_PAGOS_ESTANCIA = """
     SELECT
-        mp.nombre   AS metodo_pago_nombre,
+        mp.nombre     AS metodo_pago_nombre,
         pe.monto,
-        NULL::text  AS notas_pago
+        pe.notas_pago AS notas_pago
     FROM pagos_estancia pe
     JOIN metodos_pago mp ON mp.id = pe.metodos_pago_id
     WHERE pe.registros_id = $1

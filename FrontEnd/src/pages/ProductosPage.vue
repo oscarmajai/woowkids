@@ -222,7 +222,8 @@
             CONFIGURACIÓN DE TARIFAS POR HORA
           </div>
           <div class="text-caption text-grey-7 q-mb-sm">
-            Define los rangos de tiempo y el precio asignado para cada rango de horas.
+            Define los rangos de tiempo y el precio por hora de cada rango. Los rangos pueden
+            compartir un extremo (0–1 h y 1–2 h): esa hora se cobra con el rango que termina ahí.
           </div>
 
           <div class="row q-col-gutter-xs items-end">
@@ -270,6 +271,11 @@
             </div>
           </div>
 
+          <div v-if="errorTramo" class="tramo-error q-mt-sm" role="alert">
+            <q-icon name="error" size="18px" />
+            <span>{{ errorTramo }}</span>
+          </div>
+
           <div class="q-mt-sm">
             <div
               v-if="formDialog.config_estancia.length === 0"
@@ -295,7 +301,7 @@
                     {{ tramo.min_horas }} hrs - {{ tramo.max_horas }} hrs
                   </q-item-label>
                   <q-item-label caption>
-                    Precio: ${{ Number(tramo.precio).toFixed(2) }}
+                    Precio: ${{ Number(tramo.precio).toFixed(2) }}/h
                   </q-item-label>
                 </q-item-section>
                 <q-item-section side>
@@ -611,6 +617,7 @@ import {
 import { apiClient } from '@/api/axiosClient.ts'
 import { getProductoImagenUrl } from '@/api/productosApi'
 import { recortarImagenCuadrada } from '@/utils/imageCrop'
+import { validarTramoNuevo } from '@/utils/tramosEstancia'
 
 interface TramoEstancia {
   min_horas: number
@@ -782,40 +789,20 @@ const formularioValido = computed(() => {
 
 // ── Gestión de tramos de Estancia ────────────────────────────────────────────
 
+// UX (ola 4): el motivo por el que no se agregó un tramo se muestra junto al
+// formulario (antes era un toast fácil de perder), y los rangos contiguos
+// ("0–1 h" y "1–2 h") ya no cuentan como solapados (ver utils/tramosEstancia).
+const errorTramo = ref<string | null>(null)
+watch(tramoTemporal, () => (errorTramo.value = null), { deep: true })
+
 const agregarTramoEstancia = () => {
   const { min_horas, max_horas, precio } = tramoTemporal.value
 
-  if (min_horas < 0 || max_horas < 0 || precio <= 0) {
-    $q.notify({
-      type: 'warning',
-      message: 'Las horas deben ser >= 0 y el precio > 0.',
-      position: 'top-right',
-    })
-    return
-  }
-
-  if (min_horas > max_horas) {
-    $q.notify({
-      type: 'warning',
-      message: 'El mínimo de horas no puede ser mayor al máximo.',
-      position: 'top-right',
-    })
-    return
-  }
-
-  // Verificar solapamientos con tramos ya agregados
-  const haySolapamiento = formDialog.value.config_estancia.some((tramo) => {
-    return Math.max(tramo.min_horas, min_horas) <= Math.min(tramo.max_horas, max_horas)
-  })
-
-  if (haySolapamiento) {
-    $q.notify({
-      type: 'warning',
-      message: 'El rango de horas se solapa con uno existente.',
-      position: 'top-right',
-    })
-    return
-  }
+  errorTramo.value = validarTramoNuevo(
+    { min_horas, max_horas, precio },
+    formDialog.value.config_estancia,
+  )
+  if (errorTramo.value) return
 
   formDialog.value.config_estancia.push({ min_horas, max_horas, precio })
   // Mantener orden cronológico
@@ -1201,6 +1188,18 @@ const ejecutarReactivar = async () => {
 </script>
 
 <style scoped lang="scss">
+.tramo-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--tone-bad-bg);
+  color: var(--tone-bad-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .imagen-preview-avatar {
   border-radius: 8px;
   border: 1px solid #e2e8f0;

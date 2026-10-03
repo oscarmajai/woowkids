@@ -42,6 +42,16 @@ export function descontarCambio(pagos: AppliedPayment[], total: number): Applied
   )
 }
 
+/**
+ * Referencia de un pago capturado en el teclado de cobro (folio del voucher de
+ * tarjeta o referencia de transferencia; ambos viajan en `authCode`), lista para
+ * el campo `referencia` de los cobros de estancia (N8). Vacía = sin referencia.
+ */
+export function referenciaDePago(pago: AppliedPayment): string | undefined {
+  const ref = pago.authCode?.trim()
+  return ref ? ref : undefined
+}
+
 /** Suma de los pagos, ya descontado el cambio si se pasó por descontarCambio(). */
 export function totalPagado(pagos: AppliedPayment[]): number {
   return pagos.reduce((suma, p) => suma + p.amount, 0)

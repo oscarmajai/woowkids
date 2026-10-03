@@ -7,6 +7,7 @@ Regla 11.1 y 11.4 SAD.
 from __future__ import annotations
 
 import json
+import logging
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -14,6 +15,8 @@ from uuid import UUID
 import asyncpg
 
 from app.models.producto import Producto
+
+logger = logging.getLogger(__name__)
 
 _COLUMNS = """
     id, nombre, precio_unitario, tipo, sucursal_id, activo, es_combo,
@@ -254,18 +257,39 @@ async def get_by_id(conn: asyncpg.Connection, producto_id: str) -> asyncpg.Recor
 async def get_producto_estancia_by_branch_id(
     conn: asyncpg.Connection, sucursal_id: str
 ) -> asyncpg.Record | None:
+    """Producto de estancia (tipo 'E') activo de la sucursal.
+
+    N7: crear/actualizar ya impiden dos productos de estancia activos en una
+    sucursal, pero datos viejos o una carrera pueden dejar más de uno. Antes
+    se tomaba uno cualquiera (`LIMIT 1` sin `ORDER BY`), y el check-in, la
+    cotización del frontend (`GET /productos/estancia`) y el checkout podían
+    usar productos distintos. Ahora la elección es determinística: el activo
+    creado más recientemente (desempate por id). Si hay más de uno se deja un
+    WARNING en el log para que alguien desactive el sobrante."""
     row = await conn.fetchrow(
         """
-        SELECT id, config_estancia, precio_unitario
+        SELECT id, config_estancia, precio_unitario,
+               count(*) OVER () AS total_activos
         FROM productos
         WHERE sucursal_id = $1
           AND activo = TRUE
           AND tipo = 'E'
+        ORDER BY creado DESC, id DESC
         LIMIT 1
         """,
         sucursal_id,
     )
-    return row if row else None
+    if row is None:
+        return None
+    if row["total_activos"] > 1:
+        logger.warning(
+            "La sucursal %s tiene %s productos de estancia activos; se usa el más "
+            "reciente (%s). Desactiva los demás.",
+            sucursal_id,
+            row["total_activos"],
+            row["id"],
+        )
+    return row
 
 
 async def obtener_para_venta(
