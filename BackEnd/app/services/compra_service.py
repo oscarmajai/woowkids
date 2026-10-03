@@ -15,6 +15,7 @@ from uuid import UUID
 import asyncpg
 
 from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado, RecepcionInvalidaError
+from app.exceptions.inventario import CantidadFueraDeRangoError
 from app.repositories import (
     compra_repository,
     insumo_repository,
@@ -31,12 +32,26 @@ from app.schemas.compra import (
     LineaRecepcion,
     RecibirCompraRequest,
 )
+from app.schemas.limites_inventario import MAX_CANTIDAD, MIN_CANTIDAD
 from app.services import costeo_service
 
 
 async def _construir_out(conn: asyncpg.Connection, compra: dict[str, Any]) -> CompraOut:
     detalles = await compra_repository.listar_detalles(conn, compra["id"])
     return CompraOut.model_validate({**compra, "detalles": detalles})
+
+
+def _validar_cantidad_base(cantidad_base: Decimal, insumo: dict[str, Any]) -> None:
+    """M3: la cantidad convertida a la unidad base es la que se suma al stock
+    (numeric(12,3)). Una línea válida en su unidad puede salirse de rango al
+    convertirla (9,999,999 kg = 9,999,999,000 g) o redondearse a 0 (0.0004 g):
+    antes eso daba 500 al recibir."""
+    if cantidad_base < MIN_CANTIDAD or cantidad_base > MAX_CANTIDAD:
+        raise CantidadFueraDeRangoError(
+            f"La cantidad de «{insumo['nombre']}» convertida a su unidad base "
+            f"({cantidad_base.normalize():f}) está fuera de rango: debe ser de "
+            f"{MIN_CANTIDAD} a {MAX_CANTIDAD:,}."
+        )
 
 
 async def _validar_unidad_compatible(
@@ -73,6 +88,7 @@ async def _validar_y_calcular_base(
                 f"La presentación indicada no pertenece a «{insumo['nombre']}» o está inactiva."
             )
         equivalencia = presentacion["equivalencia_base"]
+        _validar_cantidad_base(cantidad * equivalencia, insumo)
         return cantidad * equivalencia, costo_unitario / equivalencia
 
     assert unidad_medida_id is not None
@@ -81,6 +97,7 @@ async def _validar_y_calcular_base(
     unidad_base = await unidad_medida_repository.obtener(conn, insumo["unidad_base_id"])
     assert unidad_linea is not None and unidad_base is not None
     factor = unidad_linea["factor_a_base"] / unidad_base["factor_a_base"]
+    _validar_cantidad_base(cantidad * factor, insumo)
     return cantidad * factor, costo_unitario / factor
 
 

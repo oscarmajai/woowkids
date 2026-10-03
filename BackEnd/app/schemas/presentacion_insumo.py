@@ -4,15 +4,21 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.limites_inventario import DECIMALES_CANTIDAD, MAX_CANTIDAD
+
 
 class PresentacionCrear(BaseModel):
     nombre: str = Field(..., max_length=100)
-    equivalencia_base: Decimal = Field(..., gt=0)
+    equivalencia_base: Decimal = Field(
+        ..., gt=0, le=MAX_CANTIDAD, decimal_places=DECIMALES_CANTIDAD
+    )
 
 
 class PresentacionUpdate(BaseModel):
     nombre: str | None = Field(None, max_length=100)
-    equivalencia_base: Decimal | None = Field(None, gt=0)
+    equivalencia_base: Decimal | None = Field(
+        None, gt=0, le=MAX_CANTIDAD, decimal_places=DECIMALES_CANTIDAD
+    )
     activo: bool | None = None
 
 
