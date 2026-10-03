@@ -7,6 +7,7 @@ SAD §3.2: el service orquesta repositorios, nunca escribe SQL directamente.
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -17,6 +18,7 @@ from app.core.ws_manager import manager
 from app.exceptions.comandas import (
     AutorizacionAdminRequeridaError,
     ComandaCanceladaError,
+    ComandaModificadaError,
     ComandaPagadaRequiereCancelacionError,
     TransicionComandaInvalidaError,
 )
@@ -136,7 +138,8 @@ async def crear_comanda(
     `apertura_caja_id=None` crea la comanda SIN movimiento de venta en caja: lo
     usan las comandas automáticas de eventos, cuyo ingreso ya se cobró como
     anticipo/liquidación en pagos_reservacion (registrarlo aquí lo contaría dos
-    veces y descuadraría el arqueo).
+    veces y descuadraría el arqueo), y POST /comandas, que crea la comanda sin
+    cobrarla (N10).
 
     metodo_pago_id va en None temporalmente: el módulo de métodos de pago para
     comandas todavía no está integrado (columna nullable a propósito mientras tanto).
@@ -176,19 +179,24 @@ async def crear_comanda_pos(
     conn: asyncpg.Connection,
     comanda_in: ComandaCreate,
     current_user: TokenData,
-    apertura_caja_id: str,
 ) -> Comanda:
     """POST /comandas: como crear_comanda, pero con los precios y el total
     recalculados con el catálogo de la sucursal (C2); 409 si el cliente
     mandó otros. Las comandas automáticas de eventos no pasan por aquí: usan
-    el precio del paquete, no el del catálogo."""
+    el precio del paquete, no el del catálogo.
+
+    N10: la comanda se crea SIN cobrar, así que no registra ningún movimiento
+    de venta en la caja. Antes registraba el total como venta sin método de
+    pago, que el arqueo contaba como efectivo esperado aunque nadie hubiera
+    pagado. Lo cobrado entra a la caja con su método al pagar (POST
+    /pagos/completar, el flujo del POS)."""
     sucursal_id = UUID(str(comanda_in.sucursal_id))
     venta = await precios_venta.calcular_venta(conn, sucursal_id, comanda_in.detalles_comanda)
     precios_venta.verificar_total(comanda_in.total_final, venta.subtotal)
     comanda_in = comanda_in.model_copy(
         update={"detalles_comanda": venta.detalles, "total_final": venta.subtotal}
     )
-    return await crear_comanda(conn, comanda_in, current_user, apertura_caja_id)
+    return await crear_comanda(conn, comanda_in, current_user, None)
 
 
 async def listar_pendientes(conn: asyncpg.Connection, current_user: TokenData) -> list[Comanda]:
@@ -336,12 +344,23 @@ async def cambiar_estado(
     return comanda
 
 
+def ids_con_hijos_de_combo(detalles: list[DetalleComanda], ids: list[str]) -> list[str]:
+    """`ids` más los hijos de combo cuyos renglones padre están en `ids` (M13),
+    sin repetir y en el orden original."""
+    seleccionados = set(ids)
+    extra = [
+        d.id for d in detalles if d.detalle_padre_id in seleccionados and d.id not in seleccionados
+    ]
+    return [*ids, *extra]
+
+
 async def modificar_comanda_parcial(
     conn: asyncpg.Connection,
     comanda_id: str,
     detalles_ids_a_eliminar: list[str],
     usuario_id: str | None = None,
     motivo_cancelacion: str | None = None,
+    modificado_esperado: datetime | None = None,
 ) -> Comanda | None:
     """Elimina productos de una comanda en estado 'P' y recalcula el total.
 
@@ -354,10 +373,24 @@ async def modificar_comanda_parcial(
     A4: quitar todos los productos de una comanda cobrada equivale a
     cancelarla, y eso exige la autorización y la devolución de cambiar_estado:
     responde 409 para que el cliente use ese flujo.
+
+    M13: quitar el renglón de un combo quita también sus productos (los hijos
+    con detalle_padre_id = ese renglón).
+
+    B5: `modificado_esperado` (opcional) es el `modificado` de la comanda que
+    vio el cliente; si cambió, 409 COMANDA_MODIFICADA sin tocar nada.
     """
+    if modificado_esperado is not None:
+        # Antes que cualquier otra regla: lo que el cliente decidió quitar se
+        # basa en una versión que ya no existe. Se repite bajo el bloqueo.
+        estado = await comanda_repository.get_estado_comanda(conn, comanda_id)
+        if estado is not None and estado["modificado"] != modificado_esperado:
+            raise ComandaModificadaError()
+
     actual = await comanda_repository.get_comanda_por_id(conn, comanda_id)
     if actual is not None:
         detalles = cast(list[DetalleComanda], actual.detalles)
+        detalles_ids_a_eliminar = ids_con_hijos_de_combo(detalles, detalles_ids_a_eliminar)
         restantes = {d.id for d in detalles} - set(detalles_ids_a_eliminar)
         if not restantes and await devolucion_service.comanda_tiene_pagos(conn, comanda_id):
             raise ComandaPagadaRequiereCancelacionError()
@@ -368,6 +401,7 @@ async def modificar_comanda_parcial(
         detalles_ids_a_eliminar,
         usuario_id,
         motivo_cancelacion,
+        modificado_esperado=modificado_esperado,
     )
     if comanda is not None:
         comanda.detalles = await expandir_detalles_comanda(conn, comanda.detalles)

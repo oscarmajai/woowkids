@@ -117,3 +117,8 @@ export const CODIGOS_PEDIDO_DESACTUALIZADO: ReadonlySet<string> = new Set([
 export function esPedidoDesactualizado(error: unknown): error is ApiError {
   return isApiErrorLike(error) && CODIGOS_PEDIDO_DESACTUALIZADO.has(error.code)
 }
+
+/** B5: la orden cambió (otra pestaña o dispositivo) desde que se leyó. */
+export function esOrdenModificada(error: unknown): error is ApiError {
+  return isApiErrorLike(error) && error.code === 'COMANDA_MODIFICADA'
+}

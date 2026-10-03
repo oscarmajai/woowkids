@@ -36,17 +36,24 @@ export const comandasApi = {
     return data
   },
 
+  /**
+   * Quita productos de una comanda pendiente. Con `modificadoEsperado` (el
+   * `modificado` de GET /pagos/detalles/comanda/{id}) el backend responde 409
+   * COMANDA_MODIFICADA si la orden cambió desde que se leyó (B5).
+   */
   async modificarDetalles(
     comandaId: string,
     detallesIdsAEliminar: string[],
     motivoCancelacion?: string,
     signal?: AbortSignal,
+    modificadoEsperado?: string,
   ): Promise<Comanda> {
     const { data } = await apiClient.patch<Comanda>(
       `/comandas/${comandaId}/detalles`,
       {
         detalles_ids_a_eliminar: detallesIdsAEliminar,
         ...(motivoCancelacion ? { motivo_cancelacion: motivoCancelacion } : {}),
+        ...(modificadoEsperado ? { modificado_esperado: modificadoEsperado } : {}),
       },
       { signal },
     )

@@ -313,6 +313,27 @@ export function useTicketComanda() {
     prevParentQty.clear()
   }
 
+  /**
+   * Repone un pedido guardado (p. ej. tras recargar la página): los renglones
+   * tal cual y el tracking de combos reconstruido desde `padreTicketId`, para
+   * que cambiar la cantidad de un combo siga sincronizando a sus hijos.
+   */
+  function restaurarItems(items: ItemTicket[]) {
+    comboInstances.clear()
+    prevParentQty.clear()
+    itemsTicket.value = items.map((i) => ({ ...i }))
+    for (const item of itemsTicket.value) {
+      if (!item.padreTicketId) continue
+      const hijos = comboInstances.get(item.padreTicketId) ?? new Set<string>()
+      hijos.add(item.id)
+      comboInstances.set(item.padreTicketId, hijos)
+    }
+    for (const parentId of comboInstances.keys()) {
+      const padre = itemsTicket.value.find((i) => i.id === parentId)
+      if (padre) prevParentQty.set(parentId, padre.cantidad)
+    }
+  }
+
   function guardarNotas(item: ItemTicket, notas: string) {
     const target = itemsTicket.value.find((i) => i.id === item.id)
     if (target) target.notas = notas
@@ -382,6 +403,7 @@ export function useTicketComanda() {
     guardarNotas,
     detallesParaEnvio,
     actualizarPrecios,
+    restaurarItems,
     nombreCliente,
   }
 }

@@ -184,6 +184,14 @@ _INSERT_IDEMPOTENCIA = """
 """
 
 
+async def bloquear_clave_idempotencia(conn: asyncpg.Connection, clave: str) -> None:
+    """M3: serializa los cobros con la misma Idempotency-Key. Candado de
+    sesión de transacción (se suelta al terminarla): el llamador DEBE estar
+    dentro de `conn.transaction()`. El segundo cobro espera a que el primero
+    termine y después ve su registro en pagos_idempotencia."""
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", clave)
+
+
 async def obtener_idempotencia(
     conn: asyncpg.Connection,
     clave: str,
@@ -266,11 +274,36 @@ _SELECT_DETALLE_COMANDA = """
         c.motivo_cancelacion,
         c.nombre_cliente,
         c.mesa,
+        c.modificado,
+        c.sucursal_id,
+        -- M12: cambio entregado al cliente (movimiento de caja 'C' de la comanda).
+        (
+            SELECT SUM(mc.monto)
+            FROM public.movimientos_caja mc
+            WHERE mc.referencia_id = c.id AND mc.tipo_movimiento = 'C'
+        )                  AS cambio,
         u.nombre_completo  AS creado_por_nombre
     FROM comandas c
     LEFT JOIN usuarios u ON u.id = c.creado_por
     WHERE c.id = $1
 """
+
+# M12: encabezado del ticket con los datos de la sucursal de la venta.
+_SELECT_SUCURSAL_TICKET = """
+    SELECT nombre, direccion, ciudad, estado, codigo_postal, telefono
+    FROM public.sucursales
+    WHERE id = $1
+"""
+
+
+async def _sucursal_ticket(
+    conn: asyncpg.Connection, sucursal_id: UUID | None
+) -> dict[str, Any] | None:
+    if sucursal_id is None:
+        return None
+    row = await conn.fetchrow(_SELECT_SUCURSAL_TICKET, sucursal_id)
+    return dict(row) if row else None
+
 
 _SELECT_DETALLE_PAGOS = """
     SELECT
@@ -298,6 +331,7 @@ _SELECT_DETALLE_PRODUCTOS = """
         dc.notas_especiales,
         dc.nombre_combo_padre,
         dc.id_combo_padre,
+        dc.detalle_padre_id,
         p.nombre AS producto_nombre
     FROM detalles_comanda dc
     LEFT JOIN productos p ON p.id = dc.producto_id
@@ -340,6 +374,10 @@ async def detalle_por_comanda(
             "id_combo_padre": (
                 str(dict(row)["id_combo_padre"]) if dict(row).get("id_combo_padre") else None
             ),
+            # M13: renglón del combo al que pertenece el hijo.
+            "detalle_padre_id": (
+                str(dict(row)["detalle_padre_id"]) if dict(row).get("detalle_padre_id") else None
+            ),
         }
         for row in productos_rows
     ]
@@ -360,6 +398,9 @@ async def detalle_por_comanda(
         "metodos_pago": metodos_pago,
         "detalles": detalles,
         "puntos_ganados": int(puntos_ganados) if puntos_ganados is not None else None,
+        "cambio": float(c["cambio"]) if c.get("cambio") is not None else 0.0,
+        "modificado": c["modificado"].isoformat() if c.get("modificado") else None,
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 
@@ -370,6 +411,7 @@ _SELECT_DETALLE_ESTANCIA = """
         r.total               AS total_final,
         r.estado              AS estado_actual,
         r.creado              AS fecha_hora,
+        r.sucursal_id,
         u.nombre_completo     AS creado_por_nombre
     FROM registros r
     JOIN tutores t ON t.id = r.tutores_id
@@ -409,6 +451,7 @@ _SELECT_DETALLE_RESERVACION = """
         r.precio_total                                AS total_final,
         r.estado                                      AS estado_actual,
         r.creado                                      AS fecha_hora,
+        r.sucursal_id,
         u.nombre_completo                             AS creado_por_nombre
     FROM reservaciones r
     LEFT JOIN usuarios u ON u.id = r.creado_por
@@ -510,6 +553,7 @@ async def _detalle_estancia(conn: asyncpg.Connection, registro_id: UUID) -> dict
         "creado_por_nombre": c["creado_por_nombre"],
         "metodos_pago": _armar_metodos_pago(pagos_rows),
         "detalles": _armar_detalles(items_rows),
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 
@@ -535,6 +579,7 @@ async def _detalle_reservacion(
         "creado_por_nombre": c["creado_por_nombre"],
         "metodos_pago": _armar_metodos_pago(pagos_rows),
         "detalles": _armar_detalles(items_rows),
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 

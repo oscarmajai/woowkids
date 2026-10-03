@@ -60,6 +60,10 @@ class CambioEstadoRequest(BaseModel):
 class ComandaModifyRequest(BaseModel):
     detalles_ids_a_eliminar: list[str] = Field(..., min_length=1)
     motivo_cancelacion: str | None = None
+    # B5: control optimista. El `modificado` que devolvió GET
+    # /pagos/detalles/comanda/{id}; si la comanda cambió desde entonces, 409
+    # COMANDA_MODIFICADA sin tocar nada. Opcional por compatibilidad.
+    modificado_esperado: datetime | None = None
 
     @field_validator("detalles_ids_a_eliminar")
     @classmethod

@@ -71,6 +71,22 @@ class IdempotenciaConflictoError(HTTPException):
         )
 
 
+class IdempotenciaEnCursoError(HTTPException):
+    """M3: otro cobro con la misma Idempotency-Key se está registrando."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "IDEMPOTENCIA_EN_CURSO",
+                "message": (
+                    "Este cobro ya se está registrando. Revisa el historial de ventas "
+                    "antes de volver a cobrar."
+                ),
+            },
+        )
+
+
 class PinTokenRequeridoError(HTTPException):
     """Falta token_pin de cajero/admin en /turnos-caja/confirmar (QA #14)."""
 

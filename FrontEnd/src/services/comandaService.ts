@@ -36,7 +36,13 @@ export async function modificarDetallesComanda(
   comandaId: string,
   detallesIdsAEliminar: string[],
   motivoCancelacion?: string,
-  signal?: AbortSignal,
+  opciones: { signal?: AbortSignal; modificadoEsperado?: string } = {},
 ): Promise<Comanda> {
-  return comandasApi.modificarDetalles(comandaId, detallesIdsAEliminar, motivoCancelacion, signal)
+  return comandasApi.modificarDetalles(
+    comandaId,
+    detallesIdsAEliminar,
+    motivoCancelacion,
+    opciones.signal,
+    opciones.modificadoEsperado,
+  )
 }
