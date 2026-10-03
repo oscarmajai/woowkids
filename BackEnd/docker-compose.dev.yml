@@ -34,7 +34,9 @@ services:
   # el backend se queda colgado en "Waiting for application startup" y ningún
   # endpoint responde — ni siquiera el login, que no usa almacenamiento.
   minio:
-    image: quay.io/minio/minio:latest
+    # Chainguard: Docker Hub y quay.io ya no sirven minio/minio.
+    image: cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034
+    user: '0:0'
     container_name: mercurio_minio_local
     command: server /data --console-address ":9001"
     environment:
