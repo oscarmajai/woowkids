@@ -56,8 +56,8 @@
                     <div v-if="pulserasInsuficientes" class="aviso-pulseras">
                       <q-icon name="warning" size="16px" />
                       <span>
-                        La sucursal tiene {{ inventarioPulseras }} pulseras y el evento pide
-                        {{ form.ninos }}. Confirma que habrá suficientes.
+                        La sucursal tiene {{ inventarioPulseras }} pulseras libres y el evento de
+                        hoy pide {{ form.ninos }}. Confirma que habrá suficientes.
                       </span>
                     </div>
                   </div>
@@ -169,6 +169,16 @@
                       <div class="selected-date-display">
                         <q-icon name="event" size="16px" />
                         {{ selectedDateLabel }}
+                      </div>
+                      <!-- Se avisa desde aquí, antes de armar el paquete: a 7 días o
+                           menos se cobra el total al reservar (C3, paso 3). -->
+                      <div
+                        v-if="liquidacionObligatoria"
+                        class="text-warning q-mt-xs"
+                        style="font-size: 0.75rem"
+                        data-test="aviso-liquidacion-fecha"
+                      >
+                        {{ avisoLiquidacion }} No se puede dejar solo un anticipo.
                       </div>
                     </div>
                     <div>
@@ -547,11 +557,13 @@
               >
                 <q-icon name="check_circle" color="positive" size="28px" />
                 <div>
-                  <div style="font-weight: 700" class="text-positive">
-                    Anticipo registrado correctamente
-                  </div>
+                  <!-- El cobro todavía no está en el servidor: se registra junto con
+                       la reservación al confirmar (alta atómica). Decir "registrado"
+                       aquí hacía creer que ya había quedado guardado. -->
+                  <div style="font-weight: 700" class="text-positive">Pago capturado</div>
                   <div style="font-size: 0.85rem" class="text-positive">
-                    {{ fmt(montoPagado) }} — {{ metodosPagoResumen }}
+                    {{ fmt(montoPagado) }} — {{ metodosPagoResumen }}. Se registra al confirmar la
+                    reservación en el siguiente paso.
                   </div>
                 </div>
               </div>
@@ -988,6 +1000,7 @@ import {
   diasParaEvento,
   etiquetaUnidadExtra,
   exigeLiquidacionAlReservar,
+  faltanPulserasHoy,
   montoPorPorcentaje as montoDePorcentaje,
   porcentajeAnticipoMinimo,
 } from '@/utils/reservacionPrecio'
@@ -1086,24 +1099,18 @@ const tipoEventoNombre = computed(
 // ── Validación paso 1 ────────────────────────────────────────────────────────
 
 /**
- * Pulseras activas que posee la sucursal. Es el tope físico de niños que puede
- * pulsear un evento.
- *
- * Se compara contra el INVENTARIO, no contra las libres en este momento: un
- * evento ocurre en una fecha futura, y las pulseras puestas hoy ya estarán
- * devueltas para entonces. Validar contra las libres daría falsas alarmas (en La
- * Piedad: 110 en inventario frente a 60 libres una tarde cualquiera).
+ * Pulseras activas y libres que tiene la sucursal HOY. Son de un solo uso: el
+ * número baja con cada niño registrado y sube cuando se reponen.
  *
  * null mientras no se haya podido consultar; en ese caso no se avisa nada, para
  * no acusar un faltante que no se pudo comprobar.
  */
 const inventarioPulseras = ref<number | null>(null)
 
-const pulserasInsuficientes = computed(
-  () =>
-    inventarioPulseras.value !== null &&
-    form.value.ninos > 0 &&
-    form.value.ninos > inventarioPulseras.value,
+/** Solo se avisa si el evento es hoy: para una fecha futura las existencias de
+ * hoy no dicen nada (se reponen antes), y el aviso era una falsa alarma. */
+const pulserasInsuficientes = computed(() =>
+  faltanPulserasHoy(inventarioPulseras.value, form.value.ninos, diasAlEvento.value),
 )
 
 const horarioValido = computed(

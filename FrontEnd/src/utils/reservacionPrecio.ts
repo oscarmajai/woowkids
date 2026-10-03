@@ -236,6 +236,20 @@ export function sumarHoras(horaFin: string, horas: number): string {
 }
 
 /**
+ * true si hay que avisar que no alcanzan las pulseras: solo para un evento de
+ * HOY. Las pulseras son de un solo uso y las existencias se reponen, así que
+ * comparar las libres de hoy contra un evento en semanas daba falsas alarmas.
+ * Sin inventario consultado (null) o sin fecha no se avisa.
+ */
+export function faltanPulserasHoy(
+  libres: number | null,
+  ninos: number,
+  diasAlEvento: number | null,
+): boolean {
+  return libres !== null && diasAlEvento === 0 && ninos > 0 && ninos > libres
+}
+
+/**
  * Lo que falta por cobrar de un conjunto de reservaciones, una vez cada una
  * (N13). Una reservación cancelada no tiene adeudo que cobrar aunque tenga
  * pagos y su saldo no sea cero, así que no cuenta (igual que en el diálogo de

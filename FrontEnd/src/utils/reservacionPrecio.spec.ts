@@ -7,6 +7,7 @@ import {
   detallePulseras,
   diasParaEvento,
   exigeLiquidacionAlReservar,
+  faltanPulserasHoy,
   fechaLimiteLiquidacion,
   montoPorPorcentaje,
   porcentajeAnticipoMinimo,
@@ -137,6 +138,23 @@ describe('recalcularReservacion', () => {
   it('sin extras guardados conserva el precio_extras de la reservación', () => {
     const legado = { ...RESERVACION, precio_extras: '485' } as Reservaciones
     expect(recalcularReservacion(legado, 50, { invitados: 20 }).precio_extras).toBe('485')
+  })
+})
+
+describe('faltanPulserasHoy (UX Nueva reservación)', () => {
+  it('avisa solo si el evento es hoy y no alcanzan las libres', () => {
+    expect(faltanPulserasHoy(14, 20, 0)).toBe(true)
+    expect(faltanPulserasHoy(14, 12, 0)).toBe(false)
+  })
+
+  it('no compara las libres de hoy contra un evento futuro', () => {
+    // E2E: "La sucursal tiene 14 pulseras y el evento pide 20" para un evento en 3 semanas.
+    expect(faltanPulserasHoy(14, 20, 21)).toBe(false)
+  })
+
+  it('sin fecha o sin inventario consultado no avisa', () => {
+    expect(faltanPulserasHoy(14, 20, null)).toBe(false)
+    expect(faltanPulserasHoy(null, 20, 0)).toBe(false)
   })
 })
 
