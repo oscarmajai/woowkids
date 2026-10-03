@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -7,7 +8,12 @@ from uuid import UUID, uuid4
 
 import asyncpg
 
-from app.exceptions import DatosInvalidos, IdempotenciaConflictoError
+from app.exceptions import (
+    Conflicto,
+    DatosInvalidos,
+    IdempotenciaConflictoError,
+    PedidoInvalidoError,
+)
 from app.models.comanda import Comanda
 from app.repositories import (
     comanda_repository,
@@ -22,10 +28,11 @@ from app.schemas.pagos import (
     EstadisticasOut,
     HistorialOut,
     PagoCompletoRequest,
+    PaymentItem,
     PaymentOut,
     PaymentRequest,
 )
-from app.services import inventario_service, lealtad_service
+from app.services import inventario_service, lealtad_service, precios_venta
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -34,6 +41,37 @@ def _hash_payload(body: PagoCompletoRequest) -> str:
     Idempotency-Key pero datos distintos (QA #20)."""
     payload_json = json.dumps(body.model_dump(mode="json"), sort_keys=True)
     return hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+
+
+# Lo que arma el POS cuando la tarjeta no trae folio: "CREDITO - Folio: ".
+_PREFIJO_FOLIO_TARJETA = re.compile(r"^\s*(DEBITO|CREDITO)\s*-\s*Folio:\s*", re.IGNORECASE)
+
+
+def _referencia_de_pago(pago: PaymentItem) -> str:
+    return _PREFIJO_FOLIO_TARJETA.sub("", pago.notas_pago or "").strip()
+
+
+async def _validar_metodos_pago(
+    conn: asyncpg.Connection, sucursal_id: UUID, pagos: list[PaymentItem]
+) -> None:
+    """Cada pago debe usar un método que exista y esté activo en la sucursal,
+    y traer referencia (folio, autorización) si el método la exige (M11:
+    antes solo lo validaba la UI)."""
+    for pago in pagos:
+        metodo = await metodos_pago_repository.obtener(conn, pago.metodo_pago_id, sucursal_id)
+        if metodo is None:
+            raise PedidoInvalidoError("El método de pago no existe.", code="METODO_PAGO_INVALIDO")
+        if not metodo["activo"]:
+            raise PedidoInvalidoError(
+                f"El método de pago «{metodo['nombre']}» no está activo en esta sucursal.",
+                code="METODO_PAGO_INVALIDO",
+            )
+        if metodo["requiere_referencia"] and not _referencia_de_pago(pago):
+            raise PedidoInvalidoError(
+                f"El pago con «{metodo['nombre']}» requiere la referencia o el folio "
+                "de autorización.",
+                code="REFERENCIA_REQUERIDA",
+            )
 
 
 async def procesar_pagos(
@@ -100,25 +138,50 @@ async def completar_pago(
                 )
                 return comanda_original
 
+    await _validar_metodos_pago(conn, sucursal_id, body.pagos)
+
+    # C2: el precio, el importe y el total salen del catálogo de la sucursal de
+    # la sesión, no del request. Si el cliente mandó otra cosa, 409 sin cobrar.
+    venta = await precios_venta.calcular_venta(conn, sucursal_id, body.detalles_comanda)
+    descuento_esperado = Decimal("0")
+    if body.puntos_a_redimir > 0:
+        descuento_esperado = await lealtad_service.calcular_descuento(
+            conn, sucursal_id, body.puntos_a_redimir
+        )
+    total_final = precios_venta.a_centavos(venta.subtotal - descuento_esperado)
+    if total_final <= 0:
+        raise DatosInvalidos(
+            f"El descuento por puntos ({precios_venta.formatear_pesos(descuento_esperado)}) "
+            f"no puede cubrir todo el pedido ({precios_venta.formatear_pesos(venta.subtotal)})."
+        )
+    precios_venta.verificar_total(body.total_final, total_final)
+
     total_pagos: Decimal = sum((p.monto for p in body.pagos), Decimal(0))
-    if total_pagos < body.total_final:
+    if total_pagos < total_final:
         raise DatosInvalidos(
             f"El total de los pagos ({total_pagos}) es menor "
-            f"al total de la comanda ({body.total_final})."
+            f"al total de la comanda ({total_final})."
         )
 
     ids_efectivo = await metodos_pago_repository.obtener_ids_por_tipo(conn, "E")
     cambio = body.cambio.quantize(Decimal("0.01"))
-    if cambio > total_pagos - body.total_final:
+    if cambio > total_pagos - total_final:
         raise DatosInvalidos(
             f"El cambio declarado ({cambio}) es mayor al excedente pagado "
-            f"({total_pagos - body.total_final})."
+            f"({total_pagos - total_final})."
         )
     validar_cambio(
         [(p.metodo_pago_id, p.monto) for p in body.pagos],
         cambio,
         ids_efectivo,
     )
+    # Lo que entra a caja menos el cambio tiene que ser exactamente el total:
+    # un excedente sin cambio declarado descuadra el arqueo.
+    if total_pagos - cambio != total_final:
+        raise DatosInvalidos(
+            f"Los pagos ({total_pagos}) menos el cambio ({cambio}) deben sumar "
+            f"exactamente el total de la comanda ({total_final})."
+        )
 
     async with conn.transaction():
         # Folio de ticket secuencial por sucursal (QA #21): el backend asigna
@@ -134,9 +197,9 @@ async def completar_pago(
 
         comanda_in = ComandaCreate(
             ticket_numero=ticket_numero,
-            total_final=body.total_final,
+            total_final=total_final,
             estado_actual=EstadoComanda.PENDIENTE,
-            detalles_comanda=body.detalles_comanda,
+            detalles_comanda=venta.detalles,
             notas_generales=body.notas_generales,
             sucursal_id=sucursal_id,
             nombre_cliente=body.nombre_cliente,
@@ -152,7 +215,7 @@ async def completar_pago(
         await inventario_service.descontar_por_venta(
             conn,
             str(sucursal_id),
-            body.detalles_comanda,
+            venta.detalles,
             comanda.id,
             usuario_id,
         )
@@ -200,19 +263,18 @@ async def completar_pago(
                 UUID(comanda.id),
                 usuario_id,
             )
-            subtotal_bruto: Decimal = sum((d.subtotal for d in body.detalles_comanda), Decimal(0))
-            esperado = subtotal_bruto - descuento
-            if body.total_final != esperado:
-                raise DatosInvalidos(
-                    f"El total final ({body.total_final}) no coincide con el subtotal "
-                    f"menos el descuento por puntos canjeados ({esperado})."
+            # La configuración pudo cambiar entre la validación y el canje.
+            if descuento != descuento_esperado:
+                raise Conflicto(
+                    "El valor del punto de lealtad cambió mientras se cobraba. "
+                    "Vuelve a cobrar el pedido."
                 )
         if body.celular_cliente:
             await lealtad_service.otorgar_puntos(
                 conn,
                 sucursal_id,
                 body.celular_cliente,
-                body.total_final,
+                total_final,
                 usuario_id,
                 comanda_id=UUID(comanda.id),
             )

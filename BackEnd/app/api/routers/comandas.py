@@ -73,7 +73,9 @@ async def crear_comanda(
     comanda_in = comanda_in.model_copy(update={"sucursal_id": active_branch_id})
 
     try:
-        comanda = await comanda_service.crear_comanda(conn, comanda_in, current_user, apertura_id)
+        comanda = await comanda_service.crear_comanda_pos(
+            conn, comanda_in, current_user, apertura_id
+        )
         return asdict(comanda)
     except HTTPException:
         # Preserva el status code y el {code, message} estructurado de

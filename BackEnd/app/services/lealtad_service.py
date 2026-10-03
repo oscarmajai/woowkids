@@ -141,6 +141,16 @@ async def otorgar_puntos(
     return puntos
 
 
+async def calcular_descuento(conn: asyncpg.Connection, sucursal_id: UUID, puntos: int) -> Decimal:
+    """Descuento en pesos que daría canjear `puntos` con la configuración
+    vigente, sin tocar saldos. Es la misma fórmula que redimir_puntos; sirve
+    para validar el total de un cobro antes de escribir nada (C2)."""
+    config = await lealtad_repository.obtener_configuracion(conn, sucursal_id)
+    if not config:
+        raise DatosInvalidos("No hay configuración de lealtad para esta sucursal.")
+    return puntos * Decimal(str(config["valor_punto"]))
+
+
 async def redimir_puntos(
     conn: asyncpg.Connection,
     sucursal_id: UUID,

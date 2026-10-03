@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { AxiosError } from 'axios'
 import {
+  esPedidoDesactualizado,
   isNetworkError,
   isTimeoutError,
   mensajeDeError,
@@ -95,5 +96,26 @@ describe('mensajeDeError', () => {
   it('devuelve el fallback para cualquier otro valor', () => {
     expect(mensajeDeError('texto plano', 'fallback')).toBe('fallback')
     expect(mensajeDeError(null, 'fallback')).toBe('fallback')
+  })
+})
+
+describe('esPedidoDesactualizado', () => {
+  it('reconoce los rechazos del cobro por catálogo desactualizado (C2)', () => {
+    for (const code of [
+      'PRECIO_CAMBIADO',
+      'TOTAL_NO_COINCIDE',
+      'PRODUCTO_NO_DISPONIBLE',
+      'PRODUCTO_INVALIDO',
+    ]) {
+      expect(esPedidoDesactualizado({ statusCode: 409, code, message: 'x' })).toBe(true)
+    }
+  })
+
+  it('no confunde otros conflictos ni errores sueltos', () => {
+    expect(
+      esPedidoDesactualizado({ statusCode: 409, code: 'STOCK_INSUFICIENTE', message: 'x' }),
+    ).toBe(false)
+    expect(esPedidoDesactualizado(new Error('PRECIO_CAMBIADO'))).toBe(false)
+    expect(esPedidoDesactualizado(null)).toBe(false)
   })
 })

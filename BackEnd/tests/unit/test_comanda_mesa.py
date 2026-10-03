@@ -30,7 +30,15 @@ def test_comanda_create_mesa_es_none_por_default():
 def test_pago_completo_request_acepta_mesa():
     data = PagoCompletoRequest(
         total_final=Decimal("100"),
-        detalles_comanda=[],
+        detalles_comanda=[
+            {
+                "producto_id": str(uuid4()),
+                "nombre": "Pizza",
+                "cantidad": 1,
+                "precio_unitario": "100",
+                "subtotal": "100",
+            }
+        ],
         pagos=[PaymentItem(metodo_pago_id=uuid4(), monto=Decimal("100"))],
         mesa="Terraza 3",
     )

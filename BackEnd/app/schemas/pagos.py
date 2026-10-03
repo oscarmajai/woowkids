@@ -66,6 +66,14 @@ class PaymentOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class DetalleVentaIn(DetalleCreate):
+    """Renglón del pedido que manda el POS. El precio y el importe se
+    comparan contra el catálogo en el servidor (services/precios_venta.py);
+    aquí solo se acota la cantidad (M3: con 0 tronaba con 500 en inventario)."""
+
+    cantidad: int = Field(..., ge=1, le=999)
+
+
 class PagoCompletoRequest(BaseModel):
     """Recibe la comanda y los pagos en un solo request.
 
@@ -81,7 +89,7 @@ class PagoCompletoRequest(BaseModel):
     # coincide con comandas.ticket_numero VARCHAR(10) en BD.
     ticket_numero: str | None = Field(default=None, max_length=10)
     total_final: Decimal = Field(..., gt=0)
-    detalles_comanda: list[DetalleCreate]
+    detalles_comanda: list[DetalleVentaIn] = Field(..., min_length=1, max_length=500)
     notas_generales: str | None = None
     pagos: list[PaymentItem] = Field(..., min_length=1)
     celular_cliente: str | None = None
