@@ -14,9 +14,10 @@
 # Para producción a escala se recomiendan las imágenes separadas (docker-compose.yml).
 ARG FRONTEND_IMAGE=ghcr.io/oscarmajai/woowkids-frontend:latest
 ARG BACKEND_IMAGE=ghcr.io/oscarmajai/woowkids-backend:latest
-# MinIO: dl.min.io ya no distribuye binarios (410), se toma de la imagen oficial.
-# RELEASE.2025-09-07T16-13-09Z, fijada por digest (Docker Hub solo publica latest).
-ARG MINIO_IMAGE=minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+# MinIO: dl.min.io ya no distribuye binarios (410) y Docker Hub y quay.io dejaron
+# de servir la imagen, así que se toma la de Chainguard (mismo binario AGPL).
+# RELEASE.2026-09-22T19-25-18Z, fijada por digest (Chainguard solo publica latest).
+ARG MINIO_IMAGE=cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034
 
 FROM ${FRONTEND_IMAGE} AS frontend
 FROM ${MINIO_IMAGE} AS minio
