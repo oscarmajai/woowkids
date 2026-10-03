@@ -27,7 +27,7 @@
       <KpiCard
         label="Usadas"
         :value="totalUsadas"
-        :note="totalUsadas ? 'asignadas actualmente' : undefined"
+        :note="totalUsadas ? 'ya asignadas, no se reutilizan' : undefined"
         note-tone="info"
       />
       <KpiCard

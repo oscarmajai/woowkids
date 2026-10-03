@@ -243,6 +243,25 @@
         <div class="form-grid__toggle">
           <q-toggle v-model="formDialog.destacado" label="Destacar al reservar" />
         </div>
+        <label class="form-grid__field form-grid__field--full">
+          <span class="field-label">Tipos de evento</span>
+          <q-select
+            v-model="formDialog.tipos_evento_ids"
+            dense
+            outlined
+            multiple
+            use-chips
+            emit-value
+            map-options
+            option-value="id"
+            option-label="nombre"
+            :options="tiposEventoStore.activos"
+            :loading="tiposEventoStore.loading"
+            placeholder="Todos los tipos de evento"
+            no-options-label="No hay tipos de evento registrados"
+            hint="Al reservar, el paquete solo se ofrece para estos tipos. Sin ninguno, sirve para todos."
+          />
+        </label>
         <p class="form-grid__field form-grid__field--full form-grid__note">
           Al reservar solo se ofrecerán los paquetes cuyo rango cubra el número de niños que pida
           el cliente.
@@ -368,6 +387,8 @@ import type { ApiError } from '@/types/auth'
 import { useAuthStore } from '@/stores/auth'
 import { usePaquetesStore } from '@/stores/paquetes'
 import { useProductosStore } from '@/stores/productos'
+import { useTiposEventoStore } from '@/stores/tipos_evento'
+import { usePaquetesTipoEventoStore } from '@/stores/paquetes_tipo_evento'
 import { paquetesApi } from '@/api/paquetesApi'
 import type { Paquetes, PaqueteProductoItem, PaqueteProductoIncluido } from '@/types/paquetes'
 
@@ -375,11 +396,14 @@ const $q = useQuasar()
 const authStore = useAuthStore()
 const store = usePaquetesStore()
 const productosStore = useProductosStore()
+const tiposEventoStore = useTiposEventoStore()
+const paquetesTipoEventoStore = usePaquetesTipoEventoStore()
 
 const cargar = () => {
   if (authStore.currentBranchId) {
     store.cargar(authStore.currentBranchId)
     productosStore.cargar(authStore.currentBranchId)
+    tiposEventoStore.cargar()
   }
 }
 
@@ -497,6 +521,7 @@ const formDialog = ref({
   anticipo_porcentaje: null as number | null,
   destacado: false,
   productos_incluidos: [] as PaqueteProductoItem[],
+  tipos_evento_ids: [] as string[],
 })
 
 // Un número vacío del q-input llega como '' (v-model.number no lo convierte).
@@ -516,6 +541,7 @@ const abrirCrear = () => {
     anticipo_porcentaje: null,
     destacado: false,
     productos_incluidos: [],
+    tipos_evento_ids: [],
   }
   productoIncluidoTemporal.value = { producto_id: '', cantidad: 1 }
   dialogOpen.value = true
@@ -551,6 +577,7 @@ const abrirEditar = async (row: Paquetes) => {
     anticipo_porcentaje: row.anticipo_porcentaje === null ? null : Number(row.anticipo_porcentaje),
     destacado: row.destacado,
     productos_incluidos: productosIncluidosCargados,
+    tipos_evento_ids: (row.tipos_evento ?? []).map((t) => t.id),
   }
   productoIncluidoTemporal.value = { producto_id: '', cantidad: 1 }
   dialogOpen.value = true
@@ -616,10 +643,12 @@ const guardar = async () => {
         destacado: formDialog.value.destacado,
         productos_incluidos: formDialog.value.productos_incluidos,
       })
+      const antes = (editando.value.tipos_evento ?? []).map((t) => t.id)
+      await guardarTiposEvento(editando.value.id, antes)
       $q.notify({ type: 'positive', message: 'Paquete actualizado', position: 'top-right' })
     } else {
       if (!authStore.currentBranchId) return
-      await store.crearPaquete({
+      const nuevo = await store.crearPaquete({
         nombre: formDialog.value.nombre.trim(),
         descripcion: formDialog.value.descripcion.trim() || null,
         min_invitados: formDialog.value.min_invitados,
@@ -632,6 +661,7 @@ const guardar = async () => {
         productos_incluidos: formDialog.value.productos_incluidos,
         sucursal_id: authStore.currentBranchId,
       })
+      await guardarTiposEvento(nuevo.id, [])
       $q.notify({ type: 'positive', message: 'Paquete creado', position: 'top-right' })
     }
     cerrarDialog()
@@ -643,6 +673,30 @@ const guardar = async () => {
     })
   } finally {
     guardando.value = false
+  }
+}
+
+/**
+ * Asocia al paquete los tipos de evento elegidos y quita los demás (M17). El
+ * paquete ya quedó guardado: si esto falla se avisa sin perder lo demás. Al
+ * final se recarga el listado para que muestre los tipos actualizados.
+ */
+async function guardarTiposEvento(paqueteId: string, antes: string[]): Promise<void> {
+  const despues = formDialog.value.tipos_evento_ids
+  try {
+    await paquetesTipoEventoStore.sincronizar(paqueteId, antes, despues)
+  } catch (err) {
+    $q.notify({
+      type: 'warning',
+      message: 'El paquete se guardó, pero no se pudieron actualizar sus tipos de evento.',
+      caption: resolveErrorMessage(err as ApiError),
+      position: 'top-right',
+      timeout: 6000,
+    })
+  } finally {
+    if (authStore.currentBranchId && (antes.length || despues.length)) {
+      await store.cargar(authStore.currentBranchId)
+    }
   }
 }
 

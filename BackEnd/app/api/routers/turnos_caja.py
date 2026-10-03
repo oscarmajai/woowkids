@@ -6,6 +6,7 @@ Endpoints FastAPI para el módulo de Cierre de Caja (/api/turnos-caja).
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -14,6 +15,8 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal
+from app.core.utils import get_mexico_now
+from app.repositories import sucursales as sucursales_repository
 from app.schemas.auth import TokenData
 from app.schemas.caja import (
     AbrirTurnoPayload,
@@ -37,9 +40,17 @@ from app.schemas.caja import (
 )
 from app.services import alcance_service, turnos_caja_service
 from app.services.pdf_service import generar_pdf_arqueo
+from app.services.permission_service import has_permission
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
+
+# A16: los pasos del cierre que validan PIN/contraseña (revisión, PIN de cajero
+# y de administrador, confirmación) los ejecuta la sesión del cajero que cierra
+# su turno. Antes solo pedían sesión (cocina o inventario los alcanzaban); ahora
+# piden el permiso de contar caja. Quién AUTORIZA (el administrador cuyas
+# credenciales se validan) se revisa aparte en el service.
+_PERMISO_CIERRE = "turnos_caja:conteo"
 
 
 def _sucursal_filtro(current_user: TokenData, sucursal_id: str | None) -> str | None:
@@ -71,10 +82,20 @@ _ARQUEOS_CSV_CAMPOS = [
     summary="Lista los turnos horarios configurados",
 )
 async def listar_turnos(
+    sucursal_id: str | None = Query(None),
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[TurnoResponse]:
-    return await turnos_caja_service.obtener_turnos(conn)
+    # M19: los horarios de la sucursal de la sesión (o la del selector, para
+    # AdministradorSistema) más los globales. M8: `vigente` se calcula con la
+    # hora local de esa sucursal; sin sucursal, con la hora de México.
+    sucursal = _sucursal_filtro(current_user, sucursal_id)
+    ahora = None
+    if sucursal:
+        ahora = await sucursales_repository.ahora_en_sucursal(conn, UUID(sucursal))
+    if ahora is None:
+        ahora = get_mexico_now().replace(tzinfo=None)
+    return await turnos_caja_service.obtener_turnos(conn, sucursal, ahora)
 
 
 @router.get(
@@ -116,14 +137,21 @@ async def abrir_turno(
 
 @router.get(
     "/activo",
-    response_model=TurnoActivoResponse,
+    response_model=TurnoActivoResponse | None,
     summary="Obtiene el turno activo del cajero autenticado",
 )
 async def obtener_activo(
     sucursal_id: str | None = Query(None),
+    opcional: bool = Query(
+        False,
+        description=(
+            "B4: con true, si no hay turno activo responde 200 con null en vez de "
+            "404 (para consultas de fondo que no son un error)."
+        ),
+    ),
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
-) -> TurnoActivoResponse:
+) -> TurnoActivoResponse | None:
     # AdministradorSistema no tiene sucursal propia: la apertura activa debe
     # respetar la sucursal elegida en el selector global, no cualquier turno
     # abierto en otra sucursal. El resto de roles siempre usa su propia
@@ -133,7 +161,19 @@ async def obtener_activo(
         sucursal_efectiva = sucursal_id
     else:
         sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
-    return await turnos_caja_service.obtener_turno_activo(conn, current_user.sub, sucursal_efectiva)
+    try:
+        activo = await turnos_caja_service.obtener_turno_activo(
+            conn, current_user.sub, sucursal_efectiva
+        )
+    except turnos_caja_service.TurnoNoEncontradoError:
+        if opcional:
+            return None
+        raise
+    # B9: el conteo del cierre es a ciegas. El efectivo esperado y el desglose
+    # por método (M7) solo los ve quien puede revisar el arqueo.
+    if not has_permission(current_user.role, "turnos_caja:revision_admin"):
+        activo = activo.model_copy(update={"efectivo_esperado": None, "ventas_por_metodo": None})
+    return activo
 
 
 @router.get(
@@ -182,10 +222,12 @@ async def enviar_conteo(
 )
 async def autenticar_revision_admin(
     payload: RevisionAdminPayload,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> RevisionAdminResponse:
-    return await turnos_caja_service.autenticar_admin_revision(conn, current_user.sub, payload)
+    return await turnos_caja_service.autenticar_admin_revision(
+        conn, current_user.sub, payload, solicitante=current_user
+    )
 
 
 @router.post(
@@ -195,10 +237,12 @@ async def autenticar_revision_admin(
 )
 async def confirmar_cierre(
     payload: ConfirmarCierrePayload,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> ConfirmarCierreResponse:
-    return await turnos_caja_service.confirmar_cierre(conn, current_user.sub, payload)
+    return await turnos_caja_service.confirmar_cierre(
+        conn, current_user.sub, payload, solicitante=current_user
+    )
 
 
 @router.post(
@@ -207,12 +251,14 @@ async def confirmar_cierre(
 )
 async def validar_pin_cajero(
     body: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     turno_id = body.get("turno_id", "")
-    pin = body.get("pin", "")
-    return await turnos_caja_service.validar_pin_cajero(conn, current_user.sub, turno_id, pin)
+    pin = str(body.get("pin", "") or "")
+    return await turnos_caja_service.validar_pin_cajero(
+        conn, current_user.sub, turno_id, pin, solicitante=current_user
+    )
 
 
 @router.post(
@@ -221,13 +267,20 @@ async def validar_pin_cajero(
 )
 async def validar_pin_admin(
     body: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     turno_id = body.get("turno_id", "")
-    admin_email = body.get("admin_email", "")
-    pin = body.get("pin", "")
-    return await turnos_caja_service.validar_pin_admin(conn, turno_id, admin_email, pin)
+    admin_email = str(body.get("admin_email", "") or "")
+    pin = str(body.get("pin", "") or "")
+    return await turnos_caja_service.validar_pin_admin(
+        conn,
+        turno_id,
+        admin_email,
+        pin,
+        user_id=current_user.sub,
+        solicitante=current_user,
+    )
 
 
 @router.post(
@@ -241,7 +294,9 @@ async def cancelar_conteo(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
     turno_id = body.get("turno_id", "")
-    return await turnos_caja_service.cancelar_conteo(conn, current_user.sub, turno_id)
+    return await turnos_caja_service.cancelar_conteo(
+        conn, current_user.sub, turno_id, solicitante=current_user
+    )
 
 
 @router.post(

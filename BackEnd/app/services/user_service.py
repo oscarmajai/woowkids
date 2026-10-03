@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -7,6 +8,7 @@ import asyncpg
 from app.core.roles import ROL_ADMINISTRADOR, ROL_SISTEMA, ROLES_SIN_SUCURSAL_FIJA
 from app.core.security import hash_password, verify_password
 from app.repositories.permission_repository import get_rol_by_nombre
+from app.repositories.refresh_token_repository import revoke_all_user_refresh_tokens
 from app.repositories.user_repository import (
     UsuarioRecord,
     assign_usuario_to_branch,
@@ -33,8 +35,29 @@ class EmailAlreadyExistsError(Exception):
     pass
 
 
+# Restricciones únicas del correo: la original (distingue mayúsculas) y la de
+# lower(email) de la migración 089 (M1).
+_RESTRICCIONES_EMAIL = frozenset({"uq_usuarios_email", "uq_usuarios_email_lower"})
+
+
+def _es_email_duplicado(exc: asyncpg.UniqueViolationError) -> bool:
+    return getattr(exc, "constraint_name", None) in _RESTRICCIONES_EMAIL
+
+
 class BranchRequiredError(Exception):
     pass
+
+
+class SucursalNoEncontradaError(Exception):
+    """M3: la sucursal indicada no existe (antes: 500 por la FK)."""
+
+
+# FK de usuarios_sucursal.sucursal_id: la sucursal asignada no existe.
+_FK_SUCURSAL = "usuarios_sucursal_sucursal_id_fkey"
+
+
+def _es_sucursal_inexistente(exc: asyncpg.ForeignKeyViolationError) -> bool:
+    return getattr(exc, "constraint_name", None) == _FK_SUCURSAL
 
 
 class InsufficientPermissionsError(Exception):
@@ -47,6 +70,10 @@ class UserNotFoundError(Exception):
 
 class RolInvalidoError(Exception):
     pass
+
+
+class AutoEliminacionError(Exception):
+    """Un usuario intentó eliminar su propia cuenta."""
 
 
 class CredencialActualInvalidaError(Exception):
@@ -77,6 +104,7 @@ def _to_response(record: UsuarioRecord) -> UserResponse:
         is_active=record["activo"],
         ultimo_acceso=record["ultimo_acceso"],
         tiene_pin=bool(record["pin_hash"]),
+        sucursales_ids=record.get("sucursales_ids") or [],
     )
 
 
@@ -90,11 +118,24 @@ def _assert_admin_scope(current_user: TokenData, target: UsuarioRecord) -> None:
             raise InsufficientPermissionsError
 
 
-async def list_users(conn: asyncpg.Connection, current_user: TokenData) -> list[UserResponse]:
+EstadoUsuarios = Literal["activos", "inactivos", "todos"]
+
+_FILTRO_ESTADO: dict[str, bool | None] = {"activos": True, "inactivos": False, "todos": None}
+
+
+async def list_users(
+    conn: asyncpg.Connection,
+    current_user: TokenData,
+    estado: EstadoUsuarios = "activos",
+) -> list[UserResponse]:
+    """A10: `estado` decide si se listan los activos (por defecto, como antes),
+    los inactivos o todos; sin esto un usuario desactivado desaparecía y no
+    se podía reactivar. El alcance por sucursal (C1) no cambia."""
+    activo = _FILTRO_ESTADO[estado]
     if current_user.branch_id is not None:
-        records = await get_usuarios_by_branch(conn, current_user.branch_id)
+        records = await get_usuarios_by_branch(conn, current_user.branch_id, activo)
     elif current_user.role == ROL_SISTEMA:
-        records = await get_all_usuarios(conn)
+        records = await get_all_usuarios(conn, activo)
     else:
         return []
     return [_to_response(r) for r in records]
@@ -134,20 +175,31 @@ async def create_user(
 
     creator_id = UUID(current_user.sub)
     pin_hash = hash_password(data.pin) if data.pin else None
-    async with conn.transaction():
-        user_id = await create_usuario(
-            conn,
-            email=data.email,
-            password_hash=hash_password(data.password),
-            nombre_completo=data.full_name,
-            rol=data.role,
-            creado_por=creator_id,
-            apellidos=data.apellidos,
-            telefono=data.telefono,
-            pin_hash=pin_hash,
-        )
-        if branch_id is not None:
-            await assign_usuario_to_branch(conn, user_id, branch_id, creator_id)
+    try:
+        async with conn.transaction():
+            user_id = await create_usuario(
+                conn,
+                email=data.email,
+                password_hash=hash_password(data.password),
+                nombre_completo=data.full_name,
+                rol=data.role,
+                creado_por=creator_id,
+                apellidos=data.apellidos,
+                telefono=data.telefono,
+                pin_hash=pin_hash,
+            )
+            if branch_id is not None:
+                await assign_usuario_to_branch(conn, user_id, branch_id, creator_id)
+    except asyncpg.UniqueViolationError as exc:
+        # Dos altas simultáneas con el mismo correo: la BD decide (M1).
+        if _es_email_duplicado(exc):
+            raise EmailAlreadyExistsError from exc
+        raise
+    except asyncpg.ForeignKeyViolationError as exc:
+        # M3: la transacción ya se revirtió (no queda el usuario a medias).
+        if _es_sucursal_inexistente(exc):
+            raise SucursalNoEncontradaError from exc
+        raise
 
     record = await get_usuario_by_id(conn, user_id)
     if record is None:
@@ -181,7 +233,9 @@ async def update_user(
             raise InsufficientPermissionsError
     if _role_requires_branch(data.role) and data.branch_id is None:
         raise BranchRequiredError
-    if data.email != target["email"] and await email_exists(conn, data.email):
+    # M1: data.email ya viene normalizado; se excluye al propio usuario para
+    # que una cuenta vieja con mayúsculas pueda guardarse en minúsculas.
+    if await email_exists(conn, data.email, excluir_id=user_id):
         raise EmailAlreadyExistsError
 
     editor_id = UUID(current_user.sub)
@@ -193,24 +247,37 @@ async def update_user(
     branch_id = data.branch_id if data.role != ROL_ADMINISTRADOR else None
     branch_changed = data.role != ROL_ADMINISTRADOR and branch_id != target["sucursal_id"]
 
-    async with conn.transaction():
-        updated = await update_usuario(
-            conn,
-            user_id=user_id,
-            email=data.email,
-            nombre_completo=data.full_name,
-            rol=data.role,
-            password_hash=password_hash,
-            modificado_por=editor_id,
-            apellidos=data.apellidos,
-            telefono=data.telefono,
-            activo=data.is_active,
-            pin_hash=pin_hash,
-        )
-        if not updated:
-            raise UserNotFoundError
-        if branch_changed:
-            await update_usuario_branch(conn, user_id, branch_id, editor_id)
+    try:
+        async with conn.transaction():
+            updated = await update_usuario(
+                conn,
+                user_id=user_id,
+                email=data.email,
+                nombre_completo=data.full_name,
+                rol=data.role,
+                password_hash=password_hash,
+                modificado_por=editor_id,
+                apellidos=data.apellidos,
+                telefono=data.telefono,
+                activo=data.is_active,
+                pin_hash=pin_hash,
+            )
+            if not updated:
+                raise UserNotFoundError
+            if branch_changed:
+                await update_usuario_branch(conn, user_id, branch_id, editor_id)
+            if data.is_active is False and target["activo"]:
+                # A11: al desactivar, sus sesiones no se pueden renovar (ni
+                # revivir si después se reactiva la cuenta).
+                await revoke_all_user_refresh_tokens(conn, user_id)
+    except asyncpg.UniqueViolationError as exc:
+        if _es_email_duplicado(exc):
+            raise EmailAlreadyExistsError from exc
+        raise
+    except asyncpg.ForeignKeyViolationError as exc:
+        if _es_sucursal_inexistente(exc):
+            raise SucursalNoEncontradaError from exc
+        raise
 
     record = await get_usuario_by_id(conn, user_id)
     if record is None:
@@ -219,15 +286,21 @@ async def update_user(
 
 
 async def delete_user(conn: asyncpg.Connection, user_id: UUID, current_user: TokenData) -> None:
+    # Nadie se elimina a sí mismo: se quedaría sin sesión a media acción y,
+    # si es el único administrador, sin nadie que lo reactive.
+    if str(user_id) == current_user.sub:
+        raise AutoEliminacionError
     target = await get_usuario_by_id(conn, user_id)
     if target is None:
         raise UserNotFoundError
     if target["rol"] == ROL_SISTEMA:
         raise InsufficientPermissionsError
     _assert_admin_scope(current_user, target)
-    deleted = await delete_usuario(conn, user_id, UUID(current_user.sub))
-    if not deleted:
-        raise UserNotFoundError
+    async with conn.transaction():
+        deleted = await delete_usuario(conn, user_id, UUID(current_user.sub))
+        if not deleted:
+            raise UserNotFoundError
+        await revoke_all_user_refresh_tokens(conn, user_id)
 
 
 async def cambiar_mi_pin(

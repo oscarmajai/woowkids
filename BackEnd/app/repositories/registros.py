@@ -178,3 +178,49 @@ async def obtener_saldo_para_cobro(
         registro_id,
     )
     return dict(row) if row else None
+
+
+async def get_registro_para_comprobante(
+    conn: asyncpg.Connection, registro_id: UUID
+) -> dict[str, Any] | None:
+    """N5 — encabezado del comprobante de un registro (tutor, sucursal, quién
+    lo registró, total). Bloquea la fila del registro (FOR UPDATE) para que la
+    reimpresión no se cruce con el checkout del último niño, que revoca el
+    código del QR. Llamar dentro de una transacción."""
+    row = await conn.fetchrow(
+        """
+        SELECT r.id, r.sucursal_id, r.estado, r.total, r.creado,
+               t.nombre_completo AS tutor, t.telefono,
+               s.nombre AS sucursal,
+               u.nombre_completo AS cajero
+        FROM registros r
+        JOIN tutores t ON t.id = r.tutores_id
+        JOIN sucursales s ON s.id = r.sucursal_id
+        LEFT JOIN usuarios u ON u.id = r.creado_por
+        WHERE r.id = $1 AND r.activo = TRUE
+        FOR UPDATE OF r
+        """,
+        registro_id,
+    )
+    return dict(row) if row else None
+
+
+async def get_ninos_en_estancia_de_registro(
+    conn: asyncpg.Connection, registro_id: UUID
+) -> list[dict[str, Any]]:
+    """N5 — niños del registro que siguen dentro (sin salida), con sus notas /
+    alergias (M26), para el comprobante reimpreso."""
+    rows = await conn.fetch(
+        """
+        SELECT n.nombre_completo AS nombre, n.edad, n.notas,
+               p.pulsera_rfid AS pulsera, dr.cantidad AS horas,
+               dr.salida_esperada
+        FROM detalles_registro dr
+        JOIN ninos n ON n.id = dr.ninos_id
+        JOIN pulseras p ON p.id = dr.pulseras_id
+        WHERE dr.registros_id = $1 AND dr.activo = TRUE AND dr.salida IS NULL
+        ORDER BY dr.creado, n.nombre_completo
+        """,
+        registro_id,
+    )
+    return [dict(r) for r in rows]

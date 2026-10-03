@@ -104,7 +104,11 @@ const routes: RouteRecordRaw[] = [
         path: 'cierre',
         name: 'pos-cierre',
         component: () => import('@/pages/CierreCajaPage.vue'),
-        meta: { requiresAuth: true, permissions: ['pos:acceder'], title: 'Cierre de Caja' },
+        meta: {
+          requiresAuth: true,
+          permissions: ['pos:acceder'],
+          title: 'Apertura y cierre de caja',
+        },
       },
       {
         path: 'historial-arqueos',
@@ -467,9 +471,19 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
+  // B12: una ruta inexistente muestra un 404 dentro del layout. Sin sesión,
+  // el guard manda al login (como antes).
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/login',
+    component: () => import('@/layouts/AppShell.vue'),
+    children: [
+      {
+        path: '',
+        name: 'not-found',
+        component: () => import('@/pages/NotFoundPage.vue'),
+        meta: { requiresAuth: true, title: 'Página no encontrada' },
+      },
+    ],
   },
 ]
 

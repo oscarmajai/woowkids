@@ -11,6 +11,9 @@ export interface CajaAdmin {
   activo: boolean
   impresora: string | null
   turnoActual: TurnoActualCaja | null
+  /** N14: sucursal de la caja (útil en la vista "Todas las sucursales"). */
+  sucursalId?: string | null
+  sucursalNombre?: string | null
 }
 
 export interface CajaCreate {

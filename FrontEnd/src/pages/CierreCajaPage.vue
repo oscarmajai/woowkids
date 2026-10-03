@@ -25,15 +25,44 @@
               Selecciona la operación que deseas realizar en el turno actual.
             </p>
           </div>
-          <div class="cierre-hub__actions">
-            <button type="button" class="cierre-hub__card" @click="vistaOperando = 'ingreso'">
+          <div
+            v-if="veEsperado && turno.cajaEnNegativo"
+            class="cierre-hub__alerta"
+            role="alert"
+            data-test="alerta-caja-negativa"
+          >
+            <q-icon name="warning" size="20px" />
+            <span>
+              <strong>La caja está en negativo:</strong> el efectivo esperado es
+              {{ formatMXN(turno.efectivoDisponible) }}.
+              {{
+                puedeIngresarEfectivo
+                  ? 'Registra un ingreso de efectivo o avisa al administrador.'
+                  : 'Avisa al administrador de la sucursal.'
+              }}
+            </span>
+          </div>
+          <div class="cierre-hub__actions" :style="{ '--hub-cols': accionesHub }">
+            <button
+              v-if="puedeIngresarEfectivo"
+              type="button"
+              class="cierre-hub__card"
+              data-test="hub-ingreso"
+              @click="vistaOperando = 'ingreso'"
+            >
               <span class="cierre-hub__icon cierre-hub__icon--ingreso">
                 <q-icon name="add_card" size="28px" />
               </span>
               <h3 class="cierre-hub__card-title">Ingreso de efectivo</h3>
               <p class="cierre-hub__card-text">Agregar dinero físico a la caja actual.</p>
             </button>
-            <button type="button" class="cierre-hub__card" @click="vistaOperando = 'retiro'">
+            <button
+              v-if="puedeRetirar"
+              type="button"
+              class="cierre-hub__card"
+              data-test="hub-retiro"
+              @click="vistaOperando = 'retiro'"
+            >
               <span class="cierre-hub__icon cierre-hub__icon--retiro">
                 <q-icon name="payments" size="28px" />
               </span>
@@ -58,6 +87,10 @@
               <dt>Fondo inicial</dt>
               <dd>{{ formatMXN(turno.fondoInicial) }}</dd>
             </div>
+            <div v-for="venta in ventasPorMetodo" :key="venta.metodo" data-test="hub-venta-metodo">
+              <dt>Ventas en {{ venta.label.toLowerCase() }}</dt>
+              <dd>{{ formatMXN(venta.total) }}</dd>
+            </div>
             <div>
               <dt>Retiros parciales</dt>
               <dd>{{ formatMXN(turno.totalRetiros) }}</dd>
@@ -66,9 +99,22 @@
               <dt>Ingresos de efectivo</dt>
               <dd>{{ formatMXN(turno.totalIngresos) }}</dd>
             </div>
+            <div
+              v-if="veEsperado"
+              class="cierre-hub__esperado"
+              :class="{ 'cierre-hub__esperado--negativo': turno.cajaEnNegativo }"
+              data-test="hub-efectivo-esperado"
+            >
+              <dt>Efectivo esperado en caja</dt>
+              <dd>{{ formatMXN(turno.efectivoDisponible) }}</dd>
+            </div>
             <div v-if="horaApertura">
               <dt>Apertura</dt>
               <dd>{{ horaApertura }}</dd>
+            </div>
+            <div v-if="turno.observacionesApertura" class="cierre-hub__notas">
+              <dt>Notas de apertura</dt>
+              <dd>{{ turno.observacionesApertura }}</dd>
             </div>
           </dl>
         </div>
@@ -236,14 +282,40 @@ const horaApertura = computed(() =>
     : null,
 )
 
+// El código ("CAJA 01") se repite entre sucursales: se muestra con el nombre.
+const cajaEtiqueta = computed(() =>
+  turno.cajaNombre && turno.terminal
+    ? `${turno.cajaNombre} (${turno.terminal})`
+    : turno.cajaNombre || turno.terminal || null,
+)
+
 const subtitulo = computed(() =>
   [
-    turno.terminal || null,
+    cajaEtiqueta.value,
     cajeroNombreMostrar.value,
     horaApertura.value ? `turno abierto desde ${horaApertura.value}` : null,
   ]
     .filter(Boolean)
     .join(' · '),
+)
+
+// M10: el hub solo ofrece las operaciones que el rol puede hacer (el
+// Administrador abre y cierra su turno, pero no tiene ingreso ni retiro).
+const puedeIngresarEfectivo = computed(() =>
+  authStore.hasPermission('turnos_caja:ingreso_efectivo'),
+)
+const puedeRetirar = computed(() => authStore.hasPermission('retiros_parciales:crear'))
+const accionesHub = computed(
+  () => 1 + (puedeIngresarEfectivo.value ? 1 : 0) + (puedeRetirar.value ? 1 : 0),
+)
+
+// B9: el conteo del cierre es a ciegas. El backend solo manda el efectivo
+// esperado y el desglose por método (M7) a quien puede revisar el arqueo.
+const veEsperado = computed(() => turno.efectivoEsperado !== null)
+
+// M7: lo cobrado por método (sin renglones en cero, salvo el efectivo).
+const ventasPorMetodo = computed(() =>
+  turno.ventasPorMetodo.filter((v) => v.metodo === 'efectivo' || v.total !== 0),
 )
 
 // Pasos del cierre según el estado del turno (máquina de estados del store).
@@ -449,9 +521,38 @@ watch(
     color: var(--text-secondary);
   }
 
+  &__alerta {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--tone-bad-bg);
+    color: var(--tone-bad-fg);
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+
+  &__esperado dd {
+    font-size: 15px;
+  }
+
+  &__esperado--negativo {
+    dt,
+    dd {
+      color: var(--tone-bad-fg);
+    }
+  }
+
+  &__notas dd {
+    font-weight: 600;
+    text-align: right;
+    white-space: pre-line;
+  }
+
   &__actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--hub-cols, 3), minmax(0, 1fr));
     gap: 16px;
 
     @media (max-width: 760px) {

@@ -22,7 +22,7 @@ from app.schemas.pagos_reservacion import (
     PagosReservacionOut,
     PagosReservacionUpdate,
 )
-from app.services import lealtad_service
+from app.services import lealtad_service, turnos_caja_service
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -38,7 +38,7 @@ async def listar_por_reservacion(
 ) -> list[PagosReservacionOut]:
     reservacion = await reservaciones_repository.obtener(conn, reservacion_id)
     if not reservacion:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
 
     scope = sucursal_scope(current_user)
     if scope is not None and str(reservacion["sucursal_id"]) != scope:
@@ -94,13 +94,16 @@ async def crear(
     # Transacción propia (o savepoint si ya hay una, p. ej. desde completar()):
     # pago, movimiento de caja, puntos y monto_pagado quedan juntos o no quedan.
     async with conn.transaction():
+        # N1: primero la apertura (orden de bloqueo de caja) y el turno debe
+        # seguir ABIERTA hasta que el cobro confirme.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         # Bloquea la reservación: dos cobros simultáneos se aplican en orden y el
         # segundo recalcula monto_pagado viendo el primero (C3).
         bloqueada = await reservaciones_repository.obtener_para_actualizar(
             conn, body.reservacion_id
         )
         if bloqueada is None:
-            raise NoEncontrado("Reservación")
+            raise NoEncontrado("Reservación", genero="f")
         await _validar_metodo_pago(conn, body.metodo_pago_id)
         tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
         row = await pagos_reservacion_repository.crear(
@@ -166,6 +169,8 @@ async def completar(
 
     pagos_creados: list[PagosReservacionOut] = []
     async with conn.transaction():
+        # N1: también aquí, por si no hay pagos y solo se registra el cambio.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         item: PagoReservacionItem
         for item in body.pagos:
             pago_out = await crear(

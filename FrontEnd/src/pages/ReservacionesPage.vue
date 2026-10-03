@@ -156,7 +156,7 @@
       persistent
       :primary-label="(desgloseHoras?.ajuste ?? 0) < 0 ? 'Quitar horas' : 'Agregar horas'"
       :loading="guardando"
-      :primary-disabled="!horasExtra || desgloseHoras?.anticipoExcede"
+      :primary-disabled="!horasExtra || desgloseHoras?.anticipoExcede || cargandoExtras"
       @confirm="confirmarAgregarHoras"
     >
       <div class="dlg-stack">
@@ -222,7 +222,13 @@
             </div>
             <div v-if="desgloseHoras.extras > 0" class="preview-box__fila">
               <span>Extras</span>
-              <span class="preview-box__valor">{{ fmt(desgloseHoras.extras) }}</span>
+              <span class="preview-box__valor">
+                <template v-if="desgloseHoras.extras !== desgloseHoras.extrasAntes">
+                  <span class="preview-box__previo">{{ fmt(desgloseHoras.extrasAntes) }}</span>
+                  →
+                </template>
+                {{ fmt(desgloseHoras.extras) }}
+              </span>
             </div>
             <div v-if="desgloseHoras.descuento > 0" class="preview-box__fila">
               <span>Descuento</span>
@@ -291,7 +297,9 @@
       persistent
       primary-label="Guardar cambios"
       :loading="guardando"
-      :primary-disabled="!previewPersonalizar || previewPersonalizar.anticipoExcede || cupoInvalido"
+      :primary-disabled="
+        !previewPersonalizar || previewPersonalizar.anticipoExcede || cupoInvalido || cargandoExtras
+      "
       @confirm="confirmarPersonalizar"
     >
       <div class="dlg-stack">
@@ -317,6 +325,12 @@
             <span>Pulseras</span>
             <span class="preview-box__valor">
               {{ fmt(Number(previewPersonalizar.precio_personas_extra)) }}
+            </span>
+          </div>
+          <div v-if="Number(previewPersonalizar.precio_extras) > 0" class="preview-box__fila">
+            <span>Extras</span>
+            <span class="preview-box__valor">
+              {{ fmt(Number(previewPersonalizar.precio_extras)) }}
             </span>
           </div>
           <div class="preview-box__fila preview-box__fila--total">
@@ -364,11 +378,16 @@ import {
   fechaLimiteLiquidacion,
   recalcularReservacion,
   sumarHoras,
+  type ExtraCobrado,
 } from '@/utils/reservacionPrecio'
+import { useExtrasStore } from '@/stores/extras'
+import { useReservacionExtrasStore } from '@/stores/reservacion_extras'
 
 const router = useRouter()
 const store = useReservacionesStore()
 const paquetesStore = usePaquetesStore()
+const extrasStore = useExtrasStore()
+const reservacionExtrasStore = useReservacionExtrasStore()
 const authStore = useAuthStore()
 const irANuevaReservacion = useNuevaReservacion()
 const $q = useQuasar()
@@ -379,6 +398,8 @@ onMounted(() => {
   // El precio por hora de la pulsera vive en el paquete, no en la reservación:
   // hace falta para recalcular al agregar horas o cambiar invitados.
   paquetesStore.cargar(authStore.currentBranchId)
+  // La unidad de cada extra (por persona / por hora) vive en el catálogo (M15).
+  extrasStore.cargar(authStore.currentBranchId)
 })
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -422,12 +443,45 @@ const horasEdit = ref(1)
 
 const sinTarifaPulsera = computed(() => parseFloat(tarifaPulsera(seleccionada.value)) <= 0)
 
+// ── Extras de la reservación elegida (M15) ───────────────────────────────────
+// Los extras por persona o por hora cambian con invitados u horas, así que la
+// vista previa necesita los que tiene guardados la reservación. Si no se pueden
+// cargar, la vista previa conserva el precio de extras actual y el servidor
+// responde 409 con el precio real.
+
+const extrasCargadosDe = ref<string | null>(null)
+const cargandoExtras = ref(false)
+
+async function cargarExtrasDe(r: Reservaciones): Promise<void> {
+  extrasCargadosDe.value = null
+  cargandoExtras.value = true
+  try {
+    await reservacionExtrasStore.fetchReservacionExtras(r.id)
+    if (!reservacionExtrasStore.error) extrasCargadosDe.value = r.id
+  } finally {
+    cargandoExtras.value = false
+  }
+}
+
+const extrasDeSeleccionada = computed<ExtraCobrado[]>(() => {
+  const r = seleccionada.value
+  if (!r || extrasCargadosDe.value !== r.id) return []
+  return reservacionExtrasStore.reservacion_extras.map((re) => ({
+    unidad: extrasStore.extras.find((e) => e.id === re.extra_id)?.unidad,
+    precio_unitario: re.precio_unitario,
+    cantidad: re.cantidad,
+  }))
+})
+
 const previewHoras = computed(() => {
   const r = seleccionada.value
   if (!r || !horasExtra.value) return null
-  return recalcularReservacion(r, tarifaPulsera(r), {
-    horas: r.horas_reservadas + horasExtra.value,
-  })
+  return recalcularReservacion(
+    r,
+    tarifaPulsera(r),
+    { horas: r.horas_reservadas + horasExtra.value },
+    extrasDeSeleccionada.value,
+  )
 })
 
 /**
@@ -459,7 +513,8 @@ const desgloseHoras = computed(() => {
     base: n(r.precio_base),
     precioHoras: n(r.precio_horas),
     productos: n(r.precio_productos),
-    extras: n(r.precio_extras),
+    extrasAntes: n(r.precio_extras),
+    extras: Number(nuevo.precio_extras),
     descuento: n(r.descuento),
     pulserasAntes: n(r.precio_personas_extra),
     pulserasDespues: Number(nuevo.precio_personas_extra),
@@ -481,10 +536,12 @@ const minHorasExtra = computed(() => -(Math.max(1, seleccionada.value?.horas_res
 const previewPersonalizar = computed(() => {
   const r = seleccionada.value
   if (!r || invitadosEdit.value < 1 || horasEdit.value < 1) return null
-  return recalcularReservacion(r, tarifaPulsera(r), {
-    invitados: invitadosEdit.value,
-    horas: horasEdit.value,
-  })
+  return recalcularReservacion(
+    r,
+    tarifaPulsera(r),
+    { invitados: invitadosEdit.value, horas: horasEdit.value },
+    extrasDeSeleccionada.value,
+  )
 })
 
 const fueraDeRango = computed(() => {
@@ -506,6 +563,7 @@ const abrirAgregarHoras = (r: Reservaciones) => {
   seleccionada.value = r
   horasExtra.value = 1
   dialogHoras.value = true
+  void cargarExtrasDe(r)
 }
 
 const abrirPersonalizar = (r: Reservaciones) => {
@@ -513,6 +571,7 @@ const abrirPersonalizar = (r: Reservaciones) => {
   invitadosEdit.value = r.numero_personas
   horasEdit.value = Math.max(1, r.horas_reservadas)
   dialogPersonalizar.value = true
+  void cargarExtrasDe(r)
 }
 
 const aplicarCambios = async (cambios: Record<string, unknown>, mensaje: string): Promise<void> => {
@@ -539,6 +598,8 @@ const aplicarCambios = async (cambios: Record<string, unknown>, mensaje: string)
       await Promise.all([
         store.cargar(authStore.currentBranchId),
         paquetesStore.cargar(authStore.currentBranchId),
+        extrasStore.cargar(authStore.currentBranchId),
+        cargarExtrasDe(r),
       ])
       seleccionada.value = store.reservaciones.find((x) => x.id === r.id) ?? seleccionada.value
     }

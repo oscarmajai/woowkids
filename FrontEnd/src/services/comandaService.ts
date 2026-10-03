@@ -10,7 +10,19 @@ export async function cambiarEstadoComanda(
   nuevoEstado: EstadoActualComanda,
   signal?: AbortSignal,
 ): Promise<void> {
-  return comandasApi.cambiarEstado(comandaId, nuevoEstado, undefined, signal)
+  return comandasApi.cambiarEstado(comandaId, nuevoEstado, {}, signal)
+}
+
+/**
+ * Cancela la comanda con su motivo. Si está pagada, el backend exige el token
+ * de PIN de un administrador (ver useCancelarComanda).
+ */
+export async function cancelarComanda(
+  comandaId: string,
+  motivoCancelacion: string,
+  tokenPinAdmin?: string,
+): Promise<void> {
+  return comandasApi.cambiarEstado(comandaId, 'C', { motivoCancelacion, tokenPinAdmin })
 }
 
 export async function crearComanda(
@@ -24,7 +36,13 @@ export async function modificarDetallesComanda(
   comandaId: string,
   detallesIdsAEliminar: string[],
   motivoCancelacion?: string,
-  signal?: AbortSignal,
+  opciones: { signal?: AbortSignal; modificadoEsperado?: string } = {},
 ): Promise<Comanda> {
-  return comandasApi.modificarDetalles(comandaId, detallesIdsAEliminar, motivoCancelacion, signal)
+  return comandasApi.modificarDetalles(
+    comandaId,
+    detallesIdsAEliminar,
+    motivoCancelacion,
+    opciones.signal,
+    opciones.modificadoEsperado,
+  )
 }

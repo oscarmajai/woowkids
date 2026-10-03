@@ -42,6 +42,14 @@
         <template #body-cell-dias="props">
           <q-td :props="props" class="cell-muted">{{ diasLabel(props.row.dias) }}</q-td>
         </template>
+        <template #body-cell-alcance="props">
+          <q-td :props="props">
+            <StatusBadge
+              :tone="props.row.sucursalId ? 'info' : 'pink'"
+              :label="alcanceLabel(props.row)"
+            />
+          </q-td>
+        </template>
         <template #body-cell-activo="props">
           <q-td :props="props">
             <StatusBadge
@@ -62,7 +70,7 @@
               @click="abrirDetalle(props.row)"
             />
             <q-btn
-              v-if="puedeEditar"
+              v-if="puedeEditar(props.row)"
               flat
               round
               dense
@@ -72,7 +80,7 @@
               @click="abrirEditar(props.row)"
             />
             <q-btn
-              v-if="puedeEliminar && props.row.activo"
+              v-if="puedeEliminar(props.row) && props.row.activo"
               flat
               round
               dense
@@ -82,7 +90,7 @@
               @click="confirmarEliminar(props.row)"
             />
             <q-btn
-              v-else-if="puedeEliminar"
+              v-else-if="puedeEliminar(props.row)"
               flat
               round
               dense
@@ -109,7 +117,7 @@
     <BaseDialog
       v-model="dialogOpen"
       :title="editando ? 'Editar horario' : 'Nuevo horario'"
-      :subtitle="editando ? editando.nombre : 'Turno disponible para los cajeros.'"
+      :subtitle="editando ? editando.nombre : subtituloNuevo"
       icon="schedule"
       :width="520"
       persistent
@@ -193,7 +201,7 @@
       :width="460"
       secondary-label="Cerrar"
       primary-label="Editar"
-      :primary-disabled="!puedeEditar"
+      :primary-disabled="!filaDetalle || !puedeEditar(filaDetalle)"
       @confirm="filaDetalle && ((dialogDetalle = false), abrirEditar(filaDetalle))"
     >
       <dl v-if="filaDetalle" class="detail-grid">
@@ -221,6 +229,10 @@
         <div class="detail-grid__item detail-grid__item--full">
           <dt>Días de la semana</dt>
           <dd>{{ diasLabel(filaDetalle.dias) }}</dd>
+        </div>
+        <div class="detail-grid__item detail-grid__item--full">
+          <dt>Alcance</dt>
+          <dd>{{ alcanceLabel(filaDetalle) }}</dd>
         </div>
       </dl>
     </BaseDialog>
@@ -254,6 +266,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import type { QTableColumn } from 'quasar'
 import { useAuthStore } from '@/stores/auth'
+import { useSucursalesStore } from '@/stores/sucursales'
 import { horarioService } from '@/services/horarioService'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import type { ApiError } from '@/types/auth'
@@ -267,13 +280,24 @@ import type { FilterChip } from '@/types/ui'
 
 const $q = useQuasar()
 const auth = useAuthStore()
+const sucursalesStore = useSucursalesStore()
 
-// C1: los horarios son un catálogo global (sin sucursal); el backend solo deja
-// modificarlos a AdministradorSistema para que un admin de sucursal no cambie
-// los de todas. El resto los ve en solo lectura.
-const puedeCrear = computed(() => auth.isSistema && auth.hasPermission('horarios:crear'))
-const puedeEditar = computed(() => auth.isSistema && auth.hasPermission('horarios:editar'))
-const puedeEliminar = computed(() => auth.isSistema && auth.hasPermission('horarios:eliminar'))
+// M19: cada sucursal tiene sus horarios y además ve los globales (sucursalId
+// null). Un horario nuevo se crea en la sucursal de la sesión (el
+// AdministradorSistema sin sucursal elegida crea uno global). Los globales
+// solo los modifica el AdministradorSistema.
+const puedeCrear = computed(() => auth.hasPermission('horarios:crear'))
+const puedeModificar = (row: Horario): boolean => auth.isSistema || row.sucursalId !== null
+const puedeEditar = (row: Horario): boolean =>
+  auth.hasPermission('horarios:editar') && puedeModificar(row)
+const puedeEliminar = (row: Horario): boolean =>
+  auth.hasPermission('horarios:eliminar') && puedeModificar(row)
+
+function alcanceLabel(row: Horario): string {
+  if (!row.sucursalId) return 'Todas las sucursales'
+  const sucursal = sucursalesStore.sucursales.find((s) => s.id === row.sucursalId)
+  return sucursal?.nombre ?? 'Solo esta sucursal'
+}
 
 // ── Lista ─────────────────────────────────────────────────────────────────────
 
@@ -306,6 +330,7 @@ const columns: QTableColumn[] = [
   { name: 'horaInicio', label: 'Hora inicio', field: 'horaInicio', align: 'left', sortable: true },
   { name: 'horaFin', label: 'Hora fin', field: 'horaFin', align: 'left' },
   { name: 'dias', label: 'Días', field: 'dias', align: 'left' },
+  { name: 'alcance', label: 'Alcance', field: 'sucursalId', align: 'left' },
   { name: 'activo', label: 'Estado', field: 'activo', align: 'left' },
   { name: 'actions', label: '', field: 'id', align: 'right' },
 ]
@@ -374,6 +399,12 @@ function diasLabel(dias: number[] | null): string {
     .map((d) => d.fullLabel)
     .join(', ')
 }
+
+const subtituloNuevo = computed(() =>
+  auth.currentBranchId
+    ? 'Turno disponible para los cajeros de esta sucursal.'
+    : 'Turno global: disponible para todas las sucursales.',
+)
 
 const abrirCrear = () => {
   editando.value = null

@@ -13,6 +13,8 @@ export interface Branch {
   clave: string | null
   administradorId: string | null
   administradorName: string | null
+  /** Correo del administrador (el de la sucursal es `correo`). */
+  administradorEmail: string | null
   isActive: boolean
   creado: string | null
   creadoPor: string | null
@@ -35,6 +37,20 @@ export interface CreateBranchPayload {
   correo?: string | null
   clave?: string | null
   administrador_id?: string | null
+}
+
+/**
+ * Datos operativos de la sucursal (B18): los puede leer quien gestiona
+ * reservaciones, solo de su propia sucursal (`GET /sucursales/{id}/horario`).
+ */
+export interface HorarioSucursal {
+  id: string
+  nombre: string
+  zonaHoraria: string
+  /** "HH:mm:ss" */
+  horaApertura: string
+  /** "HH:mm:ss" */
+  horaCierre: string
 }
 
 export interface IndicadoresSucursal {

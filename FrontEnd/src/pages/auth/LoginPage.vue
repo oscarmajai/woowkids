@@ -38,6 +38,10 @@ onMounted(() => {
 
 const sucursalSeleccionada = ref<string | null>(null)
 
+// B22: no hay recuperación por correo; la contraseña la reasigna un
+// administrador desde Usuarios.
+const olvidePasswordAbierto = ref(false)
+
 async function onSubmit(): Promise<void> {
   const valid = await formRef.value?.validate()
   if (!valid) return
@@ -141,7 +145,9 @@ function onCancelSucursal(): void {
               color="primary"
               class="auth-remember"
             />
-            <a href="#" class="auth-forgot" @click.prevent>¿Olvidaste tu contraseña?</a>
+            <a href="#" class="auth-forgot" @click.prevent="olvidePasswordAbierto = true">
+              ¿Olvidaste tu contraseña?
+            </a>
           </div>
 
           <q-btn
@@ -210,10 +216,37 @@ function onCancelSucursal(): void {
         />
       </div>
     </BaseDialog>
+
+    <BaseDialog
+      v-model="olvidePasswordAbierto"
+      title="¿Olvidaste tu contraseña?"
+      icon="lock_reset"
+      :width="440"
+    >
+      <p class="forgot-text">
+        Pide a tu administrador que te asigne una contraseña nueva desde
+        <strong>Usuarios</strong>.
+      </p>
+      <template #footer>
+        <q-btn
+          unelevated
+          color="primary"
+          label="Entendido"
+          @click="olvidePasswordAbierto = false"
+        />
+      </template>
+    </BaseDialog>
   </q-page>
 </template>
 
 <style scoped lang="scss">
+.forgot-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
 .auth-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

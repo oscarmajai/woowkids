@@ -28,6 +28,11 @@ export function useAppNavigation(): AppNavigation {
     () => auth.hasRole('Administrador') && !auth.hasRole('AdministradorSistema'),
   )
 
+  // AdministradorSistema no tiene sucursal propia: la caja solo tiene sentido
+  // cuando eligió una en el selector del menú lateral.
+  const sistemaSinSucursal = computed(() => auth.isSistema && !auth.currentBranchId)
+  const ocultarCaja = computed(() => esAdminDeSucursal.value || sistemaSinSucursal.value)
+
   const navGroups = computed<NavGroup[]>(() => [
     {
       label: null,
@@ -36,7 +41,7 @@ export function useAppNavigation(): AppNavigation {
     {
       label: 'Operación',
       items: [
-        ...(esAdminDeSucursal.value
+        ...(ocultarCaja.value
           ? []
           : [
               {
@@ -46,12 +51,16 @@ export function useAppNavigation(): AppNavigation {
                 permission: 'pos:acceder',
               },
             ]),
-        {
-          label: 'Apertura y Cierre',
-          icon: 'key',
-          routeName: 'pos-cierre',
-          permission: 'pos:acceder',
-        },
+        ...(sistemaSinSucursal.value
+          ? []
+          : [
+              {
+                label: 'Apertura y Cierre',
+                icon: 'key',
+                routeName: 'pos-cierre',
+                permission: 'pos:acceder',
+              },
+            ]),
         {
           label: 'Cocina',
           icon: 'restaurant',
@@ -265,7 +274,7 @@ export function useAppNavigation(): AppNavigation {
   function badgeFor(routeName: string): NavBadge | null {
     if (routeName === 'insumos-listar' || routeName === 'reportes-inventario') {
       const count = alertasInventario.totalAlertas
-      return count > 0 ? { count, tone: 'warn' } : null
+      return count > 0 ? { count, tone: 'warn', fuente: 'alertas-inventario' } : null
     }
     if (routeName === 'pos-cocina') {
       const count = shellIndicadores.comandasPendientes

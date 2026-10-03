@@ -16,9 +16,18 @@ _INSERT = """
         sucursal_id, creado, creado_por
 """
 
+# Una fila por pago (o por método, si una orden se pagó con varios). Los
+# totales por orden (`total_real`) se repiten en cada fila de su orden: quien
+# agregue sobre este UNION debe agrupar por orden antes de sumarlos (A1). Los
+# montos por método (`monto`) sí salen uno por pago.
+#
+# Una comanda cuenta como cancelada con `estado_actual = 'C'` o con
+# `activo = FALSE`: la cancelación de cocina desactiva la comanda y su estado
+# puede quedar en otro valor (A3).
 _UNION_VENTAS = """
     SELECT
         v.referencia_id,
+        v.pago_id,
         v.tipo_origen,
         v.titulo,
         v.estado_actual,
@@ -35,11 +44,14 @@ _UNION_VENTAS = """
         -- Ventas POS (comandas)
         SELECT
             c.id                               AS referencia_id,
+            po.id                              AS pago_id,
             'comanda'                          AS tipo_origen,
             c.ticket_numero                    AS titulo,
-            c.estado_actual::text              AS estado_actual,
+            -- Una comanda desactivada se muestra como cancelada aunque su
+            -- estado_actual se haya quedado en otro valor (A3).
+            CASE WHEN c.activo THEN c.estado_actual::text ELSE 'C' END AS estado_actual,
             po.sucursal_id                     AS sucursal_id,
-            (c.estado_actual = 'C')            AS es_cancelado,
+            (c.estado_actual = 'C' OR NOT c.activo) AS es_cancelado,
             po.monto                           AS monto,
             c.total_final                      AS total_real,
             po.metodo_pago_id                  AS metodo_pago_id,
@@ -56,6 +68,7 @@ _UNION_VENTAS = """
         -- Estancias / entradas de niños
         SELECT
             r.id                               AS referencia_id,
+            pe.id                              AS pago_id,
             'estancia'                         AS tipo_origen,
             t.nombre_completo                  AS titulo,
             r.estado::text                     AS estado_actual,
@@ -65,7 +78,7 @@ _UNION_VENTAS = """
             r.total                            AS total_real,
             pe.metodos_pago_id                 AS metodo_pago_id,
             mp.nombre                          AS metodo_pago_nombre,
-            NULL                               AS notas_pago,
+            pe.notas_pago                      AS notas_pago,
             pe.creado                          AS creado,
             pe.creado_por                      AS creado_por
         FROM pagos_estancia pe
@@ -78,6 +91,7 @@ _UNION_VENTAS = """
         -- Reservaciones / eventos
         SELECT
             r.id                               AS referencia_id,
+            pr.id                              AS pago_id,
             'reservacion'                      AS tipo_origen,
             CONCAT_WS(' ', r.nombre_cliente, r.apellidos_cliente) AS titulo,
             r.estado::text                         AS estado_actual,
@@ -96,12 +110,24 @@ _UNION_VENTAS = """
     ) v
 """
 
+# Límites del periodo: `$2` (inclusivo) y `$3` (exclusivo) llegan como hora
+# local de la sucursal, sin zona, y se convierten con su `zona_horaria` (M4).
+_ZONA_SUCURSAL = "(SELECT s.zona_horaria FROM public.sucursales s WHERE s.id = $1)"
+
+_FILTRO_PERIODO = f"""
+    v.sucursal_id = $1
+      AND v.creado >= ($2::timestamp AT TIME ZONE {_ZONA_SUCURSAL})
+      AND ($3::timestamp IS NULL OR v.creado < ($3::timestamp AT TIME ZONE {_ZONA_SUCURSAL}))
+"""
+
 _SELECT_HISTORIAL = f"""
     SELECT
         v.referencia_id,
         v.tipo_origen,
         v.titulo,
-        SUM(v.total_real)                    AS total_final,
+        -- El total de la orden se repite en cada uno de sus pagos: se toma una
+        -- sola vez (A1). Lo cobrado por método va en metodos_pago.
+        MAX(v.total_real)                    AS total_final,
         v.estado_actual,
         v.sucursal_id,
         MAX(v.creado)                        AS creado,
@@ -118,16 +144,16 @@ _SELECT_HISTORIAL = f"""
             ORDER BY v.creado
         ) AS metodos_pago
     FROM ({_UNION_VENTAS}) v
-    WHERE v.sucursal_id = $1
-      AND v.creado >= $2::timestamptz
-      AND ($3::timestamptz IS NULL OR v.creado <= $3::timestamptz)
+    WHERE {_FILTRO_PERIODO}
       AND (
           $5::uuid IS NULL
           OR EXISTS (
               SELECT 1
               FROM public.movimientos_caja mc
               JOIN public.apertura_caja ac ON ac.id = mc.apertura_caja_id
-              WHERE mc.referencia_id = v.referencia_id
+              -- Comandas y estancias registran el movimiento con el id de la
+              -- orden; los pagos de reservación, con el id del pago.
+              WHERE mc.referencia_id IN (v.referencia_id, v.pago_id)
                 AND ac.caja_id = $5::uuid
           )
       )
@@ -138,6 +164,8 @@ _SELECT_HISTORIAL = f"""
         OR ($4 = 'pagado' AND NOT bool_or(v.es_cancelado))
         OR ($4 = 'cancelado' AND bool_or(v.es_cancelado))
     )
+    -- Órdenes con al menos un pago de ese método en el periodo; la orden se
+    -- muestra completa (todos sus pagos del periodo y su total una vez).
     AND ($6::uuid IS NULL OR bool_or(v.metodo_pago_id = $6::uuid))
     ORDER BY MAX(v.creado) DESC
 """
@@ -154,6 +182,14 @@ _INSERT_IDEMPOTENCIA = """
         (clave, sucursal_id, usuario_id, hash_payload, comanda_id)
     VALUES ($1, $2, $3, $4, $5)
 """
+
+
+async def bloquear_clave_idempotencia(conn: asyncpg.Connection, clave: str) -> None:
+    """M3: serializa los cobros con la misma Idempotency-Key. Candado de
+    sesión de transacción (se suelta al terminarla): el llamador DEBE estar
+    dentro de `conn.transaction()`. El segundo cobro espera a que el primero
+    termine y después ve su registro en pagos_idempotencia."""
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", clave)
 
 
 async def obtener_idempotencia(
@@ -210,6 +246,8 @@ async def historial(
     caja_id: UUID | None = None,
     metodo_pago_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
+    """Una fila por orden con pagos en [desde, hasta). `desde`/`hasta` son
+    hora local de la sucursal sin zona (ver pago_service._periodo)."""
     rows = await conn.fetch(
         _SELECT_HISTORIAL, sucursal_id, desde, hasta, estado, caja_id, metodo_pago_id
     )
@@ -236,11 +274,36 @@ _SELECT_DETALLE_COMANDA = """
         c.motivo_cancelacion,
         c.nombre_cliente,
         c.mesa,
+        c.modificado,
+        c.sucursal_id,
+        -- M12: cambio entregado al cliente (movimiento de caja 'C' de la comanda).
+        (
+            SELECT SUM(mc.monto)
+            FROM public.movimientos_caja mc
+            WHERE mc.referencia_id = c.id AND mc.tipo_movimiento = 'C'
+        )                  AS cambio,
         u.nombre_completo  AS creado_por_nombre
     FROM comandas c
     LEFT JOIN usuarios u ON u.id = c.creado_por
     WHERE c.id = $1
 """
+
+# M12: encabezado del ticket con los datos de la sucursal de la venta.
+_SELECT_SUCURSAL_TICKET = """
+    SELECT nombre, direccion, ciudad, estado, codigo_postal, telefono
+    FROM public.sucursales
+    WHERE id = $1
+"""
+
+
+async def _sucursal_ticket(
+    conn: asyncpg.Connection, sucursal_id: UUID | None
+) -> dict[str, Any] | None:
+    if sucursal_id is None:
+        return None
+    row = await conn.fetchrow(_SELECT_SUCURSAL_TICKET, sucursal_id)
+    return dict(row) if row else None
+
 
 _SELECT_DETALLE_PAGOS = """
     SELECT
@@ -268,6 +331,7 @@ _SELECT_DETALLE_PRODUCTOS = """
         dc.notas_especiales,
         dc.nombre_combo_padre,
         dc.id_combo_padre,
+        dc.detalle_padre_id,
         p.nombre AS producto_nombre
     FROM detalles_comanda dc
     LEFT JOIN productos p ON p.id = dc.producto_id
@@ -310,6 +374,10 @@ async def detalle_por_comanda(
             "id_combo_padre": (
                 str(dict(row)["id_combo_padre"]) if dict(row).get("id_combo_padre") else None
             ),
+            # M13: renglón del combo al que pertenece el hijo.
+            "detalle_padre_id": (
+                str(dict(row)["detalle_padre_id"]) if dict(row).get("detalle_padre_id") else None
+            ),
         }
         for row in productos_rows
     ]
@@ -330,6 +398,9 @@ async def detalle_por_comanda(
         "metodos_pago": metodos_pago,
         "detalles": detalles,
         "puntos_ganados": int(puntos_ganados) if puntos_ganados is not None else None,
+        "cambio": float(c["cambio"]) if c.get("cambio") is not None else 0.0,
+        "modificado": c["modificado"].isoformat() if c.get("modificado") else None,
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 
@@ -340,6 +411,7 @@ _SELECT_DETALLE_ESTANCIA = """
         r.total               AS total_final,
         r.estado              AS estado_actual,
         r.creado              AS fecha_hora,
+        r.sucursal_id,
         u.nombre_completo     AS creado_por_nombre
     FROM registros r
     JOIN tutores t ON t.id = r.tutores_id
@@ -349,9 +421,9 @@ _SELECT_DETALLE_ESTANCIA = """
 
 _SELECT_DETALLE_PAGOS_ESTANCIA = """
     SELECT
-        mp.nombre   AS metodo_pago_nombre,
+        mp.nombre     AS metodo_pago_nombre,
         pe.monto,
-        NULL::text  AS notas_pago
+        pe.notas_pago AS notas_pago
     FROM pagos_estancia pe
     JOIN metodos_pago mp ON mp.id = pe.metodos_pago_id
     WHERE pe.registros_id = $1
@@ -379,6 +451,7 @@ _SELECT_DETALLE_RESERVACION = """
         r.precio_total                                AS total_final,
         r.estado                                      AS estado_actual,
         r.creado                                      AS fecha_hora,
+        r.sucursal_id,
         u.nombre_completo                             AS creado_por_nombre
     FROM reservaciones r
     LEFT JOIN usuarios u ON u.id = r.creado_por
@@ -480,6 +553,7 @@ async def _detalle_estancia(conn: asyncpg.Connection, registro_id: UUID) -> dict
         "creado_por_nombre": c["creado_por_nombre"],
         "metodos_pago": _armar_metodos_pago(pagos_rows),
         "detalles": _armar_detalles(items_rows),
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 
@@ -505,6 +579,7 @@ async def _detalle_reservacion(
         "creado_por_nombre": c["creado_por_nombre"],
         "metodos_pago": _armar_metodos_pago(pagos_rows),
         "detalles": _armar_detalles(items_rows),
+        "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 
 
@@ -522,13 +597,17 @@ async def detalle_por_referencia(
 
 _SELECT_ESTADISTICAS = f"""
     SELECT
-        COALESCE(SUM(v.total_real), 0)::float AS total_ventas,
-        COUNT(DISTINCT v.referencia_id)::int  AS total_ordenes
-    FROM ({_UNION_VENTAS}) v
-    WHERE v.sucursal_id = $1
-      AND v.creado >= $2::timestamptz
-      AND ($3::timestamptz IS NULL OR v.creado <= $3::timestamptz)
-      AND NOT v.es_cancelado
+        COALESCE(SUM(o.total_real), 0)::float AS total_ventas,
+        COUNT(*)::int                         AS total_ordenes
+    FROM (
+        -- Una fila por orden: su total cuenta una vez aunque tenga varios
+        -- pagos en el periodo (A1).
+        SELECT v.tipo_origen, v.referencia_id, MAX(v.total_real) AS total_real
+        FROM ({_UNION_VENTAS}) v
+        WHERE {_FILTRO_PERIODO}
+        GROUP BY v.tipo_origen, v.referencia_id
+        HAVING NOT bool_or(v.es_cancelado)
+    ) o
 """
 
 
@@ -538,5 +617,7 @@ async def estadisticas(
     desde: datetime,
     hasta: datetime | None = None,
 ) -> dict[str, Any]:
+    """Suma de los totales de las órdenes no canceladas con pagos en
+    [desde, hasta) (hora local de la sucursal, sin zona), cada orden una vez."""
     row = await conn.fetchrow(_SELECT_ESTADISTICAS, sucursal_id, desde, hasta)
     return dict(row) if row else {"total_ventas": 0.0, "total_ordenes": 0}

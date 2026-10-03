@@ -19,9 +19,15 @@
       <KpiCard
         label="Margen"
         :value="formatMXN(resumen?.margen ?? 0)"
+        note="ventas − costo − merma"
         :value-color="(resumen?.margen ?? 0) < 0 ? 'var(--tone-bad-fg)' : undefined"
       />
-      <KpiCard label="Merma" :value="formatMXN(resumen?.merma ?? 0)" note-tone="warn" />
+      <KpiCard
+        label="Merma"
+        :value="formatMXN(resumen?.merma ?? 0)"
+        :note="notaMerma"
+        note-tone="warn"
+      />
     </div>
 
     <DataTableCard hide-search :count="`${renglones.length} insumos`">
@@ -88,18 +94,27 @@ import {
 import type { CogsRenglon, ResumenCogs } from '@/types/movimientoInventario'
 import { resolveErrorMessage, mensajeDeError } from '@/utils/errorHandler'
 import type { ApiError } from '@/types/auth'
+import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
 
-const hoy = new Date().toISOString().slice(0, 10)
-const primeroDeMes = hoy.slice(0, 8) + '01'
+// Fecha local (no UTC: después de las 18:00 en México ya sería mañana, M4).
+const hoy = fechaEnZona()
+const primeroDeMes = primerDiaDelMesEnZona()
 const desde = ref(primeroDeMes)
 const hasta = ref(hoy)
 const loading = ref(false)
 const exportando = ref(false)
 const renglones = ref<CogsRenglon[]>([])
 const resumen = ref<ResumenCogs | null>(null)
+
+// M24: la merma incluye el faltante de los conteos físicos.
+const notaMerma = computed(() =>
+  resumen.value
+    ? `manual ${formatMXN(resumen.value.mermaManual)} · conteo ${formatMXN(resumen.value.mermaConteo)}`
+    : undefined,
+)
 
 const costoTotal = computed(() =>
   renglones.value.reduce((acc, r) => acc + Number(r.costo_total), 0),

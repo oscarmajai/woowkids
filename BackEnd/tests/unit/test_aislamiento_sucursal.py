@@ -13,7 +13,7 @@ reventaría con 500 y el test fallaría.
 
 Para agregar un endpoint basta con sumarlo a ``CASOS_403`` o ``CASOS_404``.
 Los casos positivos (misma sucursal) viven en el test de integración
-``tests/integration/test_aislamiento_sucursal_db.py``.
+``tests/db/test_aislamiento_sucursal_db.py``.
 """
 
 from __future__ import annotations
@@ -257,14 +257,21 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/api/turnos-caja/historial/resumen?sucursal_id={A}", {}),
     ("GET", f"/api/turnos-caja/historial/export?sucursal_id={A}", {}),
     ("GET", f"/api/cajas?sucursal_id={A}", {}),
-    # Horarios: catálogo global, solo AdministradorSistema lo modifica.
+    # Horarios (M19): por sucursal; editar por id está en test_horarios_sucursal.py.
+    ("GET", f"/api/horarios?sucursal_id={A}", {}),
+    ("GET", f"/api/turnos-caja/turnos?sucursal_id={A}", {}),
     (
         "POST",
         "/api/horarios",
-        {"json": {"nombre": "Matutino", "hora_inicio": "08:00", "hora_fin": "14:00"}},
+        {
+            "json": {
+                "nombre": "Matutino",
+                "hora_inicio": "08:00",
+                "hora_fin": "14:00",
+                "sucursal_id": A,
+            }
+        },
     ),
-    ("PATCH", f"/api/horarios/{RID}", {"json": {"nombre": "x"}}),
-    ("DELETE", f"/api/horarios/{RID}", {}),
     # Productos, estancias, pagos, lealtad y sucursales
     ("GET", f"/api/productos/admin?sucursal_id={A}", {}),
     ("POST", "/api/productos", {"form": _producto(A)}),
@@ -294,6 +301,7 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
         {"json": {"celular": "3312345678", "puntos": 10, "motivo": "x"}},
     ),
     ("GET", f"/api/sucursales/{A}", {}),
+    ("GET", f"/api/sucursales/{A}/horario", {}),
     ("GET", f"/api/sucursales/{A}/indicadores?desde=2026-10-01&hasta=2026-10-03", {}),
 ]
 

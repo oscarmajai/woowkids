@@ -27,6 +27,19 @@ class ConfiguracionLealtadOut(ConfiguracionLealtadBase):
     model_config = {"from_attributes": True}
 
 
+class ConfiguracionCanjeOut(BaseModel):
+    """Lo mínimo que la caja necesita para canjear puntos (A6): valor del
+    punto y mínimo de canje de la sucursal. Solo lectura; no expone el
+    porcentaje de retorno ni la auditoría de la configuración."""
+
+    sucursal_id: UUID
+    activo: bool
+    valor_punto: float
+    minimo_canje: int
+
+    model_config = {"from_attributes": True}
+
+
 class SaldoPuntosOut(BaseModel):
     sucursal_id: UUID
     celular: str

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import asyncpg
 from fastapi import HTTPException, UploadFile
 
-from app.core.object_storage import PREFIJOS, upload_bytes, validar_y_leer
+from app.core.object_storage import PREFIJOS, delete_objects, upload_bytes, validar_y_leer
 from app.core.ws_manager import manager
 from app.repositories import metodos_pago_repository
 from app.repositories.caja_repository import registrar_cambio_caja, registrar_movimiento_caja
@@ -24,6 +24,8 @@ from app.repositories.pulseras import esta_disponible_para_asignar
 from app.repositories.registros import (
     EstadoRegistro,
     change_registro_estado,
+    get_ninos_en_estancia_de_registro,
+    get_registro_para_comprobante,
     registro_create,
     registro_update_total,
 )
@@ -31,9 +33,10 @@ from app.repositories.reservaciones_repository import obtener_evento_mas_cercano
 from app.repositories.tutores import get_tutor_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
-from app.services import lealtad_service
+from app.services import lealtad_service, turnos_caja_service
 from app.services.padres_service import emitir_codigo_acceso
-from app.services.tramos_estancia import tramos_de_producto
+from app.services.pagos_estancia import validar_referencias_pago
+from app.services.tramos_estancia import precio_por_hora, tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -60,6 +63,27 @@ def _a_centavos(valor: Decimal) -> Decimal:
     return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+async def _registrar_fotos(
+    conn: asyncpg.Connection,
+    registro_id: UUID,
+    data_ine: bytes,
+    data_llegadas: list[bytes],
+    usuario_id: UUID,
+) -> list[tuple[str, bytes]]:
+    """Inserta las filas de fotos del registro y devuelve los archivos que hay
+    que subir (llave, bytes). N4: no sube nada; la subida se hace al final de
+    la transacción, cuando ya pasaron todas las validaciones."""
+    ruta_ine = f"{PREFIJOS['identificaciones']}/{registro_id}.jpg"
+    await foto_create(conn, registro_id, TipoFoto.INE, ruta_ine, usuario_id)
+    archivos = [(ruta_ine, data_ine)]
+    for data_llegada in data_llegadas:
+        foto_id = uuid4()
+        ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
+        await foto_create(conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id)
+        archivos.append((ruta_llegada, data_llegada))
+    return archivos
+
+
 async def create_estancia(
     conn: asyncpg.Connection,
     data: OnboardingRequest,
@@ -75,8 +99,55 @@ async def create_estancia(
         cambio,
         ids_efectivo,
     )
+    if data.reservacionId is None:
+        await validar_referencias_pago(conn, data.sucursalId, data.pagos or [])
 
+    data_ine = await validar_y_leer(foto_ine)
+    data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
+
+    # N4: las fotos se suben al final de la transacción (después de todos los
+    # INSERT y validaciones). Si algo falla después de subirlas (incluida la
+    # confirmación de la transacción), se borran para no dejar archivos
+    # huérfanos en MinIO.
+    subidos: list[str] = []
+    try:
+        resultado, registro_id = await _crear_estancia_tx(
+            conn, data, data_ine, data_llegadas, usuario_id, apertura_caja_id, cambio, subidos
+        )
+    except BaseException:
+        await delete_objects(subidos)
+        raise
+
+    # Se notifica ya fuera de la transacción, para no avisar a los clientes
+    # de datos que todavía podrían revertirse por un rollback.
+    await manager.broadcast(
+        str(data.sucursalId),
+        {
+            "type": "estancia_creada",
+            "sucursalId": str(data.sucursalId),
+            "registroId": str(registro_id),
+        },
+    )
+
+    return resultado
+
+
+async def _crear_estancia_tx(
+    conn: asyncpg.Connection,
+    data: OnboardingRequest,
+    data_ine: bytes,
+    data_llegadas: list[bytes],
+    usuario_id: UUID,
+    apertura_caja_id: str,
+    cambio: Decimal,
+    subidos: list[str],
+) -> tuple[dict[str, Any], UUID]:
+    """Toda la escritura del check-in en una transacción. `subidos` se va
+    llenando con las llaves que ya se subieron a MinIO, para que el llamador
+    las borre si la transacción no llega a confirmarse."""
     async with conn.transaction():
+        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
         if data.reservacionId is not None:
@@ -104,16 +175,6 @@ async def create_estancia(
 
             registro_id = uuid4()
 
-            # --- GUARDAR FOTOS FÍSICAMENTE ---
-            nombre_archivo = f"{registro_id}.jpg"
-
-            data_ine = await validar_y_leer(foto_ine)
-            data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
-
-            ruta_bd_ine = f"{PREFIJOS['identificaciones']}/{nombre_archivo}"
-
-            await upload_bytes(ruta_bd_ine, data_ine, "image/jpeg")
-
             # 2. registro (Un solo INSERT limpio)
             await registro_create(
                 conn,
@@ -125,15 +186,10 @@ async def create_estancia(
                 evento.id,
             )
 
-            # 3. fotos
-            await foto_create(conn, registro_id, TipoFoto.INE, ruta_bd_ine, usuario_id)
-            for data_llegada in data_llegadas:
-                foto_id = uuid4()
-                ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
-                await upload_bytes(ruta_llegada, data_llegada, "image/jpeg")
-                await foto_create(
-                    conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id
-                )
+            # 3. fotos (solo las filas; los archivos se suben al final)
+            archivos = await _registrar_fotos(
+                conn, registro_id, data_ine, data_llegadas, usuario_id
+            )
 
             total = Decimal(0)
 
@@ -217,16 +273,6 @@ async def create_estancia(
 
             registro_id = uuid4()
 
-            # --- GUARDAR FOTOS FÍSICAMENTE ---
-            nombre_archivo = f"{registro_id}.jpg"
-
-            data_ine = await validar_y_leer(foto_ine)
-            data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
-
-            ruta_bd_ine = f"{PREFIJOS['identificaciones']}/{nombre_archivo}"
-
-            await upload_bytes(ruta_bd_ine, data_ine, "image/jpeg")
-
             # 2. registro (Un solo INSERT limpio)
             await registro_create(
                 conn, registro_id, data.sucursalId, tutor_id, usuario_id, data.nombreSegundoTutor
@@ -234,15 +280,10 @@ async def create_estancia(
 
             total = Decimal(0)
 
-            # 3. fotos
-            await foto_create(conn, registro_id, TipoFoto.INE, ruta_bd_ine, usuario_id)
-            for data_llegada in data_llegadas:
-                foto_id = uuid4()
-                ruta_llegada = f"uploads/llegadas/{foto_id}.jpg"
-                await upload_bytes(ruta_llegada, data_llegada, "image/jpeg")
-                await foto_create(
-                    conn, registro_id, TipoFoto.LLEGADA, ruta_llegada, usuario_id, foto_id
-                )
+            # 3. fotos (solo las filas; los archivos se suben al final)
+            archivos = await _registrar_fotos(
+                conn, registro_id, data_ine, data_llegadas, usuario_id
+            )
 
             # 4. detalles
             producto_estancia = await get_producto_estancia_by_branch_id(conn, str(data.sucursalId))
@@ -268,37 +309,15 @@ async def create_estancia(
                 entrada = datetime.now(UTC)
                 salida_esperada = entrada + timedelta(hours=d.cantidad)
 
-                # Buscar el precio correspondiente en los tramos
-                precio = None
-                horas_solicitadas = float(d.cantidad)
-
-                for config in precios:
-                    min_h = float(config["min_horas"])
-                    max_h = float(config["max_horas"])
-                    p_val = Decimal(str(config["precio"]))
-
-                    if min_h <= horas_solicitadas <= max_h:
-                        precio = p_val
-                        break
-
+                # Precio por hora del tramo que cubre las horas (ver
+                # tramos_estancia.precio_por_hora: tramos ordenados; el de
+                # min_horas más bajo si ninguno las cubre).
+                precio = precio_por_hora(precios, float(d.cantidad))
                 if precio is None:
-                    precio_mas_bajo = None
-                    min_horas_mas_bajo = float("inf")
-
-                    for config in precios:
-                        min_h = float(config["min_horas"])
-                        if min_h < min_horas_mas_bajo:
-                            min_horas_mas_bajo = min_h
-                            precio_mas_bajo = Decimal(str(config["precio"]))
-
-                    if precio_mas_bajo is not None:
-                        precio = precio_mas_bajo
-                    else:
-                        raise HTTPException(
-                            400,
-                            "No se encontró ningún precio disponible en la "
-                            "configuración de estancia",
-                        )
+                    raise HTTPException(
+                        400,
+                        "No se encontró ningún precio disponible en la configuración de estancia",
+                    )
 
                 # Se guarda el producto de estancia con el que se calculó el
                 # precio, no el productoId que mande el cliente (C2).
@@ -362,7 +381,13 @@ async def create_estancia(
             total_pagado = 0.0
             for p in data.pagos or []:
                 await pago_create(
-                    conn, data.sucursalId, registro_id, p.metodoPagoId, p.monto, usuario_id
+                    conn,
+                    data.sucursalId,
+                    registro_id,
+                    p.metodoPagoId,
+                    p.monto,
+                    usuario_id,
+                    p.referencia,
                 )
                 await registrar_movimiento_caja(
                     conn,
@@ -416,18 +441,14 @@ async def create_estancia(
         # de la transacción: si el registro se revierte, el código también.
         resultado["codigoAccesoPadres"] = await emitir_codigo_acceso(conn, registro_id, usuario_id)
 
-    # Se notifica ya fuera de la transacción, para no avisar a los clientes
-    # de datos que todavía podrían revertirse por un rollback.
-    await manager.broadcast(
-        str(data.sucursalId),
-        {
-            "type": "estancia_creada",
-            "sucursalId": str(data.sucursalId),
-            "registroId": str(registro_id),
-        },
-    )
+        # N4 — los archivos se suben al final, cuando todo lo anterior ya
+        # pasó; si una subida o la confirmación fallan, el llamador borra lo
+        # que ya se haya subido.
+        for llave, contenido in archivos:
+            await upload_bytes(llave, contenido, "image/jpeg")
+            subidos.append(llave)
 
-    return resultado
+    return resultado, registro_id
 
 
 async def get_activos_estancia_by_sucursal_id(
@@ -459,3 +480,53 @@ async def get_productos_estancia_by_id_sucursal(
     conn: asyncpg.Connection, sucursal_id: UUID
 ) -> list[dict[str, Any]]:
     return await get_productos_estancia_by_sucursal_id(conn, sucursal_id)
+
+
+async def reimprimir_comprobante(
+    conn: asyncpg.Connection, registro_id: UUID, sucursal_id: UUID | None, usuario_id: UUID
+) -> dict[str, Any]:
+    """N5 — re-emite el código del portal de padres de un registro activo y
+    devuelve los datos del comprobante para imprimirlo de nuevo.
+    `emitir_codigo_acceso` revoca el código anterior: el QR del comprobante
+    viejo deja de valer. `sucursal_id` es la sucursal de la sesión (None para
+    el AdministradorSistema, que ve todas); un registro de otra sucursal
+    responde 404, igual que si no existiera."""
+    async with conn.transaction():
+        registro = await get_registro_para_comprobante(conn, registro_id)
+        if registro is None or (sucursal_id is not None and registro["sucursal_id"] != sucursal_id):
+            raise HTTPException(404, "Registro no encontrado")
+        ninos = await get_ninos_en_estancia_de_registro(conn, registro_id)
+        if registro["estado"] != EstadoRegistro.ACTIVO.value or not ninos:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "REGISTRO_NO_ACTIVO",
+                    "message": (
+                        "El registro ya no tiene niños en estancia; no se puede "
+                        "reimprimir su comprobante."
+                    ),
+                },
+            )
+        codigo = await emitir_codigo_acceso(conn, registro_id, usuario_id)
+
+    return {
+        "registroId": registro_id,
+        "codigoAccesoPadres": codigo,
+        "sucursal": registro["sucursal"],
+        "cajero": registro["cajero"],
+        "tutor": registro["tutor"],
+        "telefono": registro["telefono"],
+        "entrada": registro["creado"].isoformat(),
+        "total": float(registro["total"]),
+        "ninos": [
+            {
+                "nombre": n["nombre"],
+                "edad": n["edad"],
+                "notas": n["notas"],
+                "pulsera": n["pulsera"],
+                "horas": n["horas"],
+                "salidaEsperada": n["salida_esperada"].isoformat(),
+            }
+            for n in ninos
+        ],
+    }

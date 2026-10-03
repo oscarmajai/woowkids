@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
@@ -16,11 +16,14 @@ from app.schemas.user import (
     UserUpdateRequest,
 )
 from app.services.user_service import (
+    AutoEliminacionError,
     BranchRequiredError,
     CredencialActualInvalidaError,
     EmailAlreadyExistsError,
+    EstadoUsuarios,
     InsufficientPermissionsError,
     RolInvalidoError,
+    SucursalNoEncontradaError,
     UserNotFoundError,
     cambiar_mi_pin,
     create_user,
@@ -58,6 +61,14 @@ def _handle_write_errors(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, InsufficientPermissionsError):
         raise _FORBIDDEN from exc
+    if isinstance(exc, SucursalNoEncontradaError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "SUCURSAL_NO_ENCONTRADA",
+                "message": "La sucursal indicada no existe.",
+            },
+        ) from exc
     if isinstance(exc, RolInvalidoError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -70,10 +81,12 @@ def _handle_write_errors(exc: Exception) -> None:
 
 @router.get("", response_model=list[UserResponse])
 async def get_users(
+    estado: EstadoUsuarios = Query("activos"),
     current_user: TokenData = Depends(require_permission("usuarios:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[UserResponse]:
-    return await list_users(conn, current_user)
+    """`estado`: activos (por defecto), inactivos o todos (A10)."""
+    return await list_users(conn, current_user, estado)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -89,6 +102,7 @@ async def post_user(
         BranchRequiredError,
         InsufficientPermissionsError,
         RolInvalidoError,
+        SucursalNoEncontradaError,
     ) as exc:
         _handle_write_errors(exc)
         raise  # unreachable, satisfies mypy
@@ -124,6 +138,7 @@ async def put_user(
         BranchRequiredError,
         InsufficientPermissionsError,
         RolInvalidoError,
+        SucursalNoEncontradaError,
     ) as exc:
         _handle_write_errors(exc)
         raise  # unreachable, satisfies mypy
@@ -163,3 +178,11 @@ async def delete_user_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+    except AutoEliminacionError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "AUTO_ELIMINACION",
+                "message": "No puedes eliminar tu propia cuenta.",
+            },
+        ) from None

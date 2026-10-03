@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import HTTPException, status
 
 
@@ -10,10 +12,23 @@ class CredencialesInvalidas(HTTPException):
 
 
 class NoEncontrado(HTTPException):
-    def __init__(self, recurso: str = "Recurso") -> None:
+    """404 con la frase concordada con el género del recurso (N15):
+    `NoEncontrado("Reservación", genero="f")` → "Reservación no encontrada.".
+    `mensaje` reemplaza la frase completa cuando no basta con el nombre."""
+
+    def __init__(
+        self,
+        recurso: str = "Recurso",
+        genero: Literal["m", "f"] = "m",
+        *,
+        mensaje: str | None = None,
+    ) -> None:
+        if mensaje is None:
+            participio = "encontrada" if genero == "f" else "encontrado"
+            mensaje = f"{recurso} no {participio}."
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "NOT_FOUND", "message": f"{recurso} no encontrado."},
+            detail={"code": "NOT_FOUND", "message": mensaje},
         )
 
 
@@ -71,6 +86,22 @@ class IdempotenciaConflictoError(HTTPException):
         )
 
 
+class IdempotenciaEnCursoError(HTTPException):
+    """M3: otro cobro con la misma Idempotency-Key se está registrando."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "IDEMPOTENCIA_EN_CURSO",
+                "message": (
+                    "Este cobro ya se está registrando. Revisa el historial de ventas "
+                    "antes de volver a cobrar."
+                ),
+            },
+        )
+
+
 class PinTokenRequeridoError(HTTPException):
     """Falta token_pin de cajero/admin en /turnos-caja/confirmar (QA #14)."""
 
@@ -118,3 +149,16 @@ class PedidoInvalidoError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": code, "message": mensaje},
         )
+
+
+class RecepcionInvalidaError(HTTPException):
+    """La recepción de una compra no se puede aplicar tal como viene: una línea
+    excede lo pendiente, no pertenece a la compra, viene repetida o no trae nada
+    que recibir (A12, M23). `linea` lleva el detalle de la línea culpable para
+    que el cliente la señale."""
+
+    def __init__(self, mensaje: str, linea: dict[str, str] | None = None) -> None:
+        detail: dict[str, object] = {"code": "RECEPCION_INVALIDA", "message": mensaje}
+        if linea is not None:
+            detail["linea"] = linea
+        super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)

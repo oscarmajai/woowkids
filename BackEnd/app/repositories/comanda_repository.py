@@ -7,13 +7,15 @@ Regla 11.1 y 11.4 SAD: solo SQL parametrizado aquí, nada de lógica de negocio.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
 from app.core.utils import get_mexico_now
-from app.models.comanda import Comanda, DetalleComanda
+from app.exceptions.comandas import ComandaModificadaError
+from app.models.comanda import Comanda, DetalleComanda, indices_renglon_padre
 
 if TYPE_CHECKING:
     from app.schemas.comanda import ComandaCreate
@@ -37,6 +39,7 @@ def _row_to_detalle(row: asyncpg.Record) -> DetalleComanda:
         es_hijo_de=str(row["es_hijo_de"]) if row.get("es_hijo_de") else None,
         es_hijo_combo=bool(row.get("es_hijo_combo", False)),
         id_combo_padre=str(row["id_combo_padre"]) if row.get("id_combo_padre") else None,
+        detalle_padre_id=str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None,
     )
 
 
@@ -131,7 +134,19 @@ async def crear_comanda_con_detalles(
             detalles_procesados if detalles_procesados is not None else comanda_in.detalles_comanda
         )
 
-        for item in detalles:
+        # M13: cada hijo de combo apunta a su renglón padre. Los ids se generan
+        # antes de insertar para poder enlazarlos. Se respeta el orden del
+        # pedido (el que ven cocina y el ticket), salvo un hijo que llegó antes
+        # que su padre: va al final, porque la FK no es diferible.
+        ids_detalle = [str(uuid.uuid4()) for _ in detalles]
+        padres = indices_renglon_padre(detalles)
+        orden = sorted(
+            range(len(detalles)),
+            key=lambda i: (padre := padres[i]) is not None and padre > i,
+        )
+
+        for idx in orden:
+            item = detalles[idx]
             (
                 producto_id,
                 cantidad,
@@ -148,10 +163,10 @@ async def crear_comanda_con_detalles(
                 INSERT INTO public.detalles_comanda
                     (id, comanda_id, producto_id, cantidad, precio_unitario, importe,
                     sucursal_id, notas_especiales, nombre_combo_padre, es_hijo_de,
-                    es_hijo_combo, id_combo_padre, creado_por)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    es_hijo_combo, id_combo_padre, creado_por, detalle_padre_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
-                str(uuid.uuid4()),
+                ids_detalle[idx],
                 comanda_id,
                 producto_id,
                 cantidad,
@@ -164,12 +179,35 @@ async def crear_comanda_con_detalles(
                 es_hijo_combo,
                 id_combo_padre,
                 creado_por,
+                ids_detalle[padre] if (padre := padres[idx]) is not None else None,
             )
 
     # Releer para devolver el objeto completo
     comanda = await get_comanda_por_id(conn, comanda_id)
     assert comanda is not None, "la comanda recién insertada debe existir"
     return comanda
+
+
+_SELECT_ESTADO = """
+    SELECT id, estado_actual, activo, sucursal_id, modificado
+    FROM public.comandas
+    WHERE id = $1
+"""
+
+
+async def get_estado_comanda(conn: asyncpg.Connection, comanda_id: str) -> dict[str, Any] | None:
+    """Estado y bandera activo de la comanda, sin bloquearla."""
+    row = await conn.fetchrow(_SELECT_ESTADO, uuid.UUID(comanda_id))
+    return dict(row) if row else None
+
+
+async def bloquear_comanda(conn: asyncpg.Connection, comanda_id: str) -> dict[str, Any] | None:
+    """Como get_estado_comanda, pero con la fila bloqueada (FOR UPDATE) hasta
+    el fin de la transacción en curso (el llamador DEBE estar dentro de
+    `conn.transaction()`). Serializa los cambios de estado: dos cancelaciones
+    simultáneas no pueden revertir el stock dos veces (A2)."""
+    row = await conn.fetchrow(_SELECT_ESTADO + " FOR UPDATE", uuid.UUID(comanda_id))
+    return dict(row) if row else None
 
 
 async def actualizar_estado_comanda(
@@ -221,8 +259,12 @@ async def modificar_comanda_parcial(
     detalles_a_eliminar: list[str],
     usuario_id: str | None = None,
     motivo_cancelacion: str | None = None,
+    modificado_esperado: datetime | None = None,
 ) -> Comanda | None:
     """Elimina productos específicos de una comanda en estado 'P'.
+
+    B5: si viene `modificado_esperado` y la comanda (ya bloqueada) tiene otro
+    `modificado`, lanza ComandaModificadaError sin tocar nada.
 
     Si tras eliminar los productos seleccionados no quedan detalles activos,
     cancela automáticamente la comanda (estado 'C', activo=False) en vez de
@@ -240,6 +282,14 @@ async def modificar_comanda_parcial(
     uid = uuid.UUID(usuario_id) if usuario_id else None
 
     async with conn.transaction():
+        # Bajo el bloqueo de la fila, igual que los cambios de estado: una
+        # cancelación simultánea no puede leer detalles que se están borrando.
+        fila = await bloquear_comanda(conn, comanda_id)
+        if fila is None or fila["estado_actual"] != "P" or not fila["activo"]:
+            return None
+        if modificado_esperado is not None and fila["modificado"] != modificado_esperado:
+            raise ComandaModificadaError()
+
         # 1) Eliminar físicamente los detalles seleccionados
         ids_validos: list[uuid.UUID] = []
         for detalle_id in detalles_a_eliminar:
@@ -375,12 +425,14 @@ async def get_comandas_pendientes(
             dc.es_hijo_de,
             dc.es_hijo_combo,
             dc.id_combo_padre,
+            dc.detalle_padre_id,
             p.nombre,
             p.tipo AS producto_tipo
         FROM public.comandas c
         LEFT JOIN public.detalles_comanda dc ON dc.comanda_id = c.id
         LEFT JOIN public.productos p ON p.id = dc.producto_id
         WHERE c.estado_actual IN ('P', 'E', 'L')
+          AND c.activo = TRUE
         {filtro_sucursal}
         ORDER BY c.fecha_hora ASC
         """,
@@ -423,6 +475,9 @@ async def get_comandas_pendientes(
                     id_combo_padre=(
                         str(row["id_combo_padre"]) if row.get("id_combo_padre") else None
                     ),
+                    detalle_padre_id=(
+                        str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None
+                    ),
                 )
             )
 
@@ -449,6 +504,7 @@ async def get_comanda_por_id(
             dc.es_hijo_de,
             dc.es_hijo_combo,
             dc.id_combo_padre,
+            dc.detalle_padre_id,
             p.nombre,
             p.tipo AS producto_tipo
         FROM public.comandas c
@@ -494,6 +550,9 @@ async def get_comanda_por_id(
                     es_hijo_combo=bool(row.get("es_hijo_combo", False)),
                     id_combo_padre=(
                         str(row["id_combo_padre"]) if row.get("id_combo_padre") else None
+                    ),
+                    detalle_padre_id=(
+                        str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None
                     ),
                 )
             )

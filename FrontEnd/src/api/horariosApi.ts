@@ -8,6 +8,7 @@ interface BackendHorario {
   hora_fin: string
   activo: boolean
   dias: number[] | null
+  sucursal_id?: string | null
 }
 
 function mapHorario(raw: BackendHorario): Horario {
@@ -18,6 +19,7 @@ function mapHorario(raw: BackendHorario): Horario {
     horaFin: raw.hora_fin,
     activo: raw.activo,
     dias: raw.dias,
+    sucursalId: raw.sucursal_id ?? null,
   }
 }
 

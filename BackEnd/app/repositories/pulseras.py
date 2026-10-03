@@ -116,6 +116,35 @@ async def esta_disponible_para_asignar(
     return not bool(usada)
 
 
+async def buscar_por_rfid(
+    conn: asyncpg.Connection, sucursal_id: UUID, pulsera_rfid: str
+) -> dict[str, Any] | None:
+    """Busca una pulsera por su RFID dentro de una sucursal, esté libre o no.
+
+    Sirve para que el check-in distinga una pulsera inexistente de una que ya
+    se usó o está desactivada (B14). No expone a quién está asignada.
+    """
+    row = await conn.fetchrow(
+        """
+        SELECT
+            p.id,
+            p.pulsera_rfid,
+            p.activo,
+            EXISTS (
+                SELECT 1
+                FROM public.detalles_registro AS dr
+                WHERE dr.pulseras_id = p.id
+            ) AS usada
+        FROM public.pulseras AS p
+        WHERE p.sucursal_id = $1
+          AND p.pulsera_rfid = $2
+        """,
+        sucursal_id,
+        pulsera_rfid,
+    )
+    return dict(row) if row else None
+
+
 async def listar_todas(conn: asyncpg.Connection, sucursal_id: UUID) -> list[dict[str, Any]]:
     """Lista todas las pulseras de una sucursal (activas e inactivas), para administración."""
     rows = await conn.fetch(

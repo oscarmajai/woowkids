@@ -46,6 +46,10 @@ export class CredencialesAdminInvalidasError extends Error {
   }
 }
 
+// A5: el backend responde 403 con estos códigos cuando el PIN/contraseña de
+// caja no coincide (antes 401, que el interceptor confundía con sesión vencida).
+const CODIGOS_CREDENCIAL_INVALIDA = new Set(['CREDENCIALES_INVALIDAS', 'PIN_INVALIDO'])
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper interno — convierte cualquier error a mensaje de usuario
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,8 +89,12 @@ export const turnoCajaService = {
       return await turnoCajaApi.registrarRetiro(payload)
     } catch (err) {
       const apiErr = err as ApiError
+      // B17: el 409 puede ser "excede el efectivo disponible (disponible: $X)"
+      // o "el turno está en conteo": se muestra lo que dice el backend.
       if (apiErr.statusCode === 409)
-        throw new TransicionInvalidaError('No se pueden registrar retiros en este momento.')
+        throw new TransicionInvalidaError(
+          apiErr.message || 'No se pueden registrar retiros en este momento.',
+        )
       throw new Error(toMensajeError(err), { cause: err })
     }
   },
@@ -100,7 +108,9 @@ export const turnoCajaService = {
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.statusCode === 409)
-        throw new TransicionInvalidaError('No se pueden registrar ingresos en este momento.')
+        throw new TransicionInvalidaError(
+          apiErr.message || 'No se pueden registrar ingresos en este momento.',
+        )
       throw new Error(toMensajeError(err), { cause: err })
     }
   },
@@ -119,16 +129,19 @@ export const turnoCajaService = {
 
   /**
    * Carga el turno activo del cajero.
-   * Lanza TurnoNoEncontradoError si el backend responde 404.
+   * Lanza TurnoNoEncontradoError si no hay turno (null, o 404 de un backend viejo).
    */
   async cargarTurnoActivo(sucursalId?: string | null): Promise<TurnoActivoResponse> {
+    let turno: TurnoActivoResponse | null
     try {
-      return await turnoCajaApi.obtenerActivo(sucursalId)
+      turno = await turnoCajaApi.obtenerActivo(sucursalId)
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.statusCode === 404) throw new TurnoNoEncontradoError()
       throw new Error(toMensajeError(err), { cause: err })
     }
+    if (!turno) throw new TurnoNoEncontradoError()
+    return turno
   },
 
   /**
@@ -161,14 +174,17 @@ export const turnoCajaService = {
   /**
    * Valida las credenciales del administrador y revela el balance.
    * Transición: ESPERANDO_REVISION → BALANCE_REVELADO
-   * Lanza CredencialesAdminInvalidasError en caso de 401/403 del backend.
+   * Lanza CredencialesAdminInvalidasError si la contraseña/PIN no coincide
+   * (403 CREDENCIALES_INVALIDAS, o 401 de un backend viejo). Los demás
+   * rechazos (administrador de otra sucursal o sin permiso, demasiados
+   * intentos, turno ajeno) muestran el mensaje del backend.
    */
   async autenticarAdmin(payload: RevisionAdminPayload): Promise<RevisionAdminResponse> {
     try {
       return await turnoCajaApi.autenticarRevisionAdmin(payload)
     } catch (err) {
       const apiErr = err as ApiError
-      if (apiErr.statusCode === 401 || apiErr.statusCode === 403) {
+      if (apiErr.statusCode === 401 || CODIGOS_CREDENCIAL_INVALIDA.has(apiErr.code)) {
         throw new CredencialesAdminInvalidasError()
       }
       throw new Error(toMensajeError(err), { cause: err })

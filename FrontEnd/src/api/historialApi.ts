@@ -11,6 +11,19 @@ export interface DetalleProducto {
   nombre_combo_padre: string | null
   // Id de la instancia de combo a la que pertenece el hijo (puede faltar en órdenes viejas)
   id_combo_padre?: string | null
+  /** Renglón (id de detalle) del combo al que pertenece el hijo (M13). Null en
+   * productos sueltos, renglones de combo y órdenes viejas ambiguas. */
+  detalle_padre_id?: string | null
+}
+
+/** Sucursal de la venta, para el encabezado del ticket (M12). */
+export interface SucursalTicket {
+  nombre: string
+  direccion?: string | null
+  ciudad?: string | null
+  estado?: string | null
+  codigo_postal?: string | null
+  telefono?: string | null
 }
 
 export interface MetodoPagoDetalle {
@@ -39,6 +52,12 @@ export interface DetalleOrden {
   puntos_ganados?: number | null
   /** Mesa del pedido, opcional (B9 B.2; solo aplica a comandas). */
   mesa?: string | null
+  /** Cambio entregado al cliente; 0 si no hubo (M12). */
+  cambio?: number
+  /** Sucursal de la venta (M12). */
+  sucursal?: SucursalTicket | null
+  /** Versión de la comanda para editarla sin pisar otra edición (B5). */
+  modificado?: string | null
 }
 
 export interface Estadisticas {

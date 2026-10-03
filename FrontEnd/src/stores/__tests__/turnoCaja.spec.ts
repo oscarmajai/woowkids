@@ -297,3 +297,107 @@ describe('filas de metodos de pago', () => {
     expect(ids.every((id) => typeof id === 'string')).toBe(true)
   })
 })
+
+describe('B23: recargar con el conteo en espera de revisión', () => {
+  const conteoGuardado = {
+    desgloseEfectivo: {
+      billetes: [
+        { denominacion: 500, cantidad: 7 },
+        { denominacion: 20, cantidad: 2 },
+      ],
+      monedas: [
+        { denominacion: 20, cantidad: 1 },
+        { denominacion: 0.5, cantidad: 4 },
+      ],
+      total: 3582,
+    },
+    metodosPago: [
+      { metodo: 'Tarjeta', monto: 5903 },
+      { metodo: 'Vales', monto: 100 },
+    ],
+    totalDeclarado: 9585,
+  }
+
+  it('el formulario muestra el conteo que ya se envió, no $0.00', async () => {
+    const store = useTurnoCajaStore()
+    servicio.cargarTurnoActivo.mockResolvedValue(
+      turnoEn('ESPERANDO_REVISION', {
+        movimientos: [{ metodo: 'Tarjeta', totalVentas: 5903 }],
+        conteoGuardado,
+      }),
+    )
+
+    await store.cargarTurnoActivo()
+
+    const billete = (v: number) => store.desgloseEfectivo.billetes.find((b) => b.value === v)
+    const moneda = (v: number) => store.desgloseEfectivo.monedas.find((m) => m.value === v)
+    expect(billete(500)?.amount).toBe(7)
+    expect(billete(20)?.amount).toBe(2)
+    expect(billete(1000)?.amount).toBeNull()
+    expect(moneda(20)?.amount).toBe(1)
+    expect(moneda(0.5)?.amount).toBe(4)
+    expect(store.desgloseEfectivo.total).toBe(3582)
+    expect(store.totalContadoDeclarado).toBe(9585)
+    expect(store.metodosPago.map((m) => [m.metodo, m.monto, m.origen])).toEqual([
+      ['Tarjeta', 5903, 'sistema'],
+      ['Vales', 100, 'manual'],
+    ])
+  })
+
+  it('mientras el turno sigue operando no se toca el formulario', async () => {
+    const store = useTurnoCajaStore()
+    servicio.cargarTurnoActivo.mockResolvedValue(turnoEn('OPERANDO', { conteoGuardado }))
+
+    await store.cargarTurnoActivo()
+
+    expect(store.totalContadoDeclarado).toBeNull()
+    expect(store.desgloseEfectivo.billetes.every((b) => b.amount === null)).toBe(true)
+  })
+})
+
+describe('M7: efectivo esperado del turno', () => {
+  it('usa el efectivo esperado del backend (resta cambio y devoluciones)', async () => {
+    const store = useTurnoCajaStore()
+    servicio.cargarTurnoActivo.mockResolvedValue(
+      turnoEn('OPERANDO', {
+        fondoInicial: 500,
+        movimientos: [{ metodo: 'efectivo', totalVentas: 1000 }],
+        efectivoEsperado: 1380,
+        ventasPorMetodo: [{ metodo: 'efectivo', label: 'Efectivo', total: 880 }],
+      }),
+    )
+
+    await store.cargarTurnoActivo()
+
+    // Antes: 500 + 1000 = 1500 (sin restar los 120 de cambio).
+    expect(store.efectivoDisponible).toBe(1380)
+    expect(store.cajaEnNegativo).toBe(false)
+    expect(store.ventasPorMetodo).toEqual([{ metodo: 'efectivo', label: 'Efectivo', total: 880 }])
+  })
+
+  it('marca la caja en negativo', async () => {
+    const store = useTurnoCajaStore()
+    servicio.cargarTurnoActivo.mockResolvedValue(
+      turnoEn('OPERANDO', { fondoInicial: 2000, totalRetiros: 12000, efectivoEsperado: -1685 }),
+    )
+
+    await store.cargarTurnoActivo()
+
+    expect(store.efectivoDisponible).toBe(-1685)
+    expect(store.cajaEnNegativo).toBe(true)
+  })
+
+  it('sin el dato del backend conserva el cálculo local', async () => {
+    const store = useTurnoCajaStore()
+    servicio.cargarTurnoActivo.mockResolvedValue(
+      turnoEn('OPERANDO', {
+        fondoInicial: 500,
+        movimientos: [{ metodo: 'efectivo', totalVentas: 200 }],
+      }),
+    )
+
+    await store.cargarTurnoActivo()
+
+    expect(store.efectivoDisponible).toBe(700)
+  })
+})

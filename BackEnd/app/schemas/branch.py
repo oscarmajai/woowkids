@@ -72,6 +72,8 @@ class BranchResponse(BaseModel):
     correo: str | None
     administrador_id: UUID | None
     administrador_name: str | None
+    # Correo del administrador (no el de la sucursal, que es `correo`).
+    administrador_email: str | None = None
     clave: str | None
     is_active: bool
     creado: datetime | None = None
@@ -80,6 +82,18 @@ class BranchResponse(BaseModel):
     modificado: datetime | None = None
     modificado_por: UUID | None = None
     modificador_name: str | None = None
+
+
+class HorarioSucursalResponse(BaseModel):
+    """Datos operativos de una sucursal (B18): los que necesita quien gestiona
+    reservaciones para pintar el calendario y avisar de un evento fuera de
+    horario. No incluye datos administrativos (clave, administrador, etc.)."""
+
+    id: UUID
+    nombre: str
+    zona_horaria: str
+    hora_apertura: time
+    hora_cierre: time
 
 
 class IndicadoresSucursalResponse(BaseModel):

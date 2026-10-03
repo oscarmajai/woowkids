@@ -14,6 +14,7 @@ from app.schemas.branch import (
     BranchCreateRequest,
     BranchResponse,
     BranchUpdateRequest,
+    HorarioSucursalResponse,
     IndicadoresSucursalResponse,
 )
 from app.services.branch_service import (
@@ -21,10 +22,13 @@ from app.services.branch_service import (
     BranchNotFoundError,
     InsufficientPermissionsError,
     NombreAlreadyExistsError,
+    RangoFechasInvalidoError,
     TelefonoInvalidoError,
     create_branch,
     deactivate_branch,
+    exportar_indicadores,
     get_branch,
+    get_horario,
     get_indicadores,
     list_branches,
     reactivate_branch,
@@ -34,7 +38,16 @@ from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/sucursales", tags=["Sucursales"])
 
-_INDICADORES_CSV_CAMPOS = ["ventas", "ninos_atendidos", "eventos", "cajas_abiertas"]
+_INDICADORES_CSV_CAMPOS = [
+    "sucursal",
+    "clave",
+    "desde",
+    "hasta",
+    "ventas",
+    "ninos_atendidos",
+    "eventos",
+    "cajas_abiertas",
+]
 
 _NOT_FOUND = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,
@@ -53,6 +66,13 @@ _ADMINISTRADOR_INVALIDO = HTTPException(
     detail={
         "code": "ADMINISTRADOR_INVALIDO",
         "message": "El usuario indicado no existe, está inactivo o no tiene rol Administrador.",
+    },
+)
+_RANGO_INVALIDO = HTTPException(
+    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    detail={
+        "code": "RANGO_FECHAS_INVALIDO",
+        "message": "La fecha inicial no puede ser posterior a la fecha final.",
     },
 )
 _TELEFONO_INVALIDO = HTTPException(
@@ -100,6 +120,26 @@ async def get_branch_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+
+
+@router.get(
+    "/{sucursal_id}/horario",
+    response_model=HorarioSucursalResponse,
+    summary="Horario de operación y zona horaria de la sucursal",
+    description=(
+        "Para quien gestiona reservaciones (calendario y Nueva reservación) sin "
+        "`sucursales:ver`. Solo la sucursal de la sesión (403 si es otra)."
+    ),
+)
+async def get_horario_endpoint(
+    sucursal_id: UUID,
+    current_user: TokenData = Depends(require_permission("reservaciones:ver")),
+    conn: asyncpg.Connection = Depends(get_db),
+) -> HorarioSucursalResponse:
+    try:
+        return await get_horario(conn, sucursal_id, current_user)
+    except BranchNotFoundError:
+        raise _NOT_FOUND from None
 
 
 @router.put("/{sucursal_id}", response_model=BranchResponse)
@@ -167,6 +207,8 @@ async def get_indicadores_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+    except RangoFechasInvalidoError:
+        raise _RANGO_INVALIDO from None
 
 
 @router.get(
@@ -182,10 +224,11 @@ async def exportar_indicadores_endpoint(
 ) -> StreamingResponse:
     """Mismos indicadores de `/indicadores` (B5/C2), como descarga CSV (patrón B7)."""
     try:
-        indicadores = await get_indicadores(conn, sucursal_id, desde, hasta, current_user)
+        fila, nombre = await exportar_indicadores(conn, sucursal_id, desde, hasta, current_user)
     except BranchNotFoundError:
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
-    filas = iter([indicadores.model_dump()])
-    return csv_streaming_response(_INDICADORES_CSV_CAMPOS, filas, "indicadores_sucursal.csv")
+    except RangoFechasInvalidoError:
+        raise _RANGO_INVALIDO from None
+    return csv_streaming_response(_INDICADORES_CSV_CAMPOS, iter([fila]), nombre)

@@ -57,6 +57,10 @@ class TurnoResponse(BaseModel):
     nombre: str
     hora_inicio: time
     hora_fin: time
+    # M8: días en que aplica (0 = lunes ... 6 = domingo; None = todos) y si el
+    # horario corresponde a la hora local actual de la sucursal de la sesión.
+    dias: list[int] | None = None
+    vigente: bool = False
 
 
 # ── Apertura de Caja ────────────────────────────────────────────────────────
@@ -75,7 +79,8 @@ class AbrirTurnoPayload(BaseModel):
     # max_length=20 coincide con cajas.codigo VARCHAR(20) en BD — sin esto, un valor
     # más largo tronaba con un 500 crudo de Postgres en vez de un 422 limpio.
     terminal: str | None = Field(default="CAJA 01", max_length=20)
-    observaciones_apertura: str | None = None
+    # B13: las "Notas" de la apertura (antes se descartaban).
+    observaciones_apertura: str | None = Field(default=None, max_length=500)
     caja_id: str | None = None
     turno_id: str | None = None
     # Solo relevante para AdministradorSistema, que no tiene sucursal propia en el JWT.
@@ -91,6 +96,25 @@ class MovimientoResumen(BaseModel):
     total_ventas: Decimal
 
 
+class VentaPorMetodo(BaseModel):
+    """M7: lo cobrado en el turno por método de pago. El efectivo va neto
+    del cambio entregado (incluye las ventas sin método, que el arqueo
+    también cuenta como efectivo)."""
+
+    metodo: str
+    label: str
+    total: Decimal
+
+
+class ConteoGuardado(BaseModel):
+    """B23: el conteo que el cajero ya envió (congelado hasta la revisión),
+    para que el formulario lo muestre tras recargar la página."""
+
+    desglose_efectivo: dict[str, Any] = {}
+    metodos_pago: list[dict[str, Any]] = []
+    total_declarado: Decimal
+
+
 class TurnoActivoResponse(BaseModel):
     id: str
     sucursal_id: str
@@ -98,19 +122,35 @@ class TurnoActivoResponse(BaseModel):
     cajero_id: str
     cajero_nombre: str
     terminal: str
+    # UX caja: el código ("CAJA 01") se repite entre sucursales; el nombre
+    # ("Caja Patria 1") identifica la caja.
+    caja_nombre: str | None = None
     estado: str
     fondo_inicial: Decimal
     fecha_apertura: str
+    # B13: notas capturadas al abrir la caja.
+    observaciones_apertura: str | None = None
+    # Bruto: suma de los pagos recibidos (incluye el efectivo que se devolvió
+    # como cambio). Se conserva por compatibilidad.
     total_ventas: Decimal = Decimal("0")
     total_retiros: Decimal = Decimal("0")
     total_ingresos: Decimal = Decimal("0")
-    # B9 B.4: "vendido en turno" para el cajero mientras el turno está
-    # abierto. Deliberadamente sin desglose por método ni efectivo esperado
-    # (el arqueo es a ciegas); total_vendido es el mismo monto que
-    # total_ventas, con el nombre que espera el front.
+    # B9 B.4 / M6: "vendido en turno" para el cajero. numero_ventas cuenta
+    # tickets/órdenes (no pagos) y total_vendido es lo aplicado: lo cobrado
+    # menos el cambio entregado, igual que el esperado del arqueo.
     numero_ventas: int = 0
     total_vendido: Decimal = Decimal("0")
+    total_cambio: Decimal = Decimal("0")
+    # M7: efectivo que debería haber en el cajón ahora mismo (la misma
+    # fórmula que el esperado del arqueo y que el disponible para retiros) y
+    # lo cobrado por método. Negativo = la caja está en negativo. El conteo
+    # del cierre es a ciegas (B9): el router los deja en None para quien no
+    # tiene turnos_caja:revision_admin.
+    efectivo_esperado: Decimal | None = Decimal("0")
+    ventas_por_metodo: list[VentaPorMetodo] | None = []
     movimientos: list[MovimientoResumen] = []
+    # B23: conteo ya enviado (estados ESPERANDO_REVISION y BALANCE_REVELADO).
+    conteo_guardado: ConteoGuardado | None = None
     # QA #8: solo se llenan cuando estado == "BALANCE_REVELADO" (el admin ya
     # autenticó la revisión). El front deja de depender del sessionStorage
     # local para estos dos campos cuando vienen poblados.
@@ -150,12 +190,29 @@ class CambioResponse(BaseModel):
 class IngresoDetalle(BaseModel):
     id: str
     monto: Decimal
+    observaciones: str | None = None
+    creado: datetime
+
+
+class DevolucionDetalle(BaseModel):
+    """A4: devolución al cliente por cancelar una comanda cobrada. Las de
+    efectivo (es_efectivo) restan del efectivo esperado del turno."""
+
+    id: str
+    comanda_id: str
+    ticket_numero: str | None = None
+    metodo_pago_nombre: str | None = None
+    es_efectivo: bool
+    monto: Decimal
+    autorizado_por_nombre: str | None = None
     creado: datetime
 
 
 class IngresoEfectivoCreate(BaseModel):
     apertura_caja_id: str
     monto: Decimal = Field(..., gt=0)
+    # UX caja: motivo del ingreso (opcional, como las observaciones del retiro).
+    observaciones: str | None = Field(default=None, max_length=500)
 
     _validar_apertura_caja_id = field_validator("apertura_caja_id")(_validar_uuid)
 
@@ -164,6 +221,7 @@ class IngresoEfectivoResponse(BaseModel):
     id: str
     apertura_caja_id: str
     monto: Decimal
+    observaciones: str | None = None
     creado: datetime
 
 
@@ -249,6 +307,7 @@ class ArqueoResumen(BaseModel):
     id: str
     cajero_nombre: str
     terminal: str
+    caja_nombre: str | None = None
     sucursal_nombre: str
     fecha_apertura: str
     fecha_cierre: str
@@ -292,7 +351,10 @@ class DetalleArqueoResponse(ArqueoResumen):
     retiros: list[RetiroParcialResponse] = []
     cambios: list[CambioResponse] = []
     ingresos: list[IngresoDetalle] = []
+    devoluciones: list[DevolucionDetalle] = []
     observaciones: str | None = ""
+    # B13: notas capturadas al abrir la caja.
+    observaciones_apertura: str | None = None
 
 
 # ── Métodos de Pago del Turno Activo ───────────────────────────────────────

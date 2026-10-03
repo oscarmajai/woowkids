@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -252,6 +252,16 @@ async def hoy_en_sucursal(conn: asyncpg.Connection, sucursal_id: UUID) -> date |
     return cast(date | None, hoy)
 
 
+async def ahora_en_sucursal(conn: asyncpg.Connection, sucursal_id: UUID) -> datetime | None:
+    """Fecha y hora local de la sucursal (sin zona), para saber si un evento ya
+    empezó con el reloj de la sucursal y no con el UTC del servidor."""
+    ahora = await conn.fetchval(
+        "SELECT (NOW() AT TIME ZONE zona_horaria) FROM sucursales WHERE id = $1",
+        sucursal_id,
+    )
+    return cast(datetime | None, ahora)
+
+
 async def cancelar_por_falta_de_pago(
     conn: asyncpg.Connection, reservacion_id: UUID, motivo: str
 ) -> None:
@@ -270,6 +280,8 @@ async def cancelar_por_falta_de_pago(
                END,
                modificado = NOW()
          WHERE id = $1
+           -- Una reservación cerrada o ya cancelada no se vuelve a cancelar (A8).
+           AND estado IN ('pendiente', 'confirmada')
         """,
         reservacion_id,
         motivo,

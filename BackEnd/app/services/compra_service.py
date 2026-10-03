@@ -14,7 +14,8 @@ from uuid import UUID
 
 import asyncpg
 
-from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado
+from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado, RecepcionInvalidaError
+from app.exceptions.inventario import CantidadFueraDeRangoError, RecursoInactivoError
 from app.repositories import (
     compra_repository,
     insumo_repository,
@@ -28,14 +29,46 @@ from app.schemas.compra import (
     CompraEditar,
     CompraOut,
     CompraUpdate,
+    LineaRecepcion,
     RecibirCompraRequest,
 )
+from app.schemas.limites_inventario import MAX_CANTIDAD, MIN_CANTIDAD
 from app.services import costeo_service
 
 
 async def _construir_out(conn: asyncpg.Connection, compra: dict[str, Any]) -> CompraOut:
     detalles = await compra_repository.listar_detalles(conn, compra["id"])
     return CompraOut.model_validate({**compra, "detalles": detalles})
+
+
+def _validar_proveedor_activo(proveedor: dict[str, Any]) -> None:
+    """M22: un proveedor eliminado (borrado lógico) no admite compras nuevas."""
+    if not proveedor["activo"]:
+        raise RecursoInactivoError(
+            f"El proveedor «{proveedor['nombre']}» está eliminado; no se le pueden "
+            "registrar compras."
+        )
+
+
+def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
+    """M22: un insumo eliminado (borrado lógico) no se puede comprar."""
+    if not insumo["activo"]:
+        raise RecursoInactivoError(
+            f"El insumo «{insumo['nombre']}» está eliminado; no se puede agregar a una compra."
+        )
+
+
+def _validar_cantidad_base(cantidad_base: Decimal, insumo: dict[str, Any]) -> None:
+    """M3: la cantidad convertida a la unidad base es la que se suma al stock
+    (numeric(12,3)). Una línea válida en su unidad puede salirse de rango al
+    convertirla (9,999,999 kg = 9,999,999,000 g) o redondearse a 0 (0.0004 g):
+    antes eso daba 500 al recibir."""
+    if cantidad_base < MIN_CANTIDAD or cantidad_base > MAX_CANTIDAD:
+        raise CantidadFueraDeRangoError(
+            f"La cantidad de «{insumo['nombre']}» convertida a su unidad base "
+            f"({cantidad_base.normalize():f}) está fuera de rango: debe ser de "
+            f"{MIN_CANTIDAD} a {MAX_CANTIDAD:,}."
+        )
 
 
 async def _validar_unidad_compatible(
@@ -72,6 +105,7 @@ async def _validar_y_calcular_base(
                 f"La presentación indicada no pertenece a «{insumo['nombre']}» o está inactiva."
             )
         equivalencia = presentacion["equivalencia_base"]
+        _validar_cantidad_base(cantidad * equivalencia, insumo)
         return cantidad * equivalencia, costo_unitario / equivalencia
 
     assert unidad_medida_id is not None
@@ -80,6 +114,7 @@ async def _validar_y_calcular_base(
     unidad_base = await unidad_medida_repository.obtener(conn, insumo["unidad_base_id"])
     assert unidad_linea is not None and unidad_base is not None
     factor = unidad_linea["factor_a_base"] / unidad_base["factor_a_base"]
+    _validar_cantidad_base(cantidad * factor, insumo)
     return cantidad * factor, costo_unitario / factor
 
 
@@ -89,6 +124,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
         raise NoEncontrado("Proveedor")
     if proveedor["sucursal_id"] != body.sucursal_id:
         raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
+    _validar_proveedor_activo(proveedor)
 
     for detalle in body.detalles:
         insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
@@ -96,6 +132,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
             raise NoEncontrado("Insumo")
         if insumo["sucursal_id"] != body.sucursal_id:
             raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
+        _validar_insumo_activo(insumo)
         await _validar_y_calcular_base(
             conn,
             insumo,
@@ -120,7 +157,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
 async def obtener(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
     row = await compra_repository.obtener(conn, compra_id)
     if not row:
-        raise NoEncontrado("Compra")
+        raise NoEncontrado("Compra", genero="f")
     return await _construir_out(conn, row)
 
 
@@ -130,11 +167,25 @@ async def listar(conn: asyncpg.Connection, sucursal_id: UUID | None = None) -> l
 
 
 async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpdate) -> CompraOut:
-    await obtener(conn, compra_id)
     updates = body.model_dump(exclude_unset=True)
-    row = await compra_repository.actualizar(conn, compra_id, updates)
+    async with conn.transaction():
+        # Bajo el mismo bloqueo que recibir/cancelar (C5): el estado que se
+        # revisa abajo no puede cambiar antes del UPDATE.
+        compra = await compra_repository.bloquear(conn, compra_id)
+        if not compra:
+            raise NoEncontrado("Compra")
+        # B10: `activo=false` sobre una compra con mercancía recibida respondía
+        # 200 sin efecto (la compra seguía en el listado y el stock no se
+        # revertía). Una compra recibida no se desactiva; una pendiente se
+        # cancela con POST /compras/{id}/cancelar.
+        if "activo" in updates and compra["estado"] in ("R", "PARCIAL"):
+            raise Conflicto(
+                "Una compra recibida o con recepción parcial no se puede desactivar: "
+                "su mercancía ya entró al inventario."
+            )
+        row = await compra_repository.actualizar(conn, compra_id, updates)
     if not row:
-        raise NoEncontrado("Compra")
+        raise NoEncontrado("Compra", genero="f")
     return await _construir_out(conn, row)
 
 
@@ -145,19 +196,21 @@ async def editar(conn: asyncpg.Connection, compra_id: UUID, body: CompraEditar) 
     async with conn.transaction():
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] != "P":
             raise Conflicto("Solo se puede editar una compra pendiente.")
 
         proveedor = await proveedor_repository.obtener(conn, body.proveedor_id)
         if not proveedor or proveedor["sucursal_id"] != compra["sucursal_id"]:
             raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
+        _validar_proveedor_activo(proveedor)
         for detalle in body.detalles:
             insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
             if not insumo:
                 raise NoEncontrado("Insumo")
             if insumo["sucursal_id"] != compra["sucursal_id"]:
                 raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
+            _validar_insumo_activo(insumo)
             await _validar_y_calcular_base(
                 conn,
                 insumo,
@@ -179,15 +232,73 @@ def _conflicto_por_estado(estado: str) -> Conflicto:
     return Conflicto("La compra ya fue recibida o está cancelada.")
 
 
+def _fmt(cantidad: Decimal) -> str:
+    return f"{cantidad.normalize():f}"
+
+
+def cantidades_a_recibir(
+    detalles: list[dict[str, Any]], lineas: list[LineaRecepcion] | None
+) -> dict[UUID, Decimal]:
+    """Cuánto recibir de cada línea en esta vuelta, ya validado. Solo devuelve
+    las líneas con cantidad > 0.
+
+    - `lineas is None`: todo lo pendiente de cada línea (recibir completa).
+    - Con `lineas`: lo que diga cada una; una línea de la compra que no venga
+      cuenta como 0 (A12: antes se recibía completa). Pedir más de lo pendiente
+      (M23: antes se recortaba en silencio), un detalle ajeno a la compra o
+      repetido responde 422 sin tocar nada.
+
+    Lanza Conflicto si la compra ya no tiene nada pendiente."""
+    pendientes = {d["id"]: d["cantidad"] - d["cantidad_recibida"] for d in detalles}
+    if not any(p > 0 for p in pendientes.values()):
+        raise Conflicto("No hay nada pendiente por recibir en esta compra.")
+
+    if lineas is None:
+        return {detalle_id: p for detalle_id, p in pendientes.items() if p > 0}
+
+    por_id = {d["id"]: d for d in detalles}
+    resultado: dict[UUID, Decimal] = {}
+    vistos: set[UUID] = set()
+    for linea in lineas:
+        detalle = por_id.get(linea.detalle_id)
+        if detalle is None:
+            raise RecepcionInvalidaError(
+                "Una de las líneas a recibir no pertenece a esta compra.",
+                {"detalle_id": str(linea.detalle_id)},
+            )
+        if linea.detalle_id in vistos:
+            raise RecepcionInvalidaError(
+                f"La línea de «{detalle['insumo_nombre']}» viene repetida en la recepción.",
+                {"detalle_id": str(linea.detalle_id), "insumo_nombre": detalle["insumo_nombre"]},
+            )
+        vistos.add(linea.detalle_id)
+        pendiente = max(pendientes[linea.detalle_id], Decimal("0"))
+        if linea.cantidad > pendiente:
+            raise RecepcionInvalidaError(
+                f"La cantidad a recibir de «{detalle['insumo_nombre']}» "
+                f"({_fmt(linea.cantidad)}) excede lo pendiente ({_fmt(pendiente)}).",
+                {
+                    "detalle_id": str(linea.detalle_id),
+                    "insumo_nombre": detalle["insumo_nombre"],
+                    "solicitado": _fmt(linea.cantidad),
+                    "pendiente": _fmt(pendiente),
+                },
+            )
+        if linea.cantidad > 0:
+            resultado[linea.detalle_id] = linea.cantidad
+
+    if not resultado:
+        raise RecepcionInvalidaError("Indica al menos una cantidad mayor a 0 para recibir.")
+    return resultado
+
+
 async def recibir(
     conn: asyncpg.Connection,
     compra_id: UUID,
     creado_por: UUID,
     body: RecibirCompraRequest | None = None,
 ) -> CompraOut:
-    solicitado: dict[str, Decimal] = {}
-    if body and body.lineas:
-        solicitado = {str(linea.detalle_id): linea.cantidad for linea in body.lineas}
+    lineas = body.lineas if body else None
 
     async with conn.transaction():
         # C5: bloquear la compra y releer estado, detalles y pendientes DENTRO de
@@ -197,21 +308,25 @@ async def recibir(
         # (409) o solo lo que quedó pendiente (recepción parcial).
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] not in ("P", "PARCIAL"):
             raise _conflicto_por_estado(compra["estado"])
 
         detalles = await compra_repository.listar_detalles(conn, compra_id)
-        algo_recibido = False
+        # Se valida TODA la recepción antes de mover stock: una línea inválida
+        # no deja aplicadas a medias las anteriores.
+        a_recibir = cantidades_a_recibir(detalles, lineas)
+        # N3: bloquear de una vez los insumos a mover, en orden de id. Antes el
+        # bloqueo lo tomaba cada UPDATE de stock en el orden de las líneas (por
+        # nombre del insumo) y dos recepciones con los mismos insumos podían
+        # bloquearlos en orden distinto y trabarse (deadlock).
+        await insumo_repository.bloquear_por_ids(
+            conn, [d["insumo_id"] for d in detalles if d["id"] in a_recibir]
+        )
         for detalle in detalles:
-            pendiente = detalle["cantidad"] - detalle["cantidad_recibida"]
-            if pendiente <= 0:
+            recibir_ahora = a_recibir.get(detalle["id"])
+            if recibir_ahora is None:
                 continue
-            cantidad = solicitado.get(str(detalle["id"]), pendiente) if solicitado else pendiente
-            recibir_ahora = min(cantidad, pendiente)
-            if recibir_ahora <= 0:
-                continue
-            algo_recibido = True
 
             insumo = await insumo_repository.obtener(conn, detalle["insumo_id"])
             if not insumo:
@@ -247,9 +362,6 @@ async def recibir(
             )
             await compra_repository.sumar_recepcion_linea(conn, detalle["id"], recibir_ahora)
 
-        if not algo_recibido:
-            raise Conflicto("No hay nada pendiente por recibir en esta compra.")
-
         detalles = await compra_repository.listar_detalles(conn, compra_id)
         completa = all(d["cantidad_recibida"] >= d["cantidad"] for d in detalles)
         actualizada = await compra_repository.marcar_estado(
@@ -268,7 +380,7 @@ async def cancelar(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
     async with conn.transaction():
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] != "P":
             raise Conflicto("Solo se puede cancelar una compra pendiente sin recepciones.")
         cancelada = await compra_repository.marcar_cancelada(conn, compra_id)

@@ -10,6 +10,19 @@ from app.schemas.comanda import DetalleCreate
 class PagoIn(BaseModel):
     metodoPagoId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
     monto: float = Field(..., gt=0)
+    # N8: folio del voucher o referencia de la transferencia. Opcional en el
+    # contrato; el servicio la exige si el método de pago tiene
+    # `requiere_referencia` (misma regla que M11 en el POS). Se guarda en
+    # pagos_estancia.notas_pago.
+    referencia: str | None = Field(default=None, max_length=120)
+
+    @field_validator("referencia")
+    @staticmethod
+    def _limpiar_referencia(v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class PagoEstanciaExtraRequest(BaseModel):
@@ -174,6 +187,10 @@ class DetalleProductoOut(BaseModel):
     # QA #34: agrupa los hijos de una misma instancia de combo (migración 038).
     # None para productos sueltos o cuando el dato no existe (estancias/reservaciones).
     id_combo_padre: str | None = None
+    # M13: renglón (id de detalle) del combo al que pertenece el hijo; None en
+    # productos sueltos, renglones de combo y filas viejas que no se pudieron
+    # asignar (migración 093).
+    detalle_padre_id: str | None = None
 
 
 class MetodoPagoDetalle(BaseModel):
@@ -181,6 +198,17 @@ class MetodoPagoDetalle(BaseModel):
     monto: float
     notas_pago: str | None = None
     ultimos4: str | None = None
+
+
+class SucursalTicketOut(BaseModel):
+    """M12: datos de la sucursal de la venta para el encabezado del ticket."""
+
+    nombre: str
+    direccion: str | None = None
+    ciudad: str | None = None
+    estado: str | None = None
+    codigo_postal: str | None = None
+    telefono: str | None = None
 
 
 class DetalleOrdenOut(BaseModel):
@@ -203,6 +231,14 @@ class DetalleOrdenOut(BaseModel):
     puntos_ganados: int | None = None
     # B9 B.2: mesa del pedido, opcional (solo aplica a comandas).
     mesa: str | None = None
+    # M12: cliente, cambio entregado (0 si no hubo) y sucursal de la venta.
+    nombre_cliente: str | None = None
+    cambio: float = 0.0
+    sucursal: SucursalTicketOut | None = None
+    # B5: marca de la última modificación de la comanda. PATCH
+    # /comandas/{id}/detalles la recibe como modificado_esperado y responde
+    # 409 si la orden cambió desde que se leyó.
+    modificado: str | None = None
 
 
 # ---------------------------------------------------------------------------

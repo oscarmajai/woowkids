@@ -12,12 +12,18 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { saludoPorHora } from '@/utils/saludo'
+import { tituloAlertasStock } from '@/utils/inventario'
+import { avisosDeNotas } from '@/utils/notasNino'
+import { avisoPulserasBajas, resumenPulseras } from '@/utils/resumenPulseras'
+import { usePulserasStore } from '@/stores/pulseras'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
 import type { Comanda } from '@/types/comanda'
 import type { Reservaciones } from '@/types/reservaciones'
 import type { UiTone } from '@/types/ui'
+import type { PulseraAdmin } from '@/types/pulsera'
 
 /**
  * Inicio (1a): tablero operativo del turno. Cada bloque se muestra solo si
@@ -30,6 +36,7 @@ const reservacionesStore = useReservacionesStore()
 const alertas = useAlertasInventarioStore()
 const paquetesStore = usePaquetesStore()
 const turnoCaja = useTurnoCajaStore()
+const pulserasStore = usePulserasStore()
 
 const puede = {
   estancias: computed(() => auth.hasPermission('estancias:ver_activos')),
@@ -37,6 +44,15 @@ const puede = {
   eventos: computed(() => auth.hasPermission('reservaciones:listar')),
   inventario: computed(() => auth.hasPermission('inventario:ver')),
   pos: computed(() => auth.hasPermission('pos:acceder')),
+  // "Nuevo pedido" abre Caja (POS): el Administrador de sucursal no vende en
+  // mostrador y AdministradorSistema necesita elegir sucursal antes (B21).
+  nuevoPedido: computed(
+    () =>
+      auth.hasPermission('pos:acceder') &&
+      !(auth.hasRole('Administrador') && !auth.isSistema) &&
+      !(auth.isSistema && !auth.currentBranchId),
+  ),
+  reporteStock: computed(() => auth.hasPermission('reportes:inventario')),
   checkin: computed(() => auth.hasPermission('estancias:checkin')),
   checkout: computed(() => auth.hasPermission('estancias:checkout')),
   nuevaReservacion: computed(() => auth.hasPermission('reservaciones:crear')),
@@ -53,7 +69,7 @@ const relojTimer = setInterval(() => {
 const saludo = computed(() => {
   const h = ahora.value.getHours()
   const nombre = (auth.currentUser?.name ?? '').split(' ')[0]
-  const parte = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'
+  const parte = saludoPorHora(h)
   return nombre ? `${parte}, ${nombre}` : parte
 })
 const subtitulo = computed(() => {
@@ -94,6 +110,7 @@ onMounted(async () => {
   if (puede.estancias.value) {
     tareas.push(acceso.loadActivos())
     acceso.startTicking()
+    if (acceso.puedeVerPulseras) tareas.push(cargarInventarioPulseras())
   }
   if (puede.eventos.value && auth.currentBranchId) {
     tareas.push(reservacionesStore.cargar(auth.currentBranchId))
@@ -180,6 +197,12 @@ const pendientes = computed<Pendiente[]>(() => {
         : undefined,
     })
   }
+  // M26: cada niño en estancia con notas / alergias aparece aquí.
+  if (puede.estancias.value) {
+    for (const aviso of avisosDeNotas(acceso.activos)) {
+      lista.push({ ...aviso, icon: 'medical_information', tone: 'warn' })
+    }
+  }
   for (const r of eventosHoy.value) {
     if (Number(r.saldo_pendiente) <= 0) continue
     lista.push({
@@ -207,32 +230,72 @@ const pendientes = computed<Pendiente[]>(() => {
       action: { label: 'Ver cocina', run: () => router.push({ name: 'pos-cocina' }) },
     })
   }
+  // UX: aviso de existencias bajas de pulseras (son de un solo uso).
+  if (puede.estancias.value && acceso.puedeVerPulseras && pulseras.value.conocidas) {
+    const aviso = avisoPulserasBajas(pulseras.value.libres, pulseras.value.registradas)
+    if (aviso) {
+      lista.push({
+        key: 'pulseras-bajas',
+        ...aviso,
+        icon: 'sensors_off',
+        tone: pulseras.value.libres === 0 ? 'bad' : 'warn',
+        action: auth.hasPermission('pulseras:crear')
+          ? {
+              label: 'Registrar',
+              run: () => router.push({ name: 'estancias-pulseras-registro' }),
+            }
+          : undefined,
+      })
+    }
+  }
   if (puede.inventario.value && alertas.totalAlertas > 0) {
     const insumos = [...alertas.criticos, ...alertas.porReordenar]
     lista.push({
       key: 'stock',
       icon: 'inventory_2',
       tone: 'info',
-      title: `${insumos.length} insumos bajo mínimo`,
+      // B7: "bajo mínimo" y "por reordenar" son alertas distintas.
+      title: tituloAlertasStock(alertas.criticos.length, alertas.porReordenar.length),
       detail: insumos
         .slice(0, 3)
         .map((i) => i.nombre)
         .join(' · '),
-      action: { label: 'Ver stock', run: () => router.push({ name: 'reportes-inventario' }) },
+      action: puede.reporteStock.value
+        ? { label: 'Ver stock', run: () => router.push({ name: 'reportes-inventario' }) }
+        : undefined,
     })
   }
   return lista
 })
 
 // ── Pulseras ────────────────────────────────────────────────────────────────
+// UX: el total son las pulseras registradas (antes libres + en estancia, que
+// se encogía con cada salida porque son de un solo uso) y las ya usadas se
+// muestran aparte. El inventario se pide una vez; libres y en estancia van en vivo.
+const inventarioPulseras = ref<PulseraAdmin[] | null>(null)
+
+async function cargarInventarioPulseras(): Promise<void> {
+  if (!auth.currentBranchId) return
+  await pulserasStore.cargar(auth.currentBranchId)
+  inventarioPulseras.value = pulserasStore.error ? null : pulserasStore.pulseras
+}
+
 const pulseras = computed(() => {
-  const activas = acceso.activos.filter((a) => a.status === 'activo').length
-  const porExpirar = acceso.porExpirar
-  const excedidas = acceso.excedidos
-  const libres = acceso.pulserasLibres
-  const total = libres + activas + porExpirar + excedidas
-  const pct = (n: number) => (total ? `${(n / total) * 100}%` : '0%')
-  return { activas, porExpirar, excedidas, libres, total, pct }
+  const inventario = inventarioPulseras.value
+  const libres = acceso.pulserasCargadas
+    ? acceso.pulserasLibres
+    : (inventario?.filter((p) => p.activo && !p.usada).length ?? 0)
+  const r = resumenPulseras(
+    libres,
+    {
+      activas: acceso.activos.filter((a) => a.status === 'activo').length,
+      porExpirar: acceso.porExpirar,
+      excedidas: acceso.excedidos,
+    },
+    inventario,
+  )
+  const pct = (n: number) => (r.registradas ? `${(n / r.registradas) * 100}%` : '0%')
+  return { ...r, pct, conocidas: acceso.pulserasCargadas || inventario !== null }
 })
 
 const mostrarPanelLateral = computed(
@@ -260,7 +323,7 @@ const sinModulos = computed(
           :to="{ name: 'eventos-reservaciones-crear' }"
         />
         <q-btn
-          v-if="puede.pos.value"
+          v-if="puede.nuevoPedido.value"
           outline
           icon="add_shopping_cart"
           label="Nuevo pedido"
@@ -410,7 +473,7 @@ const sinModulos = computed(
           <h2 class="home-card__title">Pulseras</h2>
           <div class="bands__figure">
             <span class="bands__free">{{ pulseras.libres }}</span>
-            <span class="bands__of">libres de {{ pulseras.total }}</span>
+            <span class="bands__of">libres de {{ pulseras.registradas }} registradas</span>
           </div>
           <div class="bands__bar">
             <span
@@ -425,6 +488,10 @@ const sinModulos = computed(
               class="bands__seg bands__seg--bad"
               :style="{ width: pulseras.pct(pulseras.excedidas) }"
             />
+            <span
+              class="bands__seg bands__seg--used"
+              :style="{ width: pulseras.pct(pulseras.usadas) }"
+            />
           </div>
           <div class="bands__legend">
             <span><i class="bands__dot bands__dot--ok" />{{ pulseras.activas }} activas</span>
@@ -432,6 +499,10 @@ const sinModulos = computed(
               ><i class="bands__dot bands__dot--warn" />{{ pulseras.porExpirar }} por expirar</span
             >
             <span><i class="bands__dot bands__dot--bad" />{{ pulseras.excedidas }} excedidas</span>
+            <span
+              ><i class="bands__dot bands__dot--used" />{{ pulseras.usadas }} ya usadas (no se
+              reutilizan)</span
+            >
           </div>
         </section>
       </div>
@@ -731,6 +802,9 @@ const sinModulos = computed(
     &--bad {
       background: var(--tone-bad-dot);
     }
+    &--used {
+      background: #b8c0cc;
+    }
   }
 
   &__legend {
@@ -760,6 +834,9 @@ const sinModulos = computed(
     }
     &--bad {
       background: var(--tone-bad-dot);
+    }
+    &--used {
+      background: #b8c0cc;
     }
   }
 }

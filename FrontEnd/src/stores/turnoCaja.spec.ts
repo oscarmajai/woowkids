@@ -40,6 +40,27 @@ describe('useTurnoCajaStore.registrarIngreso', () => {
     expect(turnoCajaService.cargarTurnoActivo).toHaveBeenCalled()
   })
 
+  it('manda el motivo del ingreso cuando el cajero lo captura', async () => {
+    const store = useTurnoCajaStore()
+    store.turnoId = 'turno-1'
+    vi.mocked(turnoCajaService.registrarIngreso).mockResolvedValue({
+      id: 'ing-1',
+      turnoId: 'turno-1',
+      monto: 500,
+      observaciones: 'Reposición de cambio',
+      creado: '2026-08-25T00:00:00Z',
+    })
+    vi.mocked(turnoCajaService.cargarTurnoActivo).mockRejectedValue(new Error('sin turno'))
+
+    await store.registrarIngreso(500, '  Reposición de cambio  ')
+
+    expect(turnoCajaService.registrarIngreso).toHaveBeenCalledWith({
+      turnoId: 'turno-1',
+      monto: 500,
+      observaciones: 'Reposición de cambio',
+    })
+  })
+
   it('devuelve false y guarda el error cuando el backend rechaza el ingreso', async () => {
     const store = useTurnoCajaStore()
     store.turnoId = 'turno-1'

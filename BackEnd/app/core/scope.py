@@ -19,6 +19,7 @@ C1 (pruebas E2E 2026-10-03): regla única de aislamiento por sucursal.
   ``app/services/alcance_service.py``.
 """
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -117,7 +118,10 @@ def resolver_sucursal_obligatoria(current_user: TokenData, solicitada: UUID | st
 
 
 def asegurar_misma_sucursal(
-    current_user: TokenData, sucursal_recurso: UUID | str | None, recurso: str = "Recurso"
+    current_user: TokenData,
+    sucursal_recurso: UUID | str | None,
+    recurso: str = "Recurso",
+    genero: Literal["m", "f"] = "m",
 ) -> None:
     """404 si el recurso (ya cargado) no es de la sucursal de la sesión.
     AdministradorSistema accede a cualquier sucursal."""
@@ -128,4 +132,4 @@ def asegurar_misma_sucursal(
         or current_user.branch_id is None
         or str(sucursal_recurso) != str(current_user.branch_id)
     ):
-        raise NoEncontrado(recurso)
+        raise NoEncontrado(recurso, genero)

@@ -10,7 +10,7 @@ nuevos y los borra al terminar.
         -e POSTGRES_DB=woowkids -p 0:5432 postgres:16-alpine
     psql ... < sql/schema_maestro.sql
     TEST_DATABASE_URL=postgresql://dev:dev@localhost:<puerto>/woowkids \\
-        pytest tests/integration/test_reservaciones_saldo_pg.py
+        pytest tests/db/test_reservaciones_saldo_pg.py
 """
 
 import asyncio
@@ -73,9 +73,11 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
         ids["paquete"],
         ids["sucursal"],
     )
+    # Por evento: se cobra una vez. Los extras por hora/persona (M15) se
+    # prueban en test_reservacion_partidas_pg.py.
     await pg.execute(
         """INSERT INTO extras (id, sucursal_id, nombre, precio, unidad)
-           VALUES ($1, $2, 'Animador adicional', 350, 'hora')""",
+           VALUES ($1, $2, 'Animador adicional', 350, 'evento')""",
         ids["extra"],
         ids["sucursal"],
     )

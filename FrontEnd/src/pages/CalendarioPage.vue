@@ -225,7 +225,8 @@ async function cargarHorarioSucursal() {
     return
   }
   try {
-    const branch = await branchService.getBranch(authStore.currentBranchId)
+    // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
+    const branch = await branchService.getHorario(authStore.currentBranchId)
     sucursalHorario.value = { horaApertura: branch.horaApertura, horaCierre: branch.horaCierre }
   } catch {
     sucursalHorario.value = null
@@ -408,6 +409,14 @@ interface CalDay {
 
 const daysOfWeek = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
 
+/** Primer y último día (42 celdas, de lunes a domingo) de la cuadrícula del mes. */
+function rangoCuadriculaMes(y: number, m: number): { desde: string; hasta: string } {
+  const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7
+  const inicio = new Date(y, m, 1 - firstWeekday)
+  const fin = new Date(y, m, 1 - firstWeekday + 41)
+  return { desde: isoDate(inicio), hasta: isoDate(fin) }
+}
+
 const calendarDays = computed((): CalDay[] => {
   const y = curYear.value
   const m = curMonth.value
@@ -475,6 +484,11 @@ const seleccionar = (day: CalDay) => {
 
 // Rango de fechas (desde/hasta) que necesita la vista activa, para no traer
 // todo el histórico de la sucursal (B3: GET /reservaciones?desde&hasta).
+//
+// Depende SOLO de la vista y de la fecha elegida, nunca de los eventos
+// cargados (A9): en la vista Mes salía de `calendarDays`, que se recalcula con
+// cada respuesta; con el watch sobre un arreglo nuevo en cada evaluación, cada
+// carga disparaba otra y el calendario hacía miles de peticiones sin pintarse.
 const rangoFetch = computed((): { desde: string; hasta: string } => {
   const hoyIso = isoDate(today)
   if (vista.value === 'dia') {
@@ -485,15 +499,25 @@ const rangoFetch = computed((): { desde: string; hasta: string } => {
     const dias = semanaDias.value
     return { desde: dias[0] ?? hoyIso, hasta: dias[dias.length - 1] ?? hoyIso }
   }
-  const dias = calendarDays.value
-  return { desde: dias[0]?.isoDate ?? hoyIso, hasta: dias[dias.length - 1]?.isoDate ?? hoyIso }
+  return rangoCuadriculaMes(curYear.value, curMonth.value)
 })
 
+// Clave primitiva: el watch solo dispara si de verdad cambió la sucursal o
+// el rango (un string se compara por valor; un arreglo nuevo, nunca es igual).
+const claveCarga = computed(() =>
+  authStore.currentBranchId
+    ? `${authStore.currentBranchId}|${rangoFetch.value.desde}|${rangoFetch.value.hasta}`
+    : '',
+)
+
 watch(
-  () => [authStore.currentBranchId, rangoFetch.value.desde, rangoFetch.value.hasta] as const,
-  ([branchId, desde, hasta]) => {
-    if (!branchId) return
-    store.cargar(branchId, desde, hasta)
+  claveCarga,
+  (clave) => {
+    if (!clave) return
+    const [branchId, desde, hasta] = clave.split('|')
+    // Si el rango cambia antes de que llegue la respuesta, el store descarta
+    // la respuesta vieja (solo aplica la carga más reciente).
+    void store.cargar(branchId, desde, hasta)
   },
   { immediate: true },
 )

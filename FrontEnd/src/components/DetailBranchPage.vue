@@ -18,6 +18,9 @@ import { cajaAdminService } from '@/services/cajaAdminService'
 import { horarioService } from '@/services/horarioService'
 import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
+import { perteneceASucursal } from '@/utils/usuarios'
+import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
+import { fechaEnZona, primerDiaDelMesEnZona, rangoFechasInvertido } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
 import type { Branch, IndicadoresSucursal } from '@/types/branch'
@@ -44,23 +47,27 @@ const formAbierto = ref(false)
 const desactivarAbierto = ref(false)
 
 // ── Indicadores por sucursal (periodo) ─────────────────────────────────────
-function primerDiaDelMes(): string {
-  const hoy = new Date()
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-}
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-const periodoDesde = ref(primerDiaDelMes())
-const periodoHasta = ref(hoyIso())
+// El periodo por defecto (mes en curso hasta hoy) se calcula en la zona de la
+// sucursal (M4): con toISOString() "hoy" era la fecha UTC. Mientras carga la
+// sucursal se usa la zona del navegador.
+const periodoDesde = ref(primerDiaDelMesEnZona())
+const periodoHasta = ref(fechaEnZona())
+let periodoAjustadoAZona = false
 const indicadores = ref<IndicadoresSucursal | null>(null)
 const indicadoresCargando = ref(false)
 const indicadoresError = ref('')
 const exportando = ref(false)
+// B1: con el rango invertido el backend responde 422; no se pide ni se exporta.
+const rangoInvertido = computed(() => rangoFechasInvertido(periodoDesde.value, periodoHasta.value))
+const MENSAJE_RANGO_INVERTIDO = 'La fecha «Desde» no puede ser posterior a «Hasta».'
 
 async function cargarIndicadores() {
   if (!id.value) return
+  if (rangoInvertido.value) {
+    indicadores.value = null
+    indicadoresError.value = MENSAJE_RANGO_INVERTIDO
+    return
+  }
   indicadoresCargando.value = true
   indicadoresError.value = ''
   try {
@@ -77,10 +84,15 @@ async function cargarIndicadores() {
 }
 
 async function exportarIndicadores() {
-  if (!id.value) return
+  if (!id.value || rangoInvertido.value) return
   exportando.value = true
   try {
-    await branchService.exportarIndicadores(id.value, periodoDesde.value, periodoHasta.value)
+    await branchService.exportarIndicadores(
+      id.value,
+      periodoDesde.value,
+      periodoHasta.value,
+      nombreArchivoIndicadores(branch.value?.clave, periodoDesde.value, periodoHasta.value),
+    )
   } catch {
     Notify.create({ type: 'negative', message: 'Error al exportar los indicadores.' })
   } finally {
@@ -100,8 +112,14 @@ async function cargar() {
       return
     }
     branch.value = b.value
+    if (!periodoAjustadoAZona) {
+      periodoAjustadoAZona = true
+      periodoDesde.value = primerDiaDelMesEnZona(b.value.zonaHoraria)
+      periodoHasta.value = fechaEnZona(b.value.zonaHoraria)
+    }
+    // Incluye a los administradores, que no tienen sucursal fija (branchId).
     usuarios.value =
-      users.status === 'fulfilled' ? users.value.filter((u) => u.branchId === id.value) : []
+      users.status === 'fulfilled' ? users.value.filter((u) => perteneceASucursal(u, id.value)) : []
   } finally {
     loading.value = false
   }
@@ -245,6 +263,7 @@ const horariosColumns: QTableColumn[] = [
   { name: 'nombre', label: 'Horario', field: 'nombre', align: 'left', sortable: true },
   { name: 'rango', label: 'Horario', field: 'horaInicio', align: 'left' },
   { name: 'dias', label: 'Días', field: 'dias', align: 'left' },
+  { name: 'alcance', label: 'Alcance', field: 'sucursalId', align: 'left' },
   { name: 'activo', label: 'Estado', field: 'activo', align: 'left' },
 ]
 </script>
@@ -258,16 +277,21 @@ const horariosColumns: QTableColumn[] = [
       :back-to="{ name: 'sucursales-listar' }"
     >
       <template v-if="branch" #actions>
-        <template v-if="auth.hasPermission('sucursales:editar')">
-          <q-btn
-            v-if="branch.isActive"
-            outline
-            icon="block"
-            label="Desactivar"
-            @click="desactivarAbierto = true"
-          />
-          <q-btn v-else outline icon="restart_alt" label="Reactivar" @click="reactivar" />
-        </template>
+        <!-- Desactivar exige sucursales:eliminar y reactivar sucursales:editar (backend). -->
+        <q-btn
+          v-if="branch.isActive && auth.hasPermission('sucursales:eliminar')"
+          outline
+          icon="block"
+          label="Desactivar"
+          @click="desactivarAbierto = true"
+        />
+        <q-btn
+          v-else-if="!branch.isActive && auth.hasPermission('sucursales:editar')"
+          outline
+          icon="restart_alt"
+          label="Reactivar"
+          @click="reactivar"
+        />
         <q-btn
           v-if="auth.hasPermission('sucursales:editar')"
           unelevated
@@ -310,7 +334,7 @@ const horariosColumns: QTableColumn[] = [
             <KpiCard
               label="Administrador"
               :value="branch.administradorName ?? 'Sin asignar'"
-              :note="branch.correo ?? ''"
+              :note="branch.administradorEmail ?? ''"
             />
             <KpiCard
               label="Horario"
@@ -336,6 +360,8 @@ const horariosColumns: QTableColumn[] = [
                   outlined
                   type="date"
                   label="Hasta"
+                  :error="rangoInvertido"
+                  hide-bottom-space
                   @update:model-value="cargarIndicadores"
                 />
                 <q-btn
@@ -343,6 +369,7 @@ const horariosColumns: QTableColumn[] = [
                   icon="download"
                   label="Exportar"
                   :loading="exportando"
+                  :disable="rangoInvertido"
                   @click="exportarIndicadores"
                 />
               </div>
@@ -508,6 +535,15 @@ const horariosColumns: QTableColumn[] = [
               </template>
               <template #body-cell-dias="props">
                 <q-td :props="props">{{ diasLabel(props.row.dias) }}</q-td>
+              </template>
+              <template #body-cell-alcance="props">
+                <q-td :props="props">
+                  <!-- M19: /horarios devuelve los de la sucursal y los globales -->
+                  <StatusBadge
+                    :tone="props.row.sucursalId ? 'info' : 'pink'"
+                    :label="props.row.sucursalId ? 'Esta sucursal' : 'Todas las sucursales'"
+                  />
+                </q-td>
               </template>
               <template #body-cell-activo="props">
                 <q-td :props="props">

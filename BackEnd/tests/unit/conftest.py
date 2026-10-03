@@ -9,3 +9,22 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/test")
 os.environ.setdefault("MINIO_ACCESS_KEY", "test-access-key")
 os.environ.setdefault("MINIO_SECRET_KEY", "test-secret-key")
+
+from collections.abc import Iterator
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _turno_abierto_para_cobros() -> Iterator[AsyncMock]:
+    """N1: cada cobro toma un bloqueo compartido de la apertura y vuelve a
+    exigir que el turno esté ABIERTA (turnos_caja_service.bloquear_turno_para_cobro).
+    Los tests unitarios usan conexiones falsas que no responden a ese SELECT,
+    así que por defecto el turno está abierto. Los tests de N1 lo vuelven a
+    parchear con el estado que quieren probar."""
+    with patch(
+        "app.services.turnos_caja_service.bloquear_apertura_para_cobro",
+        AsyncMock(return_value={"id": "apertura", "estado": "ABIERTA"}),
+    ) as mock:
+        yield mock

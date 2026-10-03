@@ -2,7 +2,7 @@
 catálogo de la sucursal de la sesión, no los del navegador.
 
 Sin BD: los repositorios se simulan con un catálogo en memoria. La prueba
-contra PostgreSQL real está en tests/integration/test_precios_servidor_pos_pg.py.
+contra PostgreSQL real está en tests/db/test_precios_servidor_pos_pg.py.
 """
 
 from contextlib import asynccontextmanager

@@ -7,14 +7,16 @@ escribe SQL directamente.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import asyncpg
 
 from app.exceptions import DatosInvalidos, NoEncontrado, StockInsuficienteError
+from app.exceptions.inventario import RecursoInactivoError
 from app.models.comanda import DetalleComanda
 from app.repositories import (
     combo_repository,
@@ -32,6 +34,8 @@ from app.schemas.movimiento_inventario import (
     ResumenCogsOut,
 )
 from app.services import costeo_service
+
+_ZONA_DEFAULT = "America/Mexico_City"
 
 
 async def _consumo_insumos(
@@ -174,6 +178,14 @@ async def revertir_por_cancelacion(
             )
 
 
+def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
+    """M22: un insumo eliminado (borrado lógico) no admite ajustes ni conteos."""
+    if not insumo["activo"]:
+        raise RecursoInactivoError(
+            f"El insumo «{insumo['nombre']}» está eliminado; no admite movimientos de inventario."
+        )
+
+
 async def registrar_ajuste_manual(
     conn: asyncpg.Connection,
     insumo_id: UUID,
@@ -183,6 +195,7 @@ async def registrar_ajuste_manual(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
+    _validar_insumo_activo(insumo)
     delta = body.cantidad if body.tipo == "E" else -body.cantidad
     async with conn.transaction():
         nuevo_stock = await insumo_repository.ajustar_stock(conn, insumo_id, delta)
@@ -235,6 +248,7 @@ async def registrar_conteo_fisico(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
+    _validar_insumo_activo(insumo)
     delta = body.stock_contado - insumo["stock_actual"]
     if delta == 0:
         raise DatosInvalidos(
@@ -272,6 +286,38 @@ async def listar_movimientos(
 ) -> list[MovimientoInventarioOut]:
     rows = await movimiento_inventario_repository.listar_por_insumo(conn, insumo_id, desde, hasta)
     return [MovimientoInventarioOut.model_validate(r) for r in rows]
+
+
+_FORMATO_FECHA_CSV = "%Y-%m-%d %H:%M:%S"
+
+
+def _fecha_local(creado: datetime, zona: str | None) -> str:
+    """Fecha del movimiento en la zona de su sucursal, como la ve la pantalla."""
+    try:
+        tz = ZoneInfo(zona or _ZONA_DEFAULT)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = ZoneInfo(_ZONA_DEFAULT)
+    if creado.tzinfo is None:
+        creado = creado.replace(tzinfo=UTC)
+    return creado.astimezone(tz).strftime(_FORMATO_FECHA_CSV)
+
+
+async def filas_export_movimientos(
+    conn: asyncpg.Connection,
+    insumo_id: UUID,
+    desde: date | None = None,
+    hasta: date | None = None,
+) -> list[dict[str, Any]]:
+    """Kardex para el CSV: la fecha en la hora local de la sucursal (no UTC) y
+    el nombre de quien registró el movimiento (no su UUID)."""
+    rows = await movimiento_inventario_repository.listar_por_insumo(conn, insumo_id, desde, hasta)
+    filas: list[dict[str, Any]] = []
+    for r in rows:
+        fila = MovimientoInventarioOut.model_validate(r).model_dump()
+        fila["creado"] = _fecha_local(r["creado"], r.get("zona_horaria"))
+        fila["creado_por"] = r.get("creado_por_nombre") or ""
+        filas.append(fila)
+    return filas
 
 
 async def listar_cogs(

@@ -43,6 +43,7 @@ from app.api.routers import (
 from app.core.config import settings
 from app.core.database import close_pool, create_pool, get_pool
 from app.core.object_storage import ensure_bucket
+from app.exceptions.manejadores import registrar_manejadores
 from app.services.comanda_evento_scheduler import loop_comandas_eventos
 from app.services.reservaciones_vencidas_scheduler import loop_reservaciones_vencidas
 
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="Mercury API", lifespan=lifespan)
+registrar_manejadores(app)
 
 app.add_middleware(
     CORSMiddleware,

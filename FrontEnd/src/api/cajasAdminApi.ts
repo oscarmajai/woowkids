@@ -14,6 +14,8 @@ interface BackendCaja {
   activo: boolean
   impresora: string | null
   turno_actual: BackendTurnoActual | null
+  sucursal_id?: string | null
+  sucursal_nombre?: string | null
 }
 
 function mapTurnoActual(raw: BackendTurnoActual | null): TurnoActualCaja | null {
@@ -29,6 +31,8 @@ function mapCaja(raw: BackendCaja): CajaAdmin {
     activo: raw.activo,
     impresora: raw.impresora,
     turnoActual: mapTurnoActual(raw.turno_actual),
+    sucursalId: raw.sucursal_id ?? null,
+    sucursalNombre: raw.sucursal_nombre ?? null,
   }
 }
 

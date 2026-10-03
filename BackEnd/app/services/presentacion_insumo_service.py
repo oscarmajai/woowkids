@@ -11,6 +11,7 @@ from uuid import UUID
 import asyncpg
 
 from app.exceptions import NoEncontrado
+from app.exceptions.inventario import RecursoInactivoError
 from app.repositories import insumo_repository, presentacion_insumo_repository
 from app.schemas.auth import TokenData
 from app.schemas.presentacion_insumo import PresentacionCrear, PresentacionOut, PresentacionUpdate
@@ -30,6 +31,12 @@ async def crear(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
+    # M22: un insumo eliminado no admite presentaciones nuevas.
+    if not insumo["activo"]:
+        raise RecursoInactivoError(
+            f"El insumo «{insumo['nombre']}» está eliminado; no se le pueden agregar "
+            "presentaciones."
+        )
     row = await presentacion_insumo_repository.crear(
         conn, insumo_id, body.nombre, body.equivalencia_base, UUID(current_user.sub)
     )
@@ -44,17 +51,17 @@ async def actualizar(
 ) -> PresentacionOut:
     actual = await presentacion_insumo_repository.obtener(conn, presentacion_id)
     if not actual:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     updates = body.model_dump(exclude_unset=True)
     updates["modificado_por"] = UUID(current_user.sub)
     row = await presentacion_insumo_repository.actualizar(conn, presentacion_id, updates)
     if not row:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     return PresentacionOut.model_validate(row)
 
 
 async def eliminar(conn: asyncpg.Connection, presentacion_id: UUID) -> None:
     actual = await presentacion_insumo_repository.obtener(conn, presentacion_id)
     if not actual:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     await presentacion_insumo_repository.eliminar(conn, presentacion_id)

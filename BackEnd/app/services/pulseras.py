@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -8,6 +9,7 @@ from app.repositories.pulseras import get_pulseras_disponibles_por_sucursal
 from app.schemas.pulseras import (
     InventarioPulserasOut,
     PulseraCrear,
+    PulseraEstadoOut,
     PulseraOut,
     PulseraResponse,
     PulseraUpdate,
@@ -18,6 +20,28 @@ async def get_pulseras_disponibles_by_sucursal_id(
     conn: asyncpg.Connection, sucursal_id: UUID
 ) -> list[PulseraResponse]:
     return await get_pulseras_disponibles_por_sucursal(conn, sucursal_id)
+
+
+async def buscar_por_rfid(
+    conn: asyncpg.Connection, sucursal_id: UUID, pulsera_rfid: str
+) -> PulseraEstadoOut:
+    row = await pulseras_repository.buscar_por_rfid(conn, sucursal_id, pulsera_rfid.strip())
+    if not row:
+        raise NoEncontrado("Pulsera", genero="f")
+    estado: Literal["disponible", "usada", "inactiva"]
+    if row["usada"]:
+        estado = "usada"
+    elif not row["activo"]:
+        estado = "inactiva"
+    else:
+        estado = "disponible"
+    return PulseraEstadoOut(
+        id=row["id"],
+        pulseraRfid=row["pulsera_rfid"],
+        activo=row["activo"],
+        usada=row["usada"],
+        estado=estado,
+    )
 
 
 async def obtener_inventario(conn: asyncpg.Connection, sucursal_id: UUID) -> InventarioPulserasOut:
@@ -33,7 +57,7 @@ async def listar_todas(conn: asyncpg.Connection, sucursal_id: UUID) -> list[Puls
 async def obtener(conn: asyncpg.Connection, pulsera_id: UUID) -> PulseraOut:
     row = await pulseras_repository.obtener(conn, pulsera_id)
     if not row:
-        raise NoEncontrado("Pulsera")
+        raise NoEncontrado("Pulsera", genero="f")
     return PulseraOut.model_validate(row)
 
 
@@ -63,7 +87,7 @@ async def actualizar(conn: asyncpg.Connection, pulsera_id: UUID, body: PulseraUp
             "El RFID excede la longitud máxima permitida (10 caracteres)."
         ) from exc
     if not row:
-        raise NoEncontrado("Pulsera")
+        raise NoEncontrado("Pulsera", genero="f")
     return PulseraOut.model_validate(row)
 
 

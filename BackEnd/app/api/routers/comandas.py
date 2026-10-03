@@ -21,7 +21,6 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from pydantic import BaseModel
 
 from app.api.deps import (
     apertura_operando_id,
@@ -33,18 +32,13 @@ from app.core.database import get_db
 from app.core.scope import sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
-from app.schemas.comanda import ComandaCreate, ComandaModifyRequest
+from app.schemas.comanda import CambioEstadoRequest, ComandaCreate, ComandaModifyRequest
 from app.services import alcance_service, comanda_service
 from app.services.permission_service import has_permission
 
 logger = logging.getLogger("mercury.ws")
 
 router = APIRouter(prefix="/api/comandas", tags=["Comandas"])
-
-
-class CambioEstadoRequest(BaseModel):
-    estado_actual: str
-    motivo_cancelacion: str | None = None
 
 
 def get_active_branch(current_user: TokenData) -> UUID:
@@ -64,9 +58,11 @@ async def crear_comanda(
     comanda_in: ComandaCreate,
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:crear_pedido")),
-    apertura_id: str = Depends(apertura_operando_id),
+    _apertura_id: str = Depends(apertura_operando_id),
 ) -> Any:
-    """Crea una comanda nueva con sus detalles."""
+    """Crea una comanda nueva con sus detalles, sin cobrarla. Sigue exigiendo
+    un turno de caja operando, pero no registra movimiento en la caja (N10):
+    lo cobrado entra con su método de pago en POST /pagos/completar."""
     # Obtenemos la sucursal de forma centralizada y segura: nunca confiar en
     # el sucursal_id que mande el cliente en el body.
     active_branch_id = get_active_branch(current_user)
@@ -75,9 +71,7 @@ async def crear_comanda(
     # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
 
     try:
-        comanda = await comanda_service.crear_comanda_pos(
-            conn, comanda_in, current_user, apertura_id
-        )
+        comanda = await comanda_service.crear_comanda_pos(conn, comanda_in, current_user)
         return asdict(comanda)
     except HTTPException:
         # Preserva el status code y el {code, message} estructurado de
@@ -110,15 +104,20 @@ async def cambiar_estado(
         require_role("AdministradorSistema", "Administrador", "Cajero", "Cocina")
     ),
 ) -> Any:
-    """Actualiza el estado de una comanda con auditoría."""
+    """Avanza el estado de una comanda (P → E → L → T) o la cancela (C) desde
+    P/E/L, con auditoría. Transición inválida o comanda ya cancelada: 409.
+    Cancelar una comanda cobrada exige `token_pin_admin` (403
+    AUTORIZACION_ADMIN_REQUERIDA, con el turno_id para /turnos-caja/validar-pin-admin)
+    y registra la devolución en el turno abierto de quien cancela."""
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     try:
         comanda = await comanda_service.cambiar_estado(
             conn,
             comanda_id,
-            data.estado_actual,
+            data.estado_actual.value,
             current_user,
             motivo_cancelacion=data.motivo_cancelacion,
+            token_pin_admin=data.token_pin_admin,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -131,14 +130,7 @@ async def cambiar_estado(
             detail="Comanda no encontrada",
         )
 
-    scope = sucursal_scope(current_user)
-    canal = scope if scope is not None else CANAL_GLOBAL
-
-    await manager.broadcast(
-        canal,
-        {"type": "comanda_actualizada", "comanda": asdict(comanda)},
-    )
-
+    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 
@@ -152,7 +144,8 @@ async def modificar_detalles(
     """Elimina productos de una comanda en estado Pendiente y recalcula el total.
 
     Si se eliminan todos los productos, cancela automáticamente la comanda
-    y requiere motivo_cancelacion en el body.
+    y requiere motivo_cancelacion en el body. Con `modificado_esperado` (B5),
+    409 COMANDA_MODIFICADA si la orden cambió desde que se leyó.
     """
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     usuario_id = str(UUID(current_user.sub))
@@ -163,6 +156,7 @@ async def modificar_detalles(
             data.detalles_ids_a_eliminar,
             usuario_id,
             data.motivo_cancelacion,
+            modificado_esperado=data.modificado_esperado,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -176,14 +170,7 @@ async def modificar_detalles(
             detail="La comanda no existe o no está en estado Pendiente.",
         )
 
-    scope = sucursal_scope(current_user)
-    canal = scope if scope is not None else CANAL_GLOBAL
-
-    await manager.broadcast(
-        canal,
-        {"type": "comanda_actualizada", "comanda": asdict(comanda)},
-    )
-
+    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 

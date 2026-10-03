@@ -6,7 +6,9 @@
         <q-btn flat dense label="Reintentar" class="q-ml-auto" @click="cargarTodo" />
       </div>
 
-      <div v-if="cargando" class="cierre-ev__loading"><q-spinner color="primary" size="40px" /></div>
+      <div v-if="cargando" class="cierre-ev__loading">
+        <q-spinner color="primary" size="40px" />
+      </div>
 
       <template v-else-if="reservacion">
         <PageHeader
@@ -19,10 +21,7 @@
             {{ fmtFechaEvento }} · {{ duracionEvento
             }}<template v-if="paquete"> · {{ paquete.nombre }}</template>
             ·
-            <StatusBadge
-              :tone="yaCerrado ? 'ok' : 'warn'"
-              :label="yaCerrado ? 'Cerrado' : 'Pendiente de cierre'"
-            />
+            <StatusBadge :tone="estadoBadge.tone" :label="estadoBadge.label" />
           </template>
           <template #actions>
             <q-btn
@@ -62,10 +61,17 @@
                 <span class="charge__amount">{{ fmt(precioHorasNum) }}</span>
               </div>
 
-              <div v-if="precioPersonasExtraNum > 0" class="charge">
-                <span class="charge__tag">Personas</span>
-                <div class="charge__info"><span class="charge__name">Personas extra</span></div>
-                <span class="charge__amount">{{ fmt(precioPersonasExtraNum) }}</span>
+              <!-- `precio_personas_extra` es el cargo de pulseras (B19), no
+                   un cobro por personas adicionales. -->
+              <div v-if="precioPulserasNum > 0 && pulseras" class="charge">
+                <span class="charge__tag">Pulseras</span>
+                <div class="charge__info">
+                  <span class="charge__name">Pulseras</span>
+                  <span class="charge__meta">
+                    {{ pulseras.invitados }} × {{ pulseras.horas }} h a {{ fmt(pulseras.tarifa) }}
+                  </span>
+                </div>
+                <span class="charge__amount">{{ fmt(precioPulserasNum) }}</span>
               </div>
 
               <div v-for="extra in extrasDetallados" :key="extra.id" class="charge">
@@ -97,14 +103,20 @@
             </section>
 
             <section class="notes-card">
-              <label class="notes-card__field">
+              <!-- Las notas que ya tiene la reservación (p. ej. el motivo de una
+                   cancelación) se muestran aparte y no se tocan: las del cierre
+                   se agregan al final en el servidor (A8). -->
+              <div v-if="reservacion.notas" class="notes-card__previas">
+                <span class="field-label">Notas de la reservación</span>
+                <p class="notes-card__texto">{{ reservacion.notas }}</p>
+              </div>
+              <label v-if="!bloqueada" class="notes-card__field">
                 <span class="field-label">Notas de cierre</span>
                 <q-input
                   v-model="closingNotes"
                   type="textarea"
                   outlined
                   rows="3"
-                  :disable="yaCerrado"
                   placeholder="Observaciones finales o incidencias del evento…"
                 />
               </label>
@@ -119,8 +131,9 @@
             <div v-if="precioHorasNum > 0" class="settle__line">
               <span>Horas del evento</span><span>{{ fmt(precioHorasNum) }}</span>
             </div>
-            <div v-if="precioPersonasExtraNum > 0" class="settle__line">
-              <span>Personas extra</span><span>{{ fmt(precioPersonasExtraNum) }}</span>
+            <div v-if="precioPulserasNum > 0 && pulseras" class="settle__line">
+              <span>Pulseras ({{ pulseras.invitados }} × {{ pulseras.horas }}h)</span
+              ><span>{{ fmt(precioPulserasNum) }}</span>
             </div>
             <div v-if="extrasDetallados.length" class="settle__line">
               <span>Extras</span><span>{{ fmt(extrasTotalNum) }}</span>
@@ -148,7 +161,7 @@
             </div>
 
             <q-btn
-              v-if="!yaCerrado && tieneSaldo"
+              v-if="!bloqueada && tieneSaldo"
               unelevated
               color="primary"
               label="Procesar pago"
@@ -157,19 +170,18 @@
               @click="abrirModalPago"
             />
             <q-btn
+              v-if="!cancelada"
               unelevated
-              :color="yaCerrado || tieneSaldo ? 'grey-4' : 'positive'"
-              :text-color="yaCerrado || tieneSaldo ? 'grey-7' : 'white'"
+              :color="puedeCerrar ? 'positive' : 'grey-4'"
+              :text-color="puedeCerrar ? 'white' : 'grey-7'"
               :icon="yaCerrado ? 'check_circle' : 'lock'"
               :label="yaCerrado ? 'Evento cerrado' : 'Finalizar y cerrar evento'"
               class="settle__cta"
               :loading="finalizando"
-              :disable="yaCerrado || tieneSaldo"
+              :disable="!puedeCerrar"
               @click="finalizarEvento"
             />
-            <span v-if="!yaCerrado && tieneSaldo" class="settle__hint">
-              Liquida el saldo para poder cerrar el evento.
-            </span>
+            <span v-if="motivoNoCierre" class="settle__hint">{{ motivoNoCierre }}</span>
             <span v-else-if="!yaCerrado" class="settle__hint">
               El cierre generará la factura final para el cliente.
             </span>
@@ -185,13 +197,14 @@
       :total-to-pay="saldoPendiente"
       :metodos-pago="metodosPagoStore.activos"
       :permitir-lealtad="false"
+      permitir-pago-parcial
       @pago-exitoso="onPagoExitoso"
     />
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { reservacionesApi } from '@/api/reservacionesApi'
@@ -217,6 +230,7 @@ import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
 import { mensajeDeError } from '@/utils/errorHandler'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import { horasFacturables } from '@/utils/horario'
+import { detallePulseras } from '@/utils/reservacionPrecio'
 import { printTicketElement } from '@/utils/ticketPrinting'
 import { descontarCambio } from '@/utils/pagos'
 
@@ -267,7 +281,6 @@ const cargarTodo = async () => {
     pagos.value = pagosRes
     reservacionExtras.value = extrasRes
     reservacionProductos.value = productosRes
-    closingNotes.value = res.notas ?? ''
   } catch {
     error.value = 'No se pudo cargar la información del evento'
   } finally {
@@ -275,7 +288,14 @@ const cargarTodo = async () => {
   }
 }
 
+// Reloj para saber si el evento ya empezó (se refresca cada minuto). Es solo
+// para la UI: el servidor decide con la hora local de la sucursal.
+const ahora = ref(new Date())
+let relojId: ReturnType<typeof setInterval> | undefined
+onUnmounted(() => clearInterval(relojId))
+
 onMounted(() => {
+  relojId = setInterval(() => (ahora.value = new Date()), 60_000)
   cargarTodo()
   // Métodos de pago es un catálogo global por diseño: se carga siempre.
   metodosPagoStore.cargar()
@@ -327,6 +347,24 @@ const tituloEvento = computed(() => {
 })
 
 const yaCerrado = computed(() => reservacion.value?.estado === 'completada')
+const cancelada = computed(() => reservacion.value?.estado === 'cancelada')
+// Ni se cobra ni se cierra una reservación cerrada o cancelada (A8).
+const bloqueada = computed(() => yaCerrado.value || cancelada.value)
+
+const estadoBadge = computed((): { tone: 'ok' | 'warn' | 'bad'; label: string } => {
+  if (cancelada.value) return { tone: 'bad', label: 'Cancelada' }
+  if (yaCerrado.value) return { tone: 'ok', label: 'Cerrado' }
+  return { tone: 'warn', label: 'Pendiente de cierre' }
+})
+
+const inicioEvento = computed(() =>
+  reservacion.value
+    ? new Date(`${reservacion.value.fecha_evento}T${reservacion.value.hora_inicio}`)
+    : null,
+)
+const eventoIniciado = computed(
+  () => !!inicioEvento.value && inicioEvento.value.getTime() <= ahora.value.getTime(),
+)
 
 // ── Facturación ──────────────────────────────────────────────────────────────
 
@@ -336,8 +374,18 @@ const paquete = computed(() =>
 
 const packagePriceNum = computed(() => parseFloat(reservacion.value?.precio_base ?? '0'))
 const precioHorasNum = computed(() => parseFloat(reservacion.value?.precio_horas ?? '0'))
-const precioPersonasExtraNum = computed(() =>
+// La columna se llama precio_personas_extra por compatibilidad, pero guarda el
+// cargo de pulseras: invitados × horas × tarifa por hora (B19).
+const precioPulserasNum = computed(() =>
   parseFloat(reservacion.value?.precio_personas_extra ?? '0'),
+)
+const pulseras = computed(() =>
+  reservacion.value
+    ? detallePulseras(
+        reservacion.value,
+        horasFacturables(reservacion.value.hora_inicio, reservacion.value.hora_fin),
+      )
+    : null,
 )
 
 const extrasDetallados = computed(() =>
@@ -389,6 +437,21 @@ const saldoPendiente = computed(() =>
   Math.max(0, redondear2(parseFloat(reservacion.value?.saldo_pendiente ?? '0') || 0)),
 )
 const tieneSaldo = computed(() => saldoPendiente.value > TOLERANCIA_MONTO)
+
+// Misma regla que la máquina de estados del servidor: completar solo si el
+// evento ya empezó y no queda saldo.
+const puedeCerrar = computed(() => !bloqueada.value && !tieneSaldo.value && eventoIniciado.value)
+
+const motivoNoCierre = computed((): string | null => {
+  if (cancelada.value) return 'La reservación está cancelada: no se puede cobrar ni cerrar.'
+  if (yaCerrado.value) return null
+  if (tieneSaldo.value) return 'Liquida el saldo para poder cerrar el evento.'
+  if (!eventoIniciado.value) {
+    const hora = reservacion.value?.hora_inicio.slice(0, 5) ?? ''
+    return `El evento aún no empieza (${fmtFechaEvento.value}, ${hora}): se cierra después.`
+  }
+  return null
+})
 
 // ── Procesar pago ────────────────────────────────────────────────────────────
 
@@ -468,16 +531,24 @@ const onPagoExitoso = async (
 const finalizando = ref(false)
 
 const finalizarEvento = async () => {
-  if (!reservacion.value || tieneSaldo.value) return
+  if (!reservacion.value || !puedeCerrar.value) return
   finalizando.value = true
   try {
-    reservacion.value = await reservacionesApi.actualizar(reservacion.value.id, {
-      estado: 'completada',
-      notas: closingNotes.value || null,
-    })
+    // Endpoint de cierre: valida el estado en el servidor y agrega las notas
+    // del cierre a las existentes en vez de reemplazarlas (A8).
+    reservacion.value = await reservacionesApi.cerrar(
+      reservacion.value.id,
+      closingNotes.value.trim() || null,
+    )
+    closingNotes.value = ''
     $q.notify({ type: 'positive', message: 'Evento cerrado correctamente', position: 'top-right' })
-  } catch {
-    $q.notify({ type: 'negative', message: 'Error al cerrar el evento', position: 'top-right' })
+  } catch (err: unknown) {
+    $q.notify({
+      type: 'negative',
+      message: mensajeDeError(err, 'Error al cerrar el evento'),
+      position: 'top-right',
+      timeout: 6000,
+    })
   } finally {
     finalizando.value = false
   }
@@ -623,10 +694,21 @@ async function imprimirResumen() {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 
-  &__field {
+  &__field,
+  &__previas {
     display: flex;
     flex-direction: column;
+  }
+
+  &__texto {
+    margin: 0;
+    white-space: pre-line;
+    font-size: 13.5px;
+    color: var(--text-primary);
   }
 }
 

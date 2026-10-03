@@ -1,11 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { postOnboarding, type OnboardingDetalle, type OnboardingPago } from '@/api/onboardingClient'
+import {
+  fetchEstadoPulsera,
+  postOnboarding,
+  type OnboardingDetalle,
+  type OnboardingPago,
+} from '@/api/onboardingClient'
 import { productosApi } from '@/api/productosApi'
 import { useAuthStore } from '@/stores/auth'
 import { useAccessControlStore } from '@/stores/accessControl'
 import { reservacionesApi } from '@/api/reservacionesApi'
 import { horasFacturables } from '@/utils/horario'
+import { tramoParaHoras } from '@/utils/tramosEstancia'
 import type { EventoDelDia } from '@/types/reservaciones'
 import type { PrecioEstancia, TramoEstancia } from '@/types/producto'
 import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
@@ -41,6 +47,8 @@ const HOUR_OPTIONS: Record<string, number> = {
 }
 
 export type RegistrationStep = 'form' | 'rfid' | 'complete'
+
+export type ResultadoPulsera = { ok: true; pulseraId: string } | { ok: false; mensaje: string }
 export type RegistrationMode = 'normal' | 'evento'
 
 export const useRegistrationStore = defineStore('registration', () => {
@@ -73,6 +81,8 @@ export const useRegistrationStore = defineStore('registration', () => {
 
   const productoBase = ref<PrecioEstancia | null>(null)
   const pulseras = computed(() => accessControlStore.pulserasDisponibles)
+  const isLoadingPulseras = computed(() => accessControlStore.isLoadingPulseras)
+  const errorPulseras = computed(() => accessControlStore.errorPulseras)
   const pagosFromModal = ref<OnboardingPago[]>([])
   const cambioFromModal = ref(0)
   const puntosARedimirValue = ref(0)
@@ -150,6 +160,20 @@ export const useRegistrationStore = defineStore('registration', () => {
     }
   }
 
+  // A14: la página de registro carga por sí misma lo que necesita (tarifas y
+  // pulseras libres de la sucursal), aunque se abra por URL o tras F5. Si
+  // Control de Acceso acaba de traer las pulseras, no se vuelven a pedir.
+  // El turno lo garantiza el guard de ruta (`requiresTurno`).
+  async function cargarDatosIniciales() {
+    if (!authStore.currentBranchId) {
+      submitError.value = 'No hay una sucursal activa en la sesión.'
+      return
+    }
+    await Promise.all([loadProductos(), accessControlStore.asegurarPulserasCargadas()])
+  }
+
+  const isLoadingInicial = computed(() => isLoadingCatalog.value || isLoadingPulseras.value)
+
   async function cargarEventoProximo() {
     if (!authStore.currentBranchId) return
     isLoadingEvento.value = true
@@ -197,22 +221,10 @@ export const useRegistrationStore = defineStore('registration', () => {
   // Cada niño puede contratar un tiempo distinto (B2 #4); en modo evento
   // todos usan horasEvento (el tiempo lo define el evento, no el selector).
 
+  // Misma regla que el backend (tramos ordenados; en un extremo compartido,
+  // "0–1 h" y "1–2 h", gana el que termina ahí): ver utils/tramosEstancia.
   function tramoFor(horasSolicitadas: number): TramoEstancia | null {
-    if (!productoBase.value?.config_estancia?.length) return null
-
-    // Primero buscar tramo exacto
-    const tramoExacto = productoBase.value.config_estancia.find(
-      (tramo) => horasSolicitadas >= tramo.min_horas && horasSolicitadas <= tramo.max_horas,
-    )
-
-    if (tramoExacto) return tramoExacto
-
-    // Si no encuentra, usar el tramo con min_horas más bajo
-    const tramoMasBajo = productoBase.value.config_estancia.reduce((min, tramo) =>
-      tramo.min_horas < min.min_horas ? tramo : min,
-    )
-
-    return tramoMasBajo ?? null
+    return tramoParaHoras(productoBase.value?.config_estancia ?? [], horasSolicitadas)
   }
 
   const tieneTarifaValida = computed(() => {
@@ -244,6 +256,80 @@ export const useRegistrationStore = defineStore('registration', () => {
     return pulseras.value.filter(
       (p) => !usedBracelets.value.includes(p.id) || p.id === child?.rfidBracelet,
     )
+  }
+
+  function pulseraAsignadaAOtroNino(childId: string, pulseraId: string): boolean {
+    return savedChildren.value.some((c) => c.id !== childId && c.rfidBracelet === pulseraId)
+  }
+
+  /**
+   * Valida una pulsera escaneada para un niño (B14). Si no está entre las
+   * libres que tiene la página, se consulta al servidor para distinguir una
+   * pulsera inexistente de una ya asignada a otro niño o desactivada.
+   */
+  async function validarPulseraEscaneada(
+    childId: string,
+    rfidEscaneado: string,
+  ): Promise<ResultadoPulsera> {
+    const rfid = rfidEscaneado.trim()
+    const local = pulseras.value.find((p) => p.pulseraRfid === rfid)
+    if (local) {
+      if (pulseraAsignadaAOtroNino(childId, local.id)) {
+        return {
+          ok: false,
+          mensaje: `La pulsera "${rfid}" ya está asignada a otro niño de este registro.`,
+        }
+      }
+      return { ok: true, pulseraId: local.id }
+    }
+
+    if (!authStore.currentBranchId) {
+      return { ok: false, mensaje: 'No hay una sucursal activa en la sesión.' }
+    }
+
+    try {
+      const pulsera = await fetchEstadoPulsera(authStore.currentBranchId, rfid)
+      if (pulsera.estado === 'usada') {
+        return { ok: false, mensaje: `La pulsera "${rfid}" ya está asignada a otro niño.` }
+      }
+      if (pulsera.estado === 'inactiva') {
+        return { ok: false, mensaje: `La pulsera "${rfid}" está desactivada.` }
+      }
+      // Libre en el servidor pero no en la lista local (se dio de alta después
+      // de cargarla): se incorpora para poder mostrarla y asignarla.
+      if (!pulseras.value.some((p) => p.id === pulsera.id)) {
+        accessControlStore.pulserasDisponibles.push({
+          id: pulsera.id,
+          pulseraRfid: pulsera.pulseraRfid,
+        })
+      }
+      if (pulseraAsignadaAOtroNino(childId, pulsera.id)) {
+        return {
+          ok: false,
+          mensaje: `La pulsera "${rfid}" ya está asignada a otro niño de este registro.`,
+        }
+      }
+      return { ok: true, pulseraId: pulsera.id }
+    } catch (err: unknown) {
+      if ((err as { statusCode?: number } | null)?.statusCode === 404) {
+        return { ok: false, mensaje: `La pulsera "${rfid}" no existe en esta sucursal.` }
+      }
+      console.error(err)
+      return { ok: false, mensaje: `No se pudo verificar la pulsera "${rfid}". Intenta de nuevo.` }
+    }
+  }
+
+  /** Valida y, si procede, asigna la pulsera escaneada al niño. */
+  async function asignarPulseraEscaneada(
+    childId: string,
+    rfidEscaneado: string,
+  ): Promise<ResultadoPulsera> {
+    const resultado = await validarPulseraEscaneada(childId, rfidEscaneado)
+    if (resultado.ok) {
+      const child = children.value.find((c) => c.id === childId)
+      if (child) child.rfidBracelet = resultado.pulseraId
+    }
+    return resultado
   }
 
   const allChildrenHaveBracelet = computed(
@@ -445,6 +531,9 @@ export const useRegistrationStore = defineStore('registration', () => {
       pagadoFromServer.value = response.pagado
       estadoFromServer.value = response.estado
       advertenciaEfectivoFromServer.value = response.advertenciaEfectivo ?? null
+      // Las pulseras recién asignadas ya no están libres: el siguiente registro
+      // no debe ofrecerlas aunque reutilice la lista ya cargada.
+      accessControlStore.descartarPulseras(detalles.map((d) => d.pulseraId))
       step.value = 'complete'
     } catch (err: any) {
       if (err?.statusCode === 409) {
@@ -457,6 +546,9 @@ export const useRegistrationStore = defineStore('registration', () => {
         } else {
           submitError.value = message || 'No se pudo completar el registro. Intenta de nuevo.'
         }
+      } else if (err?.statusCode === 422 && err?.message) {
+        // N8: p. ej. un pago con tarjeta o transferencia sin referencia.
+        submitError.value = err.message
       } else {
         submitError.value = 'No se pudo completar el registro. Intenta de nuevo.'
       }
@@ -504,6 +596,9 @@ export const useRegistrationStore = defineStore('registration', () => {
     currentChildIndex,
     productoBase,
     pulseras,
+    isLoadingPulseras,
+    errorPulseras,
+    isLoadingInicial,
     isLoadingCatalog,
     isSubmitting,
     submitError,
@@ -537,6 +632,9 @@ export const useRegistrationStore = defineStore('registration', () => {
     completeRegistration,
     reset,
     loadProductos,
+    cargarDatosIniciales,
+    validarPulseraEscaneada,
+    asignarPulseraEscaneada,
     cargarEventoProximo,
     cambiarModo,
     seleccionarEvento,

@@ -56,7 +56,7 @@
         </template>
         <template #body-cell-total="props">
           <q-td :props="props" class="text-weight-bold">{{
-            formatMXN(Number(props.row.total))
+            formatMXN(totalConIva(props.row.total, props.row.iva))
           }}</q-td>
         </template>
         <template #body-cell-fecha_pedido="props">
@@ -224,7 +224,7 @@
                 outlined
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
               />
             </div>
             <div class="col-1 flex flex-center">
@@ -257,10 +257,12 @@
                 <q-item-section>
                   <q-item-label class="text-weight-medium">{{ linea.insumo_nombre }}</q-item-label>
                   <q-item-label caption>
-                    {{ linea.cantidad }} {{ linea.unidad_label }} × ${{
-                      linea.costo_unitario.toFixed(2)
-                    }}
-                    = ${{ (linea.cantidad * linea.costo_unitario).toFixed(2) }}
+                    {{ linea.cantidad }} {{ linea.unidad_label }} ×
+                    {{ formatCostoUnitario(linea.costo_unitario) }}
+                    = {{ formatMXN(linea.cantidad * linea.costo_unitario) }}
+                    <span v-if="linea.costo_unitario === 0" class="text-warning text-weight-bold">
+                      · sin costo
+                    </span>
                   </q-item-label>
                 </q-item-section>
                 <q-item-section side>
@@ -271,9 +273,23 @@
               </q-item>
             </q-list>
 
+            <q-banner
+              v-if="lineasSinCosto.length"
+              dense
+              rounded
+              class="bg-orange-1 text-orange-10 q-mt-sm"
+            >
+              <template #avatar><q-icon name="warning" color="orange-9" /></template>
+              {{ lineasSinCosto.join(', ') }}
+              {{ lineasSinCosto.length === 1 ? 'tiene' : 'tienen' }} costo $0: entrará al inventario
+              sin costo y bajará su costo promedio. Revisa el costo si no es un obsequio.
+            </q-banner>
+
             <div class="row justify-end q-mt-sm text-subtitle2 text-weight-bold">
-              Total: ${{ totalCompra.toFixed(2) }}
-              <template v-if="ivaCompra > 0"> · IVA: ${{ ivaCompra.toFixed(2) }}</template>
+              <template v-if="ivaCompra > 0">
+                Subtotal: {{ formatMXN(totalCompra) }} · IVA: {{ formatMXN(ivaCompra) }} ·&nbsp;
+              </template>
+              Total: {{ formatMXN(totalConIva(totalCompra, ivaCompra)) }}
             </div>
           </div>
         </div>
@@ -386,9 +402,8 @@
               <q-item-label>{{ l.insumo_nombre }}</q-item-label>
               <q-item-label caption>
                 {{ Number(l.cantidad) }}
-                {{ l.presentacion_nombre ?? l.unidad_medida_codigo ?? '' }} × ${{
-                  Number(l.costo_unitario).toFixed(2)
-                }}
+                {{ l.presentacion_nombre ?? l.unidad_medida_codigo ?? '' }} ×
+                {{ formatCostoUnitario(l.costo_unitario) }}
               </q-item-label>
             </q-item-section>
             <q-item-section side class="text-weight-medium">
@@ -399,10 +414,11 @@
         <div v-else class="text-body2 text-grey-7 q-py-sm">Sin líneas.</div>
         <div v-if="detalleCompra" class="row justify-end q-mt-sm text-subtitle2 text-weight-bold">
           <template v-if="detalleCompra.folio">{{ detalleCompra.folio }} ·&nbsp;</template>
-          Total: ${{ Number(detalleCompra.total).toFixed(2) }}
           <template v-if="Number(detalleCompra.iva) > 0">
-            · IVA: ${{ Number(detalleCompra.iva).toFixed(2) }}
+            Subtotal: {{ formatMXN(Number(detalleCompra.total)) }} · IVA:
+            {{ formatMXN(Number(detalleCompra.iva)) }} ·&nbsp;
           </template>
+          Total: {{ formatMXN(totalConIva(detalleCompra.total, detalleCompra.iva)) }}
         </div>
         <div v-if="detalleCompra?.notas" class="text-caption text-grey-7 q-mt-sm">
           Notas: {{ detalleCompra.notas }}
@@ -424,6 +440,7 @@ import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { formatCostoUnitario, totalConIva } from '@/utils/inventario'
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import type { QTableColumn } from 'quasar'
@@ -437,6 +454,12 @@ import { useUnidadesMedidaStore } from '@/stores/unidadesMedida'
 import { usePresentacionesInsumoStore } from '@/stores/presentacionesInsumo'
 import { comprasApi } from '@/api/comprasApi'
 import type { Compra, EstadoCompra } from '@/types/compra'
+import {
+  armarRecepcion,
+  cantidadCapturada,
+  lineaExcedida,
+  type LineaRecepcionUI,
+} from '@/utils/recepcionCompra'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
@@ -616,6 +639,11 @@ const totalCompra = computed(() =>
   lineas.value.reduce((acc, l) => acc + l.cantidad * l.costo_unitario, 0),
 )
 
+// Aviso: una línea a $0 entra al inventario sin costo y baja el promedio PEPS.
+const lineasSinCosto = computed(() =>
+  lineas.value.filter((l) => l.costo_unitario === 0).map((l) => l.insumo_nombre),
+)
+
 const lineaTemporalVacia = () => ({
   insumo_id: null as string | null,
   unidad_seleccion: null as string | null,
@@ -717,8 +745,10 @@ const agregarLinea = () => {
     unidad_medida_id,
     presentacion_id,
     unidad_label,
-    cantidad: lineaTemporal.value.cantidad,
-    costo_unitario: lineaTemporal.value.costo_unitario,
+    // Precisión de las columnas: cantidad con 3 decimales y costo unitario con
+    // 6 (M21: el costo ya no se redondea a centavos).
+    cantidad: Number(Number(lineaTemporal.value.cantidad).toFixed(3)),
+    costo_unitario: Number(Number(lineaTemporal.value.costo_unitario).toFixed(6)),
   })
   lineaTemporal.value = lineaTemporalVacia()
 }
@@ -804,24 +834,14 @@ const ejecutarAccion = async () => {
 
 // ── Recibir (parcial) ───────────────────────────────────────────────────────
 
-interface LineaRecepcionUI {
-  detalle_id: string
-  insumo_nombre: string
-  unidad: string
-  pedido: number
-  recibido: number
-  pendiente: number
-  ahora: number
-}
-
 const dialogRecibir = ref(false)
 const compraRecibir = ref<Compra | null>(null)
 const lineasRecepcion = ref<LineaRecepcionUI[]>([])
 
-const lineaExcedida = (l: LineaRecepcionUI) => l.ahora > l.pendiente
 const hayAlgoQueRecibir = computed(
   () =>
-    lineasRecepcion.value.some((l) => l.ahora > 0) && !lineasRecepcion.value.some(lineaExcedida),
+    lineasRecepcion.value.some((l) => cantidadCapturada(l) > 0) &&
+    !lineasRecepcion.value.some(lineaExcedida),
 )
 
 const abrirRecibir = async (row: Compra) => {
@@ -857,11 +877,10 @@ const ejecutarRecibir = async () => {
   }
   ejecutando.value = true
   try {
-    const actualizada = await store.recibir(compraRecibir.value.id, {
-      lineas: lineasRecepcion.value
-        .filter((l) => l.ahora > 0)
-        .map((l) => ({ detalle_id: l.detalle_id, cantidad: String(l.ahora) })),
-    })
+    const actualizada = await store.recibir(
+      compraRecibir.value.id,
+      armarRecepcion(lineasRecepcion.value),
+    )
     $q.notify({
       type: 'positive',
       message:

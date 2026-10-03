@@ -17,10 +17,31 @@ import asyncpg
 _SELECT = """
     SELECT mi.id, mi.sucursal_id, mi.insumo_id, mi.tipo, mi.cantidad, mi.stock_resultante,
            mi.motivo, mi.referencia_id, mi.notas, mi.costo_total, mi.creado, mi.creado_por,
-           i.nombre AS insumo_nombre
+           i.nombre AS insumo_nombre,
+           ucp.nombre_completo AS creado_por_nombre,
+           smi.zona_horaria AS zona_horaria
     FROM public.movimientos_inventario mi
     JOIN public.insumos i ON i.id = mi.insumo_id
+    LEFT JOIN public.usuarios ucp ON ucp.id = mi.creado_por
+    LEFT JOIN public.sucursales smi ON smi.id = mi.sucursal_id
 """
+
+# Zona horaria de la sucursal $1 / de la sucursal del insumo $1.
+_ZONA_SUCURSAL = "(SELECT s.zona_horaria FROM public.sucursales s WHERE s.id = $1)"
+_ZONA_INSUMO = (
+    "(SELECT s.zona_horaria FROM public.insumos ins "
+    "JOIN public.sucursales s ON s.id = ins.sucursal_id WHERE ins.id = $1)"
+)
+
+
+def _desde_local(columna: str, idx: int, zona: str) -> str:
+    """`columna` desde el inicio del día $idx en la zona de la sucursal (M4)."""
+    return f"{columna} >= (${idx}::date::timestamp AT TIME ZONE {zona})"
+
+
+def _hasta_local(columna: str, idx: int, zona: str) -> str:
+    """`columna` hasta el fin del día $idx (inclusivo) en la zona de la sucursal (M4)."""
+    return f"{columna} < ((${idx}::date + 1)::timestamp AT TIME ZONE {zona})"
 
 
 async def registrar(
@@ -91,18 +112,23 @@ async def listar_por_insumo(
     hasta: date | None = None,
 ) -> list[dict[str, Any]]:
     """Historial de movimientos de un insumo (kardex), opcionalmente acotado
-    a un rango de fechas. `hasta` es inclusivo del día completo."""
+    a un rango de fechas. `hasta` es inclusivo del día completo; los días son
+    los de la zona horaria de la sucursal del insumo."""
     conditions = ["mi.insumo_id = $1"]
     params: list[Any] = [insumo_id]
     if desde is not None:
         params.append(desde)
-        conditions.append(f"mi.creado >= ${len(params)}")
+        conditions.append(_desde_local("mi.creado", len(params), _ZONA_INSUMO))
     if hasta is not None:
         params.append(hasta)
-        conditions.append(f"mi.creado < ${len(params)}::date + interval '1 day'")
+        conditions.append(_hasta_local("mi.creado", len(params), _ZONA_INSUMO))
 
     where_clause = " AND ".join(conditions)
-    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.creado DESC", *params)
+    # B11: los movimientos de una misma transacción comparten `creado` (now() es
+    # la hora de inicio de la transacción) y salían en orden arbitrario. La
+    # secuencia (migración 098) es el orden real de inserción: para un mismo
+    # insumo coincide con el orden en que se encadena stock_resultante.
+    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.secuencia DESC", *params)
     return [dict(r) for r in rows]
 
 
@@ -113,15 +139,15 @@ async def reporte_cogs(
     hasta: date | None = None,
 ) -> list[dict[str, Any]]:
     """Costo de lo consumido (salidas de venta + mermas) por insumo en el
-    periodo. `hasta` inclusivo del día completo."""
+    periodo. `hasta` inclusivo del día completo, en la zona de la sucursal."""
     conditions = ["mi.sucursal_id = $1", "mi.tipo IN ('S', 'M')"]
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
-        conditions.append(f"mi.creado >= ${len(params)}")
+        conditions.append(_desde_local("mi.creado", len(params), _ZONA_SUCURSAL))
     if hasta is not None:
         params.append(hasta)
-        conditions.append(f"mi.creado < ${len(params)}::date + interval '1 day'")
+        conditions.append(_hasta_local("mi.creado", len(params), _ZONA_SUCURSAL))
 
     where_clause = " AND ".join(conditions)
     rows = await conn.fetch(
@@ -148,38 +174,64 @@ async def resumen_costo_ventas(
 ) -> dict[str, Any]:
     """KPIs del reporte de costo de ventas (B7 pendiente #3): ventas totales
     de comandas en el periodo, costo de lo vendido (motivo venta_comanda),
-    margen (ventas - costo) y merma (motivo merma, por separado del costo
-    de venta)."""
+    merma y margen (ventas - costo de ventas - merma).
+
+    M24: la merma son todas las salidas tipo 'M' del periodo: la merma manual
+    (motivo merma) y el faltante de los conteos físicos (motivo conteo_fisico),
+    con su desglose en `merma_manual` / `merma_conteo`. Antes solo contaba la
+    manual: el faltante por conteo no aparecía en ningún KPI y el margen no
+    restaba ninguna merma, así que se veía mejor de lo que es. Un sobrante de
+    conteo (entrada 'E') no se resta de la merma.
+
+    Las comandas canceladas (`estado_actual = 'C'` o `activo = FALSE`) no
+    cuentan como venta, y al costo de lo vendido se le resta lo que su
+    cancelación devolvió al inventario (A3). Los días son los de la zona
+    horaria de la sucursal (M4)."""
     conditions_mov = ["mi.sucursal_id = $1"]
-    conditions_com = ["c.sucursal_id = $1", "c.estado_actual <> 'C'"]
+    conditions_com = ["c.sucursal_id = $1", "c.estado_actual <> 'C'", "c.activo"]
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
         idx = len(params)
-        conditions_mov.append(f"mi.creado >= ${idx}")
-        conditions_com.append(f"c.fecha_hora >= ${idx}")
+        conditions_mov.append(_desde_local("mi.creado", idx, _ZONA_SUCURSAL))
+        conditions_com.append(_desde_local("c.fecha_hora", idx, _ZONA_SUCURSAL))
     if hasta is not None:
         params.append(hasta)
         idx = len(params)
-        conditions_mov.append(f"mi.creado < ${idx}::date + interval '1 day'")
-        conditions_com.append(f"c.fecha_hora < ${idx}::date + interval '1 day'")
+        conditions_mov.append(_hasta_local("mi.creado", idx, _ZONA_SUCURSAL))
+        conditions_com.append(_hasta_local("c.fecha_hora", idx, _ZONA_SUCURSAL))
 
     where_mov = " AND ".join(conditions_mov)
     where_com = " AND ".join(conditions_com)
 
+    # La devolución por cancelación se descuenta en el periodo de la venta
+    # original, igual que la venta deja de contarse en ese periodo.
     costo_venta_row = await conn.fetchrow(
         f"""
-        SELECT COALESCE(SUM(mi.costo_total), 0) AS costo_ventas
-        FROM public.movimientos_inventario mi
-        WHERE {where_mov} AND mi.motivo = 'venta_comanda'
+        WITH vendidos AS (
+            SELECT mi.referencia_id, mi.costo_total
+            FROM public.movimientos_inventario mi
+            WHERE {where_mov} AND mi.motivo = 'venta_comanda'
+        )
+        SELECT COALESCE((SELECT SUM(costo_total) FROM vendidos), 0)
+             - COALESCE((
+                   SELECT SUM(d.costo_total)
+                   FROM public.movimientos_inventario d
+                   WHERE d.sucursal_id = $1
+                     AND d.motivo = 'cancelacion_comanda'
+                     AND d.referencia_id IN (SELECT referencia_id FROM vendidos)
+               ), 0) AS costo_ventas
         """,
         *params,
     )
     merma_row = await conn.fetchrow(
         f"""
-        SELECT COALESCE(SUM(mi.costo_total), 0) AS merma
+        SELECT COALESCE(SUM(mi.costo_total) FILTER (WHERE mi.motivo = 'merma'), 0)
+                   AS merma_manual,
+               COALESCE(SUM(mi.costo_total) FILTER (WHERE mi.motivo = 'conteo_fisico'), 0)
+                   AS merma_conteo
         FROM public.movimientos_inventario mi
-        WHERE {where_mov} AND mi.motivo = 'merma'
+        WHERE {where_mov} AND mi.tipo = 'M'
         """,
         *params,
     )
@@ -192,11 +244,15 @@ async def resumen_costo_ventas(
         *params,
     )
     costo_ventas = Decimal(str(costo_venta_row["costo_ventas"]))
-    merma = Decimal(str(merma_row["merma"]))
+    merma_manual = Decimal(str(merma_row["merma_manual"]))
+    merma_conteo = Decimal(str(merma_row["merma_conteo"]))
+    merma = merma_manual + merma_conteo
     ventas_totales = Decimal(str(ventas_row["ventas_totales"]))
     return {
         "ventas_totales": ventas_totales,
         "costo_ventas": costo_ventas,
-        "margen": ventas_totales - costo_ventas,
+        "margen": ventas_totales - costo_ventas - merma,
         "merma": merma,
+        "merma_manual": merma_manual,
+        "merma_conteo": merma_conteo,
     }

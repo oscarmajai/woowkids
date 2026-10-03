@@ -1,13 +1,13 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 import app.services.metodos_pago as svc
 from app.api.deps import require_permission
 from app.core.database import get_db
 from app.core.roles import ROL_SISTEMA
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.schemas.auth import TokenData
 from app.schemas.metodos_pago import MetodosPagoActivacion, MetodosPagoOut, MetodosPagoUpdate
 
@@ -58,18 +58,15 @@ async def actualizar_catalogo_metodo_pago(
 async def activar_metodo_pago(
     metodo_pago_id: UUID,
     body: MetodosPagoActivacion,
+    sucursal_id: UUID | None = Query(None),
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("metodos_pago:editar")),
 ) -> MetodosPagoOut:
-    # Activar/desactivar es una decisión de cada sucursal; se deriva siempre
-    # de la sucursal del usuario autenticado, nunca del cliente. Administrador
-    # Sistema no tiene sucursal propia, así que no puede usar este endpoint.
-    if current_user.branch_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Este usuario no tiene una sucursal asignada para activar/desactivar "
-            "métodos de pago.",
-        )
+    # Activar/desactivar es una decisión de cada sucursal (regla C1): roles con
+    # sucursal fija, siempre la suya (403 si piden otra); AdministradorSistema,
+    # la del parámetro o la del selector. B2: sin ninguna (vista "Todas las
+    # sucursales") responde 422 SUCURSAL_REQUERIDA con un mensaje claro.
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
     return await svc.set_activacion(
-        conn, metodo_pago_id, current_user.branch_id, body.activo, UUID(current_user.sub)
+        conn, metodo_pago_id, sucursal, body.activo, UUID(current_user.sub)
     )

@@ -99,8 +99,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { obtenerDetalleOrden } from '@/services/historialService'
-import { mensajeDeError } from '@/utils/errorHandler'
-import { comandasApi } from '@/api/comandasApi'
+import { esOrdenModificada, mensajeDeError } from '@/utils/errorHandler'
+import { agruparPorRenglon, resumirHijos } from '@/utils/renglonesOrden'
+import { useCancelarComanda } from '@/composables/useCancelarComanda'
+import { modificarDetallesComanda } from '@/services/comandaService'
 import MotivoCancelacionDialog from './MotivoCancelacionDialog.vue'
 import type { DetalleOrden, DetalleProducto } from '@/api/historialApi'
 
@@ -123,111 +125,28 @@ const emit = defineEmits<{
 }>()
 
 const $q = useQuasar()
+const { cancelarComanda } = useCancelarComanda()
 const isLoading = ref(true)
 const guardando = ref(false)
 const orden = ref<DetalleOrden | null>(null)
 const selectedKeys = ref<Set<string>>(new Set())
 
+// M13: un renglón por producto suelto o por combo, cada combo con sus propios
+// productos (por renglón, no por nombre): quitar un combo dividido no arrastra
+// los productos del otro.
 const itemsVisibles = computed<DisplayItem[]>(() => {
   if (!orden.value) return []
-
-  const detalles = orden.value.detalles
-  const comboNames = new Set<string>()
-
-  for (const d of detalles) {
-    if (d.nombre_combo_padre) comboNames.add(d.nombre_combo_padre)
-  }
-
-  const result: DisplayItem[] = []
-  const usedParentIds = new Set<string>()
-
-  for (const comboName of comboNames) {
-    const hijos = detalles.filter((d) => d.nombre_combo_padre === comboName)
-    const padres = detalles.filter((d) => d.producto_nombre === comboName && !d.nombre_combo_padre)
-
-    if (padres.length === 0) {
-      for (const h of hijos) {
-        result.push({
-          key: `suelto-${h.id}`,
-          tipo: 'suelto',
-          producto_nombre: h.producto_nombre,
-          cantidad: h.cantidad,
-          precio_unitario: h.precio_unitario,
-          importe: h.importe,
-          ids: [h.id],
-          notas_especiales: h.notas_especiales,
-        })
-      }
-      continue
-    }
-
-    for (const p of padres) usedParentIds.add(p.id)
-
-    // Agrupa los hijos por instancia (id_combo_padre) y reparte los grupos
-    // entre las líneas padre en orden, según su cantidad. Así quitar un padre
-    // no arrastra los hijos de otras instancias del mismo combo.
-    const porInstancia = new Map<string, DetalleProducto[]>()
-    for (const h of hijos) {
-      if (!h.id_combo_padre) break
-      porInstancia.set(h.id_combo_padre, [...(porInstancia.get(h.id_combo_padre) ?? []), h])
-    }
-    const agrupablePorId =
-      padres.length > 1 && porInstancia.size > 0 && hijos.every((h) => h.id_combo_padre)
-
-    if (!agrupablePorId) {
-      // Un solo padre, o orden vieja sin id_combo_padre: un único bloque con
-      // todos los padres y los hijos del combo (no editable por grupo).
-      result.push({
-        key: `combo-${padres[0]!.id}`,
-        tipo: 'combo',
-        producto_nombre: comboName,
-        cantidad: padres.reduce((sum, p) => sum + p.cantidad, 0),
-        precio_unitario: padres[0]!.precio_unitario,
-        importe: padres.reduce((sum, p) => sum + p.importe, 0),
-        ids: [...padres.map((p) => p.id), ...hijos.map((h) => h.id)],
-        notas_especiales: padres[0]!.notas_especiales,
-        hijos,
-      })
-      continue
-    }
-
-    const grupos = [...porInstancia.values()]
-    let cursor = 0
-    padres.forEach((padre, idx) => {
-      const esUltimo = idx === padres.length - 1
-      const asignados = grupos.slice(cursor, esUltimo ? undefined : cursor + padre.cantidad)
-      cursor += padre.cantidad
-      const hijosPadre = asignados.flat()
-      result.push({
-        key: `combo-${padre.id}`,
-        tipo: 'combo',
-        producto_nombre: comboName,
-        cantidad: padre.cantidad,
-        precio_unitario: padre.precio_unitario,
-        importe: padre.importe,
-        ids: [padre.id, ...hijosPadre.map((h) => h.id)],
-        notas_especiales: padre.notas_especiales,
-        hijos: hijosPadre,
-      })
-    })
-  }
-
-  for (const d of detalles) {
-    if (!d.nombre_combo_padre && !usedParentIds.has(d.id)) {
-      result.push({
-        key: `suelto-${d.id}`,
-        tipo: 'suelto',
-        producto_nombre: d.producto_nombre,
-        cantidad: d.cantidad,
-        precio_unitario: d.precio_unitario,
-        importe: d.importe,
-        ids: [d.id],
-        notas_especiales: d.notas_especiales,
-      })
-    }
-  }
-
-  return result
+  return agruparPorRenglon(orden.value.detalles).map(({ renglon, hijos }) => ({
+    key: `${hijos.length ? 'combo' : 'suelto'}-${renglon.id}`,
+    tipo: hijos.length ? 'combo' : 'suelto',
+    producto_nombre: renglon.producto_nombre,
+    cantidad: renglon.cantidad,
+    precio_unitario: renglon.precio_unitario,
+    importe: renglon.importe,
+    ids: [renglon.id, ...hijos.map((h) => h.id)],
+    notas_especiales: renglon.notas_especiales,
+    ...(hijos.length ? { hijos: resumirHijos(hijos) } : {}),
+  }))
 })
 
 const todosSeleccionados = computed(() => {
@@ -249,13 +168,15 @@ const idsAEliminar = computed(() => {
   return ids
 })
 
-onMounted(async () => {
+async function cargarOrden() {
   try {
     orden.value = await obtenerDetalleOrden('comanda', props.comandaId)
   } finally {
     isLoading.value = false
   }
-})
+}
+
+onMounted(cargarOrden)
 
 function toggleItem(key: string) {
   const next = new Set(selectedKeys.value)
@@ -305,11 +226,19 @@ async function ejecutarEliminacion(motivoCancelacion?: string) {
   try {
     const esCancelacionTotal = idsAEliminar.value.length === orden.value.detalles.length
 
-    await comandasApi.modificarDetalles(
-      props.comandaId,
-      idsAEliminar.value,
-      esCancelacionTotal ? motivoCancelacion : undefined,
-    )
+    if (esCancelacionTotal) {
+      // Quitar todo es cancelar la orden: va por el mismo flujo que "Cancelar
+      // orden" (revierte inventario y, si está pagada, pide el PIN de un
+      // administrador y registra la devolución en caja).
+      const cancelada = await cancelarComanda(props.comandaId, motivoCancelacion ?? '')
+      if (!cancelada) return
+    } else {
+      // B5: con la versión que se leyó; si la orden cambió en otra pestaña o
+      // dispositivo, el backend responde 409 COMANDA_MODIFICADA sin tocar nada.
+      await modificarDetallesComanda(props.comandaId, idsAEliminar.value, undefined, {
+        modificadoEsperado: orden.value.modificado ?? undefined,
+      })
+    }
 
     $q.notify({
       type: 'positive',
@@ -324,6 +253,20 @@ async function ejecutarEliminacion(motivoCancelacion?: string) {
     emit('orden-actualizada')
     emit('close')
   } catch (err: unknown) {
+    if (esOrdenModificada(err)) {
+      // B5: se recarga la orden y se limpia la selección para que el cajero
+      // decida otra vez sobre lo que hay ahora.
+      selectedKeys.value = new Set()
+      await cargarOrden()
+      $q.notify({
+        type: 'warning',
+        message: mensajeDeError(err, 'La orden cambió mientras la editabas.'),
+        caption: 'Se recargó la orden. Revisa los productos y vuelve a intentarlo.',
+        position: 'top',
+        timeout: 6000,
+      })
+      return
+    }
     const msg = mensajeDeError(err, 'No se pudo modificar la orden.')
     $q.notify({ type: 'negative', message: msg, position: 'top', timeout: 4000 })
   } finally {

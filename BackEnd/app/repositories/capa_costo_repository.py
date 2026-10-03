@@ -37,13 +37,17 @@ async def crear_capa(
 
 async def capas_disponibles(conn: asyncpg.Connection, insumo_id: UUID) -> list[dict[str, Any]]:
     """Capas con stock restante, en orden FIFO (más viejas primero). `FOR UPDATE`
-    serializa consumos concurrentes del mismo insumo."""
+    serializa consumos concurrentes del mismo insumo.
+
+    B11: el orden es la secuencia de inserción (migración 098). Antes era
+    (creado, id) y las capas de una misma recepción, que comparten `creado`,
+    se consumían en el orden de un uuid aleatorio."""
     rows = await conn.fetch(
         """
         SELECT id, cantidad_restante, costo_unitario
         FROM public.capas_costo_insumo
         WHERE insumo_id = $1 AND cantidad_restante > 0
-        ORDER BY creado ASC, id ASC
+        ORDER BY secuencia ASC
         FOR UPDATE
         """,
         insumo_id,

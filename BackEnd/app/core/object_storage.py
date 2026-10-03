@@ -61,6 +61,17 @@ async def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     )
 
 
+async def delete_objects(keys: list[str]) -> None:
+    """Borra objetos sin propagar errores: se usa para limpiar archivos que
+    quedaron huérfanos porque la transacción que los referenciaba se revirtió
+    (N4). Si el borrado falla, solo queda el aviso en el log."""
+    for key in keys:
+        try:
+            await asyncio.to_thread(_client.delete_object, Bucket=BUCKET, Key=key)
+        except Exception:
+            logger.warning("No se pudo borrar el objeto huérfano %s", key, exc_info=True)
+
+
 def _get_object(key: str) -> dict[str, Any]:
     try:
         return dict(_client.get_object(Bucket=BUCKET, Key=key))

@@ -4,6 +4,7 @@ import { AxiosError } from 'axios'
 import type { ApiError } from '@/types/auth'
 import { apiClient, rawApiClient, refreshAccessToken, configurarRefresh } from '@/api/axiosClient'
 import { tokenMemory } from '@/utils/tokenMemory'
+import { resolveErrorMessage } from '@/utils/errorHandler'
 
 function makeResponse(config: InternalAxiosRequestConfig, status: number, data: unknown) {
   return { data, status, statusText: '', headers: {}, config } as AxiosResponse
@@ -139,6 +140,28 @@ describe('axiosClient interceptor', () => {
     expect(err.details).toBeUndefined()
   })
 
+  it('B8: un 422 de validación muestra los mensajes en español del backend', async () => {
+    apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) =>
+      fail(config, 422, {
+        detail: [
+          {
+            type: 'greater_than',
+            loc: ['body', 'cantidad'],
+            msg: 'cantidad: debe ser mayor que 0',
+            input: '-5',
+            ctx: { gt: '0' },
+          },
+          { type: 'missing', loc: ['body', 'tipo'], msg: 'tipo: es obligatorio' },
+        ],
+      })) as AxiosAdapter
+
+    const err = (await apiClient.post('/x').catch((e: ApiError) => e)) as ApiError
+
+    expect(err.statusCode).toBe(422)
+    expect(err.message).toBe('cantidad: debe ser mayor que 0, tipo: es obligatorio')
+    expect(resolveErrorMessage(err)).toBe(err.message)
+  })
+
   it('con refresher registrado, guarda el usuario y permisos nuevos', async () => {
     const newUser = { ...USER, permissions: ['pos:acceder'] }
     configurarRefresh(() => Promise.resolve({ token: 'tok', user: newUser }))
@@ -154,6 +177,54 @@ describe('axiosClient interceptor', () => {
     expect(stored.token).toBeUndefined()
     // C3: el token nuevo queda solo en memoria, nunca en localStorage.
     expect(tokenMemory.get()).toBe('tok')
+  })
+
+  // A5: un PIN mal escrito al abrir caja refrescaba el token, reenviaba el
+  // PIN equivocado y cerraba la sesión.
+  it.each([401, 403])(
+    'un PIN incorrecto al abrir caja (%i) no refresca, no reenvía ni cierra sesión',
+    async (status) => {
+      let apiCalls = 0
+      apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) => {
+        apiCalls++
+        return fail(config, status, {
+          detail: { code: 'PIN_INVALIDO', message: 'El PIN ingresado es incorrecto.' },
+        })
+      }) as AxiosAdapter
+      setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
+      const onUnauthorized = vi.fn()
+      window.addEventListener('auth:unauthorized', onUnauthorized)
+
+      const err = (await apiClient
+        .post('/api/turnos-caja/abrir', { pin: '1111' })
+        .catch((e: ApiError) => e)) as ApiError
+
+      expect(err.statusCode).toBe(status)
+      expect(err.code).toBe('PIN_INVALIDO')
+      expect(err.message).toBe('El PIN ingresado es incorrecto.')
+      expect(apiCalls).toBe(1)
+      expect(refreshCalls).toBe(0)
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      expect(localStorage.getItem('auth_session')).not.toBeNull()
+      window.removeEventListener('auth:unauthorized', onUnauthorized)
+    },
+  )
+
+  it('un 429 por demasiados intentos de PIN no toca la sesión', async () => {
+    apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) =>
+      fail(config, 429, {
+        detail: { code: 'PIN_BLOQUEADO', message: 'Demasiados intentos fallidos de PIN.' },
+      })) as AxiosAdapter
+    setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
+
+    const err = (await apiClient
+      .post('/api/turnos-caja/validar-pin-admin', {})
+      .catch((e: ApiError) => e)) as ApiError
+
+    expect(err.statusCode).toBe(429)
+    expect(err.code).toBe('PIN_BLOQUEADO')
+    expect(refreshCalls).toBe(0)
+    expect(localStorage.getItem('auth_session')).not.toBeNull()
   })
 
   it('C3: el access token nunca se persiste en localStorage', async () => {

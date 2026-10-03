@@ -13,6 +13,7 @@ from app.schemas.auth import TokenData
 from app.schemas.disponibilidad import DisponibilidadResponse
 from app.schemas.reservaciones import (
     EventoDelDiaOut,
+    ReservacionCerrar,
     ReservacionesCrear,
     ReservacionesOut,
     ReservacionesUpdate,
@@ -137,7 +138,27 @@ async def actualizar_reservacion(
     current_user: TokenData = Depends(require_permission("reservaciones:editar")),
 ) -> ReservacionesOut:
     await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
-    return await svc.actualizar(conn, reservacion_id, body)
+    return await svc.actualizar(conn, reservacion_id, body, UUID(current_user.sub))
+
+
+@router.post(
+    "/{reservacion_id}/cerrar",
+    response_model=ReservacionesOut,
+    summary="Cierra el evento (pasa la reservación a completada)",
+    description=(
+        "Solo si el evento ya empezó (hora local de la sucursal), no tiene saldo "
+        "pendiente y la reservación no está cancelada ni cerrada; si no, 409. "
+        "Las notas del cierre se agregan a las existentes."
+    ),
+)
+async def cerrar_reservacion(
+    reservacion_id: UUID,
+    body: ReservacionCerrar,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("reservaciones:editar")),
+) -> ReservacionesOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
+    return await svc.cerrar(conn, reservacion_id, body.notas_cierre, UUID(current_user.sub))
 
 
 @router.delete("/{reservacion_id}", status_code=status.HTTP_204_NO_CONTENT)

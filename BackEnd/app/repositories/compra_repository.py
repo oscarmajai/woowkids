@@ -128,7 +128,10 @@ async def listar(conn: asyncpg.Connection, sucursal_id: UUID | None = None) -> l
 
 async def listar_detalles(conn: asyncpg.Connection, compra_id: UUID) -> list[dict[str, Any]]:
     rows = await conn.fetch(
-        _DETALLE_SELECT + " WHERE dc.compra_id = $1 ORDER BY i.nombre ASC", compra_id
+        # Orden de captura (migración 099); antes por nombre del insumo, y la
+        # recepción y el detalle mostraban las líneas en otro orden que la compra.
+        _DETALLE_SELECT + " WHERE dc.compra_id = $1 ORDER BY dc.secuencia ASC",
+        compra_id,
     )
     return [dict(r) for r in rows]
 

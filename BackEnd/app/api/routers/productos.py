@@ -13,7 +13,12 @@ import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import (
+    exigir_permiso,
+    get_current_user,
+    require_any_permission,
+    require_permission,
+)
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
@@ -22,6 +27,15 @@ from app.schemas.registros import ProductoEstanciaResponse
 from app.services import alcance_service, producto_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
+
+# B20: el catálogo con precios lo consumen las pantallas que venden: POS
+# (pos:acceder), Nueva reservación (reservaciones:crear) y Cierre de evento
+# (reservaciones:editar). Ninguna pantalla de estancias lo usa (el check-in usa
+# /productos/estancia), así que atención e inventario ya no lo leen.
+_PERMISOS_CATALOGO = ("pos:acceder", "reservaciones:crear", "reservaciones:editar")
+# B20: el listado completo (con inactivos) es de la pantalla Productos; Paquetes
+# también lo usa para elegir los alimentos incluidos.
+_PERMISOS_ADMIN = ("inventario:gestionar_productos", "paquetes:crear", "paquetes:editar")
 
 
 @router.get("/estancia")
@@ -40,7 +54,7 @@ async def obtener_config_estancia(
 @router.get("/catalogo")
 async def listar_productos_cajero(
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_any_permission(*_PERMISOS_CATALOGO)),
 ) -> list[dict[str, Any]]:
     return await producto_service.obtener_productos_para_cajero(conn, current_user)
 
@@ -49,7 +63,7 @@ async def listar_productos_cajero(
 async def listar_productos_admin(
     sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    current_user: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_any_permission(*_PERMISOS_ADMIN)),
 ) -> list[ProductoOut]:
     """Lista productos activos e inactivos, para la pantalla de catálogo.
 
@@ -118,6 +132,10 @@ async def actualizar_producto(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
+    # M20: desactivar (activo=false) equivale a eliminar: exige el mismo
+    # permiso que DELETE. Antes bastaba con el de gestionar.
+    if body.activo is False:
+        exigir_permiso(current_user, "inventario:eliminar_producto")
     await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     await alcance_service.asegurar_recursos(
         conn, current_user, "producto", [c.producto_id for c in body.productos_combo or []]

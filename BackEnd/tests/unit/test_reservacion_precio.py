@@ -47,7 +47,7 @@ def test_desglose_r0008_coincide_con_lo_que_cobro_el_asistente() -> None:
         12,
         time(16, 0),
         time(19, 0),
-        [Decimal("450.00"), Decimal("35.00")],
+        [(Decimal("450.00"), "evento"), (Decimal("35.00"), "evento")],
         [(Decimal("135.00"), 6)],
     )
     assert desglose.precio_pulseras == Decimal("2520.00")
@@ -63,11 +63,70 @@ def test_desglose_r0009_premium_cuatro_horas() -> None:
         20,
         time(11, 0),
         time(15, 0),
-        [Decimal("890.00"), Decimal("350.00")],
+        [(Decimal("890.00"), "evento"), (Decimal("350.00"), "evento")],
         [(Decimal("175.00"), 5)],
     )
     assert desglose.precio_pulseras == Decimal("4800.00")
     assert desglose.precio_total == Decimal("13815.00")
+
+
+def test_m15_extra_por_persona_se_cobra_por_cada_invitado() -> None:
+    # R-0008: "Bolsita de dulces" ($35 por persona) para 12 niños = $420, no $35.
+    desglose = rp.calcular_desglose(
+        _paquete(),
+        12,
+        time(16, 0),
+        time(19, 0),
+        [(Decimal("450.00"), "evento"), (Decimal("35.00"), "persona")],
+        [(Decimal("135.00"), 6)],
+    )
+    assert desglose.precio_extras == Decimal("870.00")
+    assert desglose.precio_total == Decimal("8000.00")
+
+
+def test_m15_extra_por_hora_se_cobra_por_cada_hora_facturable() -> None:
+    # R-0009: "Animador adicional" ($350 por hora) en un evento de 4 h = $1,400.
+    desglose = rp.calcular_desglose(
+        _paquete(precio_base=Decimal("6900.00"), precio_hora_pulsera=Decimal("60.00")),
+        20,
+        time(11, 0),
+        time(14, 30),  # 3.5 h se cobran como 4
+        [(Decimal("890.00"), "evento"), (Decimal("350.00"), "hora")],
+        [],
+    )
+    assert desglose.precio_extras == Decimal("2290.00")
+
+
+@pytest.mark.parametrize(
+    ("unidad", "actual", "esperado"),
+    [("persona", 1, 12), ("hora", 1, 3), ("evento", 1, 1), ("evento", 2, 2), (None, 1, 1)],
+)
+def test_cantidad_extra_segun_unidad(unidad: str | None, actual: int, esperado: int) -> None:
+    assert rp.cantidad_extra(unidad, 12, 3, actual) == esperado
+
+
+def test_m15_recalcular_extras_al_cambiar_invitados_y_horas() -> None:
+    extras = [
+        rp.ExtraCobrado(id="bolsita", unidad="persona", precio_unitario=Decimal("35"), cantidad=12),
+        rp.ExtraCobrado(id="animador", unidad="hora", precio_unitario=Decimal("350"), cantidad=3),
+        rp.ExtraCobrado(id="pastel", unidad="evento", precio_unitario=Decimal("450"), cantidad=1),
+    ]
+    total, cambios = rp.recalcular_extras(extras, 15, 4)
+    assert total == Decimal("2375.00")  # 15*35 + 4*350 + 450
+    assert cambios == {"bolsita": 15, "animador": 4}
+
+
+def test_total_desde_partes_aplica_cambios() -> None:
+    reservacion = {
+        "precio_base": Decimal("3800.00"),
+        "precio_personas_extra": Decimal("2520.00"),
+        "precio_horas": Decimal("0"),
+        "precio_productos": Decimal("810.00"),
+        "precio_extras": Decimal("485.00"),
+        "descuento": Decimal("0"),
+    }
+    assert rp.total_desde_partes(reservacion) == Decimal("7615.00")
+    assert rp.total_desde_partes(reservacion, precio_extras=Decimal("870")) == Decimal("8000.00")
 
 
 def test_recalcular_total_edicion_conserva_partes_historicas() -> None:

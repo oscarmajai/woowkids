@@ -46,6 +46,8 @@ export const insumosApi = {
       costoVentas: Number(data.costo_ventas),
       margen: Number(data.margen),
       merma: Number(data.merma),
+      mermaManual: Number(data.merma_manual ?? data.merma),
+      mermaConteo: Number(data.merma_conteo ?? 0),
     }
   },
 

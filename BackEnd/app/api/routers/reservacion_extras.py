@@ -48,7 +48,7 @@ async def crear_reservacion_extra(
     # C1: la reservación y el extra deben ser de la sucursal de la sesión.
     await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
     await alcance_service.asegurar_recurso(conn, current_user, "extra", body.extra_id)
-    return await svc.crear(conn, body)
+    return await svc.crear(conn, body, UUID(current_user.sub))
 
 
 @router.patch("/{reservacion_extra_id}", response_model=ReservacionExtrasOut)
@@ -61,7 +61,7 @@ async def actualizar_reservacion_extra(
     await alcance_service.asegurar_recurso(
         conn, current_user, "reservacion_extra", reservacion_extra_id
     )
-    return await svc.actualizar(conn, reservacion_extra_id, body)
+    return await svc.actualizar(conn, reservacion_extra_id, body, UUID(current_user.sub))
 
 
 @router.delete("/{reservacion_extra_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -73,4 +73,4 @@ async def eliminar_reservacion_extra(
     await alcance_service.asegurar_recurso(
         conn, current_user, "reservacion_extra", reservacion_extra_id
     )
-    await svc.eliminar(conn, reservacion_extra_id)
+    await svc.eliminar(conn, reservacion_extra_id, UUID(current_user.sub))

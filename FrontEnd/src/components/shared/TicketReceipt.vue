@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DetalleOrden, DetalleProducto } from '@/api/historialApi'
+import { agruparPorRenglon, resumirHijos } from '@/utils/renglonesOrden'
 import { ticketContentWidth, type TicketWidth } from '@/utils/ticketPrinting'
 
 const props = defineProps<{ orden: DetalleOrden; anchoMm: TicketWidth }>()
@@ -11,25 +12,26 @@ const esCancelado = computed(() => {
   return estado === 'C'
 })
 
-const detallesAgrupados = computed(() => {
+// M13: cada combo lleva solo sus productos (por renglón, no por nombre), con
+// los iguales sumados ("2x Hot dog" en un 2x combo).
+const detallesAgrupados = computed<DetalleProducto[]>(() => {
   if (!props.orden?.detalles) return []
-
-  // Separamos los productos normales/padres de los que son contenido de combo
-  const principales = props.orden.detalles.filter((item) => !item.nombre_combo_padre)
-  const hijos = props.orden.detalles.filter((item) => item.nombre_combo_padre)
-
-  const resultado: DetalleProducto[] = []
-
-  principales.forEach((padre) => {
-    resultado.push(padre) // Metemos el producto principal a la lista final
-
-    // Si este producto es un combo, buscamos sus hijos y los metemos justo debajo
-    const susHijos = hijos.filter((h) => h.nombre_combo_padre === padre.producto_nombre)
-    resultado.push(...susHijos)
-  })
-
-  return resultado
+  return agruparPorRenglon(props.orden.detalles).flatMap(({ renglon, hijos }) => [
+    renglon,
+    ...resumirHijos(hijos),
+  ])
 })
+
+// M12: encabezado con los datos de la sucursal de la venta.
+const sucursal = computed(() => props.orden?.sucursal ?? null)
+const lineaCiudad = computed(() => {
+  const s = sucursal.value
+  if (!s) return ''
+  const lugar = [s.ciudad, s.estado].filter(Boolean).join(', ')
+  const linea = [s.codigo_postal, lugar].filter(Boolean).join(' ')
+  return linea ? `${linea}.` : ''
+})
+const cambio = computed(() => Number(props.orden?.cambio ?? 0))
 
 function formatearFecha(iso: string | null): string {
   if (!iso) return ''
@@ -46,11 +48,13 @@ function formatearFecha(iso: string | null): string {
 
 <template>
   <div class="ticket-receipt" :style="{ width: ticketContentWidth(anchoMm) }">
-    <!-- Encabezado fijo WOOW KIDS -->
+    <!-- Encabezado: WOOW KIDS y la sucursal de la venta (M12) -->
     <div class="ticket-header">
       <h1>WOOW KIDS</h1>
-      <p>Nigromante 391, Peña</p>
-      <p>59375 La Piedad de Cabadas, Michoacán.</p>
+      <p v-if="sucursal?.nombre">{{ sucursal.nombre }}</p>
+      <p v-if="sucursal?.direccion">{{ sucursal.direccion }}</p>
+      <p v-if="lineaCiudad">{{ lineaCiudad }}</p>
+      <p v-if="sucursal?.telefono">Tel. {{ sucursal.telefono }}</p>
     </div>
 
     <div class="ticket-divider-dashed"></div>
@@ -116,6 +120,10 @@ function formatearFecha(iso: string | null): string {
       <div v-for="(mp, idx) in orden.metodos_pago" :key="idx" class="ticket-totals-row">
         <span>PAGO {{ String(mp.metodo_pago_nombre).toUpperCase() }}</span>
         <span>${{ Number(mp.monto).toFixed(2) }}</span>
+      </div>
+      <div v-if="cambio > 0" class="ticket-totals-row">
+        <span>CAMBIO</span>
+        <span>${{ cambio.toFixed(2) }}</span>
       </div>
     </div>
 

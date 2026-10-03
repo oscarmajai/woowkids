@@ -5,10 +5,29 @@
       subtitle="Órdenes cobradas en caja, estancias y eventos."
     >
       <template #actions>
-        <q-btn outline icon="download" label="Exportar" :loading="exportando" @click="exportar" />
-        <q-btn outline icon="sync" label="Actualizar" :loading="isLoading" @click="cargarDatos" />
+        <q-btn
+          outline
+          icon="download"
+          label="Exportar"
+          :loading="exportando"
+          :disable="sinSucursal"
+          @click="exportar"
+        />
+        <q-btn
+          outline
+          icon="sync"
+          label="Actualizar"
+          :loading="isLoading"
+          :disable="sinSucursal"
+          @click="cargarDatos"
+        />
       </template>
     </PageHeader>
+
+    <div v-if="sinSucursal" class="list-page__note list-page__note--warn">
+      <q-icon name="info" size="19px" />
+      {{ MENSAJE_SIN_SUCURSAL }}
+    </div>
 
     <div class="kpi-row">
       <KpiCard label="Ingresos" :value="formatearMonto(estadisticas.total_ventas)" />
@@ -111,6 +130,13 @@
             <tr v-else-if="transaccionesFiltradas.length === 0">
               <td colspan="7">
                 <StateBlock
+                  v-if="sinSucursal"
+                  variant="empty"
+                  title="Elige una sucursal"
+                  :body="MENSAJE_SIN_SUCURSAL"
+                />
+                <StateBlock
+                  v-else
                   :variant="busqueda || filtroEstado !== 'todos' ? 'no-results' : 'empty'"
                   :title="
                     busqueda || filtroEstado !== 'todos'
@@ -199,7 +225,7 @@
                         <q-item-section>Editar orden</q-item-section>
                       </q-item>
                       <q-item
-                        v-if="!esEstadoFinal(tx.estado_actual)"
+                        v-if="esCancelable(tx.estado_actual)"
                         v-close-popup
                         clickable
                         class="text-negative"
@@ -256,7 +282,7 @@ import type { FilterChip, UiTone } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
 import { mensajeDeError, resolveErrorMessage } from '@/utils/errorHandler'
 import type { ApiError } from '@/types/auth'
-import { comandasApi } from '@/api/comandasApi'
+import { useCancelarComanda } from '@/composables/useCancelarComanda'
 import {
   obtenerHistorial,
   obtenerEstadisticas,
@@ -270,6 +296,7 @@ import type { Estadisticas } from '@/api/historialApi'
 import type { CajaItem } from '@/types/turnoCaja'
 
 const $q = useQuasar()
+const { cancelarComanda } = useCancelarComanda()
 const authStore = useAuthStore()
 const metodosPagoStore = useMetodosPagoStore()
 
@@ -296,6 +323,13 @@ const modoImpresion = ref(false)
 const exportando = ref(false)
 let controladorFetch: AbortController | null = null
 
+// N17: el historial es por sucursal (sus periodos se calculan en la zona de
+// cada una). En "Todas las sucursales" el backend pide elegir una (422); no se
+// consulta y se avisa.
+const sinSucursal = computed(() => !authStore.currentBranchId)
+const MENSAJE_SIN_SUCURSAL =
+  'El historial de ventas es por sucursal: elige una en el selector para verlo.'
+
 const opcionesCaja = computed(() => cajas.value.map((c) => ({ label: c.nombre, value: c.id })))
 const opcionesMetodoPago = computed(() =>
   metodosPagoStore.metodos.map((m) => ({ label: m.nombre, value: m.id })),
@@ -315,6 +349,13 @@ async function cargarFiltrosDisponibles() {
 
 function cargarDatos() {
   if (controladorFetch) controladorFetch.abort()
+  if (sinSucursal.value) {
+    controladorFetch = null
+    transacciones.value = []
+    estadisticas.value = { total_ventas: 0, total_ordenes: 0, ticket_promedio: 0 }
+    isLoading.value = false
+    return
+  }
   controladorFetch = new AbortController()
   const signal = controladorFetch.signal
 
@@ -403,6 +444,7 @@ function limpiarFiltroFecha() {
 }
 
 async function exportar() {
+  if (sinSucursal.value) return
   exportando.value = true
   try {
     await exportarHistorial(filtroTiempo.value, filtroEstado.value, {
@@ -545,6 +587,12 @@ function esEditable(estado: string): boolean {
   return estado.toUpperCase() === 'P'
 }
 
+// A2: solo se cancela mientras sigue en cocina (Pendiente, En preparación,
+// Lista). Una entregada ya consumió sus insumos; el backend responde 409.
+function esCancelable(estado: string): boolean {
+  return ['P', 'E', 'L'].includes(estado.toUpperCase())
+}
+
 function abrirCancelar(comandaId: string) {
   comandaSeleccionadaId.value = comandaId
   $q.dialog({
@@ -556,7 +604,9 @@ function abrirCancelar(comandaId: string) {
     },
   }).onOk(async (motivo: string) => {
     try {
-      await comandasApi.cambiarEstado(comandaId, 'C', motivo)
+      // A4: si la orden está pagada, pide el PIN de un administrador.
+      const cancelada = await cancelarComanda(comandaId, motivo)
+      if (!cancelada) return
       $q.notify({
         type: 'positive',
         message: 'Orden cancelada correctamente.',
@@ -568,6 +618,7 @@ function abrirCancelar(comandaId: string) {
     } catch (err: unknown) {
       const msg = mensajeDeError(err, 'No se pudo cancelar la orden.')
       $q.notify({ type: 'negative', message: msg, position: 'top', timeout: 4000 })
+      void cargarDatos()
     }
   })
 }

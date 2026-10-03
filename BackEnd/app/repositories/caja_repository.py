@@ -36,7 +36,7 @@ async def get_caja_por_codigo(
         """
         SELECT id, sucursal_id, codigo, nombre, creado
         FROM public.cajas
-        WHERE sucursal_id = $1 AND codigo = $2
+        WHERE sucursal_id = $1 AND codigo = $2 AND activo = TRUE
         """,
         uuid.UUID(sucursal_id),
         codigo,
@@ -47,7 +47,8 @@ async def get_caja_por_codigo(
 async def get_caja_por_id(
     conn: asyncpg.Connection, sucursal_id: str, caja_id: str
 ) -> dict[str, Any] | None:
-    """Caja por id, solo si pertenece a la sucursal indicada."""
+    """Caja activa por id, solo si pertenece a la sucursal indicada (M9: una
+    caja desactivada ya no admite turnos nuevos)."""
     try:
         caja_uuid = uuid.UUID(caja_id)
     except ValueError:
@@ -56,7 +57,7 @@ async def get_caja_por_id(
         """
         SELECT id, sucursal_id, codigo, nombre, creado
         FROM public.cajas
-        WHERE sucursal_id = $1 AND id = $2
+        WHERE sucursal_id = $1 AND id = $2 AND activo = TRUE
         """,
         uuid.UUID(sucursal_id),
         caja_uuid,
@@ -124,16 +125,45 @@ async def listar_cajas_por_sucursal(
     return [dict(r) for r in rows]
 
 
-async def listar_turnos(conn: asyncpg.Connection) -> list[dict[str, Any]]:
+async def listar_turnos(
+    conn: asyncpg.Connection, sucursal_id: str | None = None
+) -> list[dict[str, Any]]:
+    """M19: con sucursal, los horarios activos de esa sucursal más los globales
+    (sucursal_id NULL); sin sucursal (AdministradorSistema sin selector), todos."""
     rows = await conn.fetch(
         """
-        SELECT id, nombre, hora_inicio, hora_fin
+        SELECT id, nombre, hora_inicio, hora_fin, dias
         FROM public.turnos
         WHERE activo = TRUE
+          AND ($1::uuid IS NULL OR sucursal_id IS NULL OR sucursal_id = $1::uuid)
         ORDER BY hora_inicio ASC
-        """
+        """,
+        uuid.UUID(sucursal_id) if sucursal_id else None,
     )
     return [dict(r) for r in rows]
+
+
+async def turno_disponible_en_sucursal(
+    conn: asyncpg.Connection, turno_id: str, sucursal_id: str
+) -> bool:
+    """M19: el horario existe, está activo y es global o de esa sucursal."""
+    try:
+        tid = uuid.UUID(str(turno_id))
+    except ValueError:
+        return False
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM public.turnos
+                WHERE id = $1 AND activo = TRUE
+                  AND (sucursal_id IS NULL OR sucursal_id = $2::uuid)
+            )
+            """,
+            tid,
+            uuid.UUID(str(sucursal_id)),
+        )
+    )
 
 
 async def get_primer_turno(conn: asyncpg.Connection) -> dict[str, Any] | None:
@@ -156,6 +186,8 @@ def _row_to_caja_admin_dict(row: asyncpg.Record) -> dict[str, Any]:
     }
     if "sucursal_id" in row.keys():
         d["sucursal_id"] = str(row["sucursal_id"])
+    if "sucursal_nombre" in row.keys():
+        d["sucursal_nombre"] = row["sucursal_nombre"]
     turno_actual = None
     if row.get("apertura_id") is not None:
         turno_actual = {
@@ -167,21 +199,27 @@ def _row_to_caja_admin_dict(row: asyncpg.Record) -> dict[str, Any]:
     return d
 
 
-async def listar_cajas_admin(conn: asyncpg.Connection, sucursal_id: str) -> list[dict[str, Any]]:
+async def listar_cajas_admin(
+    conn: asyncpg.Connection, sucursal_id: str | None
+) -> list[dict[str, Any]]:
+    """Cajas de la sucursal; con None (AdministradorSistema en "Todas las
+    sucursales", N14), las de todas."""
     rows = await conn.fetch(
         """
         SELECT
-            c.id, c.nombre, c.numero, c.activo, c.impresora,
+            c.id, c.sucursal_id, s.nombre AS sucursal_nombre,
+            c.nombre, c.numero, c.activo, c.impresora,
             a.id AS apertura_id, a.creado AS apertura_fecha,
             COALESCE(u.nombre_completo, u.email) AS apertura_cajero
         FROM public.cajas c
+        JOIN public.sucursales s ON s.id = c.sucursal_id
         LEFT JOIN public.apertura_caja a
                ON a.caja_id = c.id AND a.estado IN ('ABIERTA', 'EN_CORTE')
         LEFT JOIN public.usuarios u ON u.id = a.cajero_id
-        WHERE c.sucursal_id = $1
-        ORDER BY c.numero ASC, c.nombre ASC
+        WHERE $1::uuid IS NULL OR c.sucursal_id = $1::uuid
+        ORDER BY s.nombre ASC, c.numero ASC, c.nombre ASC
         """,
-        uuid.UUID(sucursal_id),
+        uuid.UUID(sucursal_id) if sucursal_id else None,
     )
     return [_row_to_caja_admin_dict(r) for r in rows]
 
@@ -289,6 +327,34 @@ async def actualizar_caja_admin(
     }
 
 
+async def bloquear_caja(conn: asyncpg.Connection, caja_id: str) -> bool:
+    """M9: bloquea la fila de la caja hasta el fin de la transacción en curso
+    (el llamador DEBE estar en `conn.transaction()`). FOR UPDATE choca con el
+    FOR KEY SHARE que toma la llave foránea al insertar una apertura, así que
+    una apertura en curso termina antes de revisar si la caja tiene turno.
+    Devuelve False si la caja no existe."""
+    fila = await conn.fetchval(
+        "SELECT id FROM public.cajas WHERE id = $1 FOR UPDATE",
+        uuid.UUID(caja_id),
+    )
+    return fila is not None
+
+
+async def caja_tiene_turno_activo(conn: asyncpg.Connection, caja_id: str) -> bool:
+    """M9: True si la caja tiene una apertura ABIERTA o EN_CORTE."""
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM public.apertura_caja
+                WHERE caja_id = $1 AND estado IN ('ABIERTA', 'EN_CORTE')
+            )
+            """,
+            uuid.UUID(caja_id),
+        )
+    )
+
+
 async def eliminar_caja_admin(
     conn: asyncpg.Connection,
     caja_id: str,
@@ -333,6 +399,7 @@ async def get_apertura_activa_por_usuario(
             a.monto_declarado,
             a.conteo_json,
             a.token_admin_jti,
+            a.observaciones_apertura,
             a.creado AS fecha_apertura,
             c.nombre AS caja_nombre,
             c.codigo AS terminal,
@@ -391,6 +458,7 @@ _SELECT_APERTURA_POR_ID = """
         a.monto_declarado,
         a.conteo_json,
         a.token_admin_jti,
+        a.observaciones_apertura,
         a.creado AS fecha_apertura,
         c.nombre AS caja_nombre,
         c.codigo AS terminal,
@@ -413,6 +481,26 @@ async def get_apertura_por_id(conn: asyncpg.Connection, apertura_id: str) -> dic
     return dict(row) if row else None
 
 
+async def get_dueno_y_sucursal_apertura(
+    conn: asyncpg.Connection, apertura_id: str
+) -> dict[str, Any] | None:
+    """Cajero dueño y sucursal de una apertura, sin bloqueo: solo para decidir
+    quién puede operarla antes de validar credenciales (A15/A16)."""
+    apertura_uuid = _uuid_o_none(apertura_id)
+    if apertura_uuid is None:
+        return None
+    row = await conn.fetchrow(
+        """
+        SELECT a.id, a.cajero_id, c.sucursal_id
+        FROM public.apertura_caja a
+        INNER JOIN public.cajas c ON a.caja_id = c.id
+        WHERE a.id = $1
+        """,
+        apertura_uuid,
+    )
+    return dict(row) if row else None
+
+
 async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[str, Any] | None:
     """Igual que get_apertura_por_id, pero bloquea la fila de apertura_caja hasta
     el fin de la transacción en curso (el llamador DEBE estar dentro de
@@ -422,15 +510,35 @@ async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[
     entonces lee los datos ya actualizados (C4).
 
     FOR NO KEY UPDATE y no FOR UPDATE a propósito: no choca con el FOR KEY SHARE
-    que toma la llave foránea de movimientos_caja al insertar, así que los cobros
-    del POS nunca esperan a un retiro ni a un cierre. Es seguro porque un cobro
-    nunca baja el efectivo (el cambio no puede exceder el efectivo recibido,
-    validaciones_pago.validar_cambio). Orden de bloqueo: apertura_caja siempre
-    primero."""
+    que toma la llave foránea de movimientos_caja al insertar (un retiro o un
+    ingreso insertan su movimiento con la apertura ya bloqueada). N1: sí choca
+    con el FOR SHARE de bloquear_apertura_para_cobro, así que un cobro en curso
+    termina antes de que empiece el conteo o el cierre, y un cobro que llega
+    durante una transición espera y después ve el estado nuevo. Orden de
+    bloqueo: apertura_caja siempre primero."""
     apertura_uuid = _uuid_o_none(apertura_id)
     if apertura_uuid is None:
         return None
     row = await conn.fetchrow(_SELECT_APERTURA_POR_ID + " FOR NO KEY UPDATE OF a", apertura_uuid)
+    return dict(row) if row else None
+
+
+async def bloquear_apertura_para_cobro(
+    conn: asyncpg.Connection, apertura_id: str
+) -> dict[str, Any] | None:
+    """N1: bloqueo compartido (FOR SHARE) de la apertura para la transacción
+    de un cobro (el llamador DEBE estar en `conn.transaction()`). Dos cobros
+    del mismo turno no se esperan entre sí, pero un cobro y una transición del
+    turno (iniciar conteo, cierre, retiros: FOR NO KEY UPDATE en
+    bloquear_apertura) se serializan, así que el estado leído aquí sigue
+    valiendo hasta que el cobro confirma."""
+    apertura_uuid = _uuid_o_none(apertura_id)
+    if apertura_uuid is None:
+        return None
+    row = await conn.fetchrow(
+        "SELECT id, cajero_id, estado FROM public.apertura_caja WHERE id = $1 FOR SHARE",
+        apertura_uuid,
+    )
     return dict(row) if row else None
 
 
@@ -441,6 +549,7 @@ async def crear_apertura_caja(
     turno_id: str,
     fondo_inicial: Decimal,
     creado_por: str | None = None,
+    observaciones_apertura: str | None = None,
 ) -> dict[str, Any]:
     apertura_id = uuid.uuid4()
     now = get_mexico_now()
@@ -448,8 +557,9 @@ async def crear_apertura_caja(
     await conn.execute(
         """
         INSERT INTO public.apertura_caja
-            (id, caja_id, cajero_id, turno_id, fondo_inicial, estado, creado, creado_por)
-        VALUES ($1, $2, $3, $4, $5, 'ABIERTA', $6, $7)
+            (id, caja_id, cajero_id, turno_id, fondo_inicial, estado, creado, creado_por,
+             observaciones_apertura)
+        VALUES ($1, $2, $3, $4, $5, 'ABIERTA', $6, $7, $8)
         """,
         apertura_id,
         uuid.UUID(caja_id),
@@ -458,6 +568,7 @@ async def crear_apertura_caja(
         fondo_inicial,
         now,
         uuid.UUID(creado_por) if creado_por else user_uuid,
+        observaciones_apertura,
     )
     res = await get_apertura_por_id(conn, str(apertura_id))
     assert res is not None
@@ -630,7 +741,7 @@ async def listar_ingresos_por_apertura(
 ) -> list[dict[str, Any]]:
     rows = await conn.fetch(
         """
-        SELECT id, monto, creado
+        SELECT id, monto, observaciones, creado
         FROM public.movimientos_caja
         WHERE apertura_caja_id = $1 AND tipo_movimiento = 'I'
         ORDER BY creado DESC
@@ -651,8 +762,11 @@ async def registrar_movimiento_caja(
     metodo_pago_id: str | None,
     monto: Decimal,
     creado_por: str | None = None,
+    observaciones: str | None = None,
 ) -> dict[str, Any]:
     """
+    `observaciones` solo lo usa hoy el ingreso de efectivo (su motivo).
+
     metodo_pago_id es temporalmente opcional: el módulo de ventas/comandas aún no integra
     métodos de pago, así que puede registrar movimientos con metodo_pago_id=NULL mientras
     tanto. Cuando esté integrado, volver a exigirlo (columna ya vuelta NOT NULL en BD).
@@ -662,10 +776,10 @@ async def registrar_movimiento_caja(
         """
         INSERT INTO public.movimientos_caja
             (apertura_caja_id, tipo_movimiento, referencia_id, metodo_pago_id, monto,
-             creado, creado_por)
-        VALUES ($1, $2::tipo_movimiento_caja, $3, $4, $5, $6, $7)
+             creado, creado_por, observaciones)
+        VALUES ($1, $2::tipo_movimiento_caja, $3, $4, $5, $6, $7, $8)
         RETURNING id, apertura_caja_id, tipo_movimiento, referencia_id, metodo_pago_id,
-                  monto, creado
+                  monto, observaciones, creado
         """,
         uuid.UUID(apertura_caja_id),
         tipo_movimiento,
@@ -674,6 +788,7 @@ async def registrar_movimiento_caja(
         monto,
         now,
         uuid.UUID(creado_por) if creado_por else None,
+        observaciones,
     )
     return dict(row)
 
@@ -708,6 +823,7 @@ async def registrar_ingreso_efectivo(
     referencia_id: str,
     monto: Decimal,
     creado_por: str | None = None,
+    observaciones: str | None = None,
 ) -> dict[str, Any]:
     """Registra una entrada de efectivo físico durante el turno que no
     corresponde a una venta (reposición de cambio, fondo adicional, etc.).
@@ -722,6 +838,7 @@ async def registrar_ingreso_efectivo(
         metodo_pago_id=None,
         monto=monto,
         creado_por=creado_por,
+        observaciones=observaciones,
     )
 
 
@@ -788,16 +905,19 @@ async def sumar_total_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id
 
 
 async def contar_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id: str) -> int:
-    """Número de ventas (movimientos de cobro, no retiros/cambio/ingresos) del
-    turno. Pendiente B9 B.4: "vendido en turno" para el cajero -- solo el
-    total y el número de tickets, sin desglose por método ni efectivo
-    esperado (conteo a ciegas)."""
+    """Número de tickets/órdenes cobrados en el turno (M6), no de pagos: un
+    pago mixto (efectivo + tarjeta) registra un movimiento por pago con la
+    misma referencia (la comanda en el POS, el registro en estancias). Los
+    pagos de reservación ('R') referencian el pago, así que se agrupan por su
+    reservación. Retiros, cambio e ingresos no son ventas."""
     val = await conn.fetchval(
         """
-        SELECT COUNT(*)
-        FROM public.movimientos_caja
-        WHERE apertura_caja_id = $1
-          AND tipo_movimiento NOT IN ('RP', 'C', 'I')
+        SELECT COUNT(DISTINCT (m.tipo_movimiento, COALESCE(pr.reservacion_id, m.referencia_id)))
+        FROM public.movimientos_caja m
+        LEFT JOIN public.pagos_reservacion pr
+               ON m.tipo_movimiento = 'R' AND pr.id = m.referencia_id
+        WHERE m.apertura_caja_id = $1
+          AND m.tipo_movimiento NOT IN ('RP', 'C', 'I')
         """,
         uuid.UUID(apertura_caja_id),
     )
@@ -810,7 +930,8 @@ async def calcular_efectivo_disponible(
     """Efectivo físico esperado en el cajón en este momento (turno aún ABIERTA,
     sin depender del conteo de cierre). Misma fórmula que _calcular_balance usa
     para "efectivo esperado" al cerrar, evaluada en vivo -- fondo inicial +
-    ventas en efectivo + ingresos - retiros - cambio entregado. Único origen de
+    ventas en efectivo + ingresos - retiros - cambio entregado - devoluciones en
+    efectivo de comandas canceladas (A4). Único origen de
     verdad, reusado por crear_retiro (bloquea si el retiro la deja negativa) y
     por la advertencia de cambio insuficiente en pagos/reservaciones/estancias
     (no bloquea, solo informa)."""
@@ -820,7 +941,25 @@ async def calcular_efectivo_disponible(
         + await sumar_ingresos_por_apertura(conn, apertura_caja_id)
         - await sumar_retiros_por_apertura(conn, apertura_caja_id)
         - await sumar_cambio_apertura(conn, apertura_caja_id)
+        - await sumar_devoluciones_efectivo_apertura(conn, apertura_caja_id)
     )
+
+
+async def sumar_devoluciones_efectivo_apertura(
+    conn: asyncpg.Connection, apertura_caja_id: str
+) -> Decimal:
+    """A4: efectivo devuelto a clientes desde el cajón de este turno al
+    cancelar comandas cobradas (devoluciones_comanda.es_efectivo). Resta del
+    efectivo esperado igual que un retiro."""
+    val = await conn.fetchval(
+        """
+        SELECT COALESCE(SUM(monto), 0)
+        FROM public.devoluciones_comanda
+        WHERE apertura_caja_id = $1 AND es_efectivo
+        """,
+        uuid.UUID(apertura_caja_id),
+    )
+    return Decimal(str(val))
 
 
 async def sumar_ventas_efectivo_apertura(
@@ -919,6 +1058,7 @@ async def listar_historial_cierres(
             (cc.monto_cierre - cc.monto_sistema) AS diferencia_neta,
             cc.tipo_cierre,
             c.codigo AS terminal,
+            c.nombre AS caja_nombre,
             COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
             COALESCE(u_cajero.nombre_completo, u_cajero.email, 'Cajero') AS cajero_nombre,
             COALESCE(u_admin.nombre_completo, u_admin.email, 'Administrador') AS admin_nombre,
@@ -1079,11 +1219,13 @@ async def obtener_detalle_cierre(conn: asyncpg.Connection, cierre_id: str) -> di
             (cc.monto_cierre - cc.monto_sistema) AS diferencia_neta,
             cc.tipo_cierre,
             c.codigo AS terminal,
+            c.nombre AS caja_nombre,
             c.sucursal_id,
             COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
             COALESCE(u_cajero.nombre_completo, u_cajero.email, 'Cajero') AS cajero_nombre,
             COALESCE(u_admin.nombre_completo, u_admin.email, 'Administrador') AS admin_nombre,
-            cc.observaciones
+            cc.observaciones,
+            a.observaciones_apertura
         FROM public.cierre_caja cc
         INNER JOIN public.apertura_caja a ON cc.apertura_caja_id = a.id
         INNER JOIN public.cajas c ON a.caja_id = c.id
