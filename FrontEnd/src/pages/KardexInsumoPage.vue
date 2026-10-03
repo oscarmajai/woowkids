@@ -215,6 +215,7 @@ const MOTIVO_LABEL: Record<string, string> = {
   compra: 'Compra',
   conteo_fisico: 'Conteo físico',
   ajuste_fifo: 'Ajuste',
+  inventario_inicial: 'Inventario inicial',
 }
 
 const formatearFecha = (iso: string): string =>

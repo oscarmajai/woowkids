@@ -437,6 +437,12 @@ import { useUnidadesMedidaStore } from '@/stores/unidadesMedida'
 import { usePresentacionesInsumoStore } from '@/stores/presentacionesInsumo'
 import { comprasApi } from '@/api/comprasApi'
 import type { Compra, EstadoCompra } from '@/types/compra'
+import {
+  armarRecepcion,
+  cantidadCapturada,
+  lineaExcedida,
+  type LineaRecepcionUI,
+} from '@/utils/recepcionCompra'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
@@ -804,24 +810,14 @@ const ejecutarAccion = async () => {
 
 // ── Recibir (parcial) ───────────────────────────────────────────────────────
 
-interface LineaRecepcionUI {
-  detalle_id: string
-  insumo_nombre: string
-  unidad: string
-  pedido: number
-  recibido: number
-  pendiente: number
-  ahora: number
-}
-
 const dialogRecibir = ref(false)
 const compraRecibir = ref<Compra | null>(null)
 const lineasRecepcion = ref<LineaRecepcionUI[]>([])
 
-const lineaExcedida = (l: LineaRecepcionUI) => l.ahora > l.pendiente
 const hayAlgoQueRecibir = computed(
   () =>
-    lineasRecepcion.value.some((l) => l.ahora > 0) && !lineasRecepcion.value.some(lineaExcedida),
+    lineasRecepcion.value.some((l) => cantidadCapturada(l) > 0) &&
+    !lineasRecepcion.value.some(lineaExcedida),
 )
 
 const abrirRecibir = async (row: Compra) => {
@@ -857,11 +853,10 @@ const ejecutarRecibir = async () => {
   }
   ejecutando.value = true
   try {
-    const actualizada = await store.recibir(compraRecibir.value.id, {
-      lineas: lineasRecepcion.value
-        .filter((l) => l.ahora > 0)
-        .map((l) => ({ detalle_id: l.detalle_id, cantidad: String(l.ahora) })),
-    })
+    const actualizada = await store.recibir(
+      compraRecibir.value.id,
+      armarRecepcion(lineasRecepcion.value),
+    )
     $q.notify({
       type: 'positive',
       message:
