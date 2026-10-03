@@ -477,3 +477,46 @@ async def test_login_y_refresh_informan_si_el_usuario_tiene_pin(entorno: Any) ->
     )
     assert sin_pin.status_code == 200, sin_pin.text
     assert sin_pin.json()["user"]["tiene_pin"] is False
+
+
+# ── N14: cajas desde "Todas las sucursales" ────────────────────────────────
+
+
+async def test_sistema_lista_y_edita_cajas_sin_sucursal_elegida(entorno: Any) -> None:
+    client, conn = entorno
+    resp = await client.get("/api/cajas", headers=_h("sistema"))
+    assert resp.status_code == 200, resp.text
+    por_id = {c["id"]: c for c in resp.json()}
+    assert {IDS["caja_a"], IDS["caja_b"]} <= set(por_id)
+    assert por_id[IDS["caja_a"]]["sucursal_id"] == SUC_A
+    assert por_id[IDS["caja_a"]]["sucursal_nombre"] == "Q5 Sucursal A"
+
+    resp = await client.patch(
+        f"/api/cajas/{IDS['caja_b']}", json={"nombre": "Q5 Caja B editada"}, headers=_h("sistema")
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.delete(f"/api/cajas/{IDS['caja_a']}", headers=_h("sistema"))
+    assert resp.status_code == 204, resp.text
+    filas = {
+        str(r["id"]): r
+        for r in await conn.fetch(
+            "SELECT id, nombre, activo, sucursal_id FROM public.cajas WHERE id = ANY($1::uuid[])",
+            [UUID(IDS["caja_a"]), UUID(IDS["caja_b"])],
+        )
+    }
+    assert filas[IDS["caja_b"]]["nombre"] == "Q5 Caja B editada"
+    assert str(filas[IDS["caja_b"]]["sucursal_id"]) == SUC_B
+    assert filas[IDS["caja_a"]]["activo"] is False
+
+
+async def test_admin_sigue_sin_editar_cajas_de_otra_sucursal(entorno: Any) -> None:
+    client, conn = entorno
+    resp = await client.patch(
+        f"/api/cajas/{IDS['caja_b']}", json={"nombre": "Hackeada"}, headers=_h("admin_a")
+    )
+    assert resp.status_code == 404, resp.text
+    resp = await client.get("/api/cajas", headers=_h("admin_a"))
+    assert {c["sucursal_id"] for c in resp.json()} == {SUC_A}
+    assert await conn.fetchval(
+        "SELECT nombre FROM public.cajas WHERE id = $1", UUID(IDS["caja_b"])
+    ) == ("Q5 Caja B")

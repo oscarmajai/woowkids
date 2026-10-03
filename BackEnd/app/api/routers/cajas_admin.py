@@ -6,6 +6,7 @@ Filtrado automático por la sucursal del usuario autenticado.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -59,11 +60,28 @@ def _branch_id(current_user: TokenData) -> str:
     return str(current_user.branch_id)
 
 
-def _resolver_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> str:
+def _asegurar_caja_editable(current_user: TokenData, caja: dict[str, Any] | None) -> None:
+    """404 si la caja no existe o no es de la sucursal de la sesión.
+
+    N14: el AdministradorSistema edita cualquier caja con la sucursal de la
+    propia caja (antes exigía una sucursal en la sesión: 400 SIN_SUCURSAL en la
+    vista "Todas las sucursales")."""
+    if caja is None:
+        raise _NOT_FOUND
+    if current_user.role == ROL_SISTEMA:
+        return
+    if caja["sucursal_id"] != _branch_id(current_user):
+        raise _NOT_FOUND
+
+
+def _resolver_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> str | None:
     """D1.1: AdministradorSistema puede consultar cualquier sucursal vía el
     parámetro opcional; el resto solo la suya (403 si pide otra). Sin el
-    parámetro, el comportamiento queda igual que hoy (la sucursal de la sesión)."""
+    parámetro, la sucursal de la sesión; N14: el AdministradorSistema sin
+    sucursal elegida ve las de todas (None)."""
     if sucursal_id is None:
+        if current_user.role == ROL_SISTEMA and current_user.branch_id is None:
+            return None
         return _branch_id(current_user)
     if current_user.role == ROL_SISTEMA:
         return str(sucursal_id)
@@ -120,11 +138,7 @@ async def editar(
     current_user: TokenData = Depends(require_permission("cajas:editar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> CajaAdminResponse:
-    sucursal_id = _branch_id(current_user)
-
-    existing = await get_caja_admin_por_id(conn, caja_id)
-    if existing is None or existing["sucursal_id"] != sucursal_id:
-        raise _NOT_FOUND
+    _asegurar_caja_editable(current_user, await get_caja_admin_por_id(conn, caja_id))
 
     try:
         row = await actualizar_caja_admin(
@@ -157,10 +171,6 @@ async def eliminar(
     current_user: TokenData = Depends(require_permission("cajas:eliminar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> None:
-    sucursal_id = _branch_id(current_user)
-
-    existing = await get_caja_admin_por_id(conn, caja_id)
-    if existing is None or existing["sucursal_id"] != sucursal_id:
-        raise _NOT_FOUND
+    _asegurar_caja_editable(current_user, await get_caja_admin_por_id(conn, caja_id))
 
     await eliminar_caja_admin(conn, caja_id=caja_id, modificado_por=current_user.sub)

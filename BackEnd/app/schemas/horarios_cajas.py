@@ -116,3 +116,6 @@ class CajaAdminResponse(BaseModel):
     activo: bool
     impresora: str | None = None
     turno_actual: TurnoActualCaja | None = None
+    # N14: para distinguir las cajas en la vista "Todas las sucursales".
+    sucursal_id: str | None = None
+    sucursal_nombre: str | None = None
