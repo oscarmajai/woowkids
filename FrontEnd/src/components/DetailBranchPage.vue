@@ -18,6 +18,7 @@ import { cajaAdminService } from '@/services/cajaAdminService'
 import { horarioService } from '@/services/horarioService'
 import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
+import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
 import type { Branch, IndicadoresSucursal } from '@/types/branch'
@@ -44,16 +45,12 @@ const formAbierto = ref(false)
 const desactivarAbierto = ref(false)
 
 // ── Indicadores por sucursal (periodo) ─────────────────────────────────────
-function primerDiaDelMes(): string {
-  const hoy = new Date()
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-}
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-const periodoDesde = ref(primerDiaDelMes())
-const periodoHasta = ref(hoyIso())
+// El periodo por defecto (mes en curso hasta hoy) se calcula en la zona de la
+// sucursal (M4): con toISOString() "hoy" era la fecha UTC. Mientras carga la
+// sucursal se usa la zona del navegador.
+const periodoDesde = ref(primerDiaDelMesEnZona())
+const periodoHasta = ref(fechaEnZona())
+let periodoAjustadoAZona = false
 const indicadores = ref<IndicadoresSucursal | null>(null)
 const indicadoresCargando = ref(false)
 const indicadoresError = ref('')
@@ -100,6 +97,11 @@ async function cargar() {
       return
     }
     branch.value = b.value
+    if (!periodoAjustadoAZona) {
+      periodoAjustadoAZona = true
+      periodoDesde.value = primerDiaDelMesEnZona(b.value.zonaHoraria)
+      periodoHasta.value = fechaEnZona(b.value.zonaHoraria)
+    }
     usuarios.value =
       users.status === 'fulfilled' ? users.value.filter((u) => u.branchId === id.value) : []
   } finally {

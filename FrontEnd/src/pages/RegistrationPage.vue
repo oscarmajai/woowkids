@@ -22,6 +22,15 @@
       <PrintVoucher v-if="store.step === 'complete'" @nuevo="router.back()" />
 
       <template v-else>
+        <div v-if="store.isLoadingInicial" class="reg-note" role="status">
+          <q-spinner color="primary" size="18px" />Cargando tarifas y pulseras disponibles…
+        </div>
+        <div v-else-if="store.errorPulseras" class="reg-note reg-note--warn" role="alert">
+          <q-icon name="error_outline" size="19px" />
+          <span class="reg-note__text">{{ store.errorPulseras }}</span>
+          <q-btn flat dense no-caps label="Reintentar" @click="store.cargarDatosIniciales()" />
+        </div>
+
         <div v-if="store.step === 'form'" class="reg-modes" role="radiogroup">
           <button
             v-for="m in MODOS"
@@ -111,7 +120,9 @@ const $q = useQuasar()
 onMounted(() => {
   // La validación de turno (y la espera de su carga async) ya la hace el
   // guard de ruta (`requiresTurno`, ver router/guards.ts) antes de entrar aquí.
-  store.loadProductos()
+  // Tarifas y pulseras se cargan aquí mismo (A14): la página debe funcionar
+  // aunque se abra por URL o tras F5, sin pasar por Control de Acceso.
+  void store.cargarDatosIniciales()
 })
 
 // Watch para detectar cuando no hay precios disponibles y redirigir
@@ -323,6 +334,10 @@ function formatHora12(horaStr: string): string {
   &--warn {
     background: var(--tone-warn-bg);
     color: var(--tone-warn-fg);
+  }
+
+  &__text {
+    flex: 1;
   }
 }
 </style>

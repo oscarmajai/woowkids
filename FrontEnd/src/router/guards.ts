@@ -60,11 +60,14 @@ export function setupRouterGuards(router: Router): void {
       // conteo real, así que este guard no aplica para él (quedaría en 0 para
       // siempre y lo bloquearía sin importar el inventario real). Solo se
       // exige el mínimo de 2 libres a roles que sí pueden verlo.
-      if (
-        accessControlStore.puedeVerPulseras &&
-        (!accessControlStore.lastUpdated || accessControlStore.pulserasLibres < 2)
-      ) {
-        return { name: 'estancias-control-acceso' }
+      // Si se entra por URL o tras F5 la lista aún no está cargada: se pide
+      // aquí (A14) en vez de rebotar a Control de Acceso. Si la carga falla
+      // se deja pasar y la página muestra el error con opción de reintentar.
+      if (accessControlStore.puedeVerPulseras) {
+        const cargadas = await accessControlStore.asegurarPulserasCargadas()
+        if (cargadas && accessControlStore.pulserasLibres < 2) {
+          return { name: 'estancias-control-acceso' }
+        }
       }
     }
 

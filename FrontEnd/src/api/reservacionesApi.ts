@@ -42,6 +42,16 @@ export const reservacionesApi = {
   actualizar: (id: string, body: ReservacionesUpdate) =>
     apiClient.patch<Reservaciones>(`/reservaciones/${id}`, body).then((r) => r.data),
 
+  /**
+   * Cierra el evento (pasa a completada). El servidor responde 409 si está
+   * cancelada o ya cerrada, si el evento aún no empieza o si queda saldo; las
+   * notas del cierre se agregan a las existentes (A8).
+   */
+  cerrar: (id: string, notas_cierre: string | null) =>
+    apiClient
+      .post<Reservaciones>(`/reservaciones/${id}/cerrar`, { notas_cierre })
+      .then((r) => r.data),
+
   eliminar: (id: string) => apiClient.delete(`/reservaciones/${id}`).then((r) => r.data),
 
   // Como seria correcto aqui?, no es por params o si?

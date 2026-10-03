@@ -9,6 +9,11 @@ import type {
 } from '@/types/reservaciones'
 import type { ReservacionCompletaRequest } from '@/types/reservaciones_completa'
 
+// Folio de la última carga pedida: si llega la respuesta de una carga anterior
+// (p. ej. el calendario cambió de mes mientras esperaba), se descarta para no
+// pintar otro rango ni encadenar recargas (A9).
+let ultimaCarga = 0
+
 interface ReservacionesState {
   reservaciones: Reservaciones[]
   loading: boolean
@@ -35,14 +40,18 @@ export const useReservacionesStore = defineStore('reservaciones', {
      * los usan para no traer todo el histórico de la sucursal.
      */
     async cargar(sucursal_id?: string, desde?: string, hasta?: string) {
+      const folio = ++ultimaCarga
       this.loading = true
       this.error = null
       try {
-        this.reservaciones = await reservacionesApi.listar(sucursal_id, desde, hasta)
+        const reservaciones = await reservacionesApi.listar(sucursal_id, desde, hasta)
+        if (folio === ultimaCarga) this.reservaciones = reservaciones
       } catch (error: unknown) {
-        this.error = mensajeDeError(error, 'Error al cargar reservaciones')
+        if (folio === ultimaCarga) {
+          this.error = mensajeDeError(error, 'Error al cargar reservaciones')
+        }
       } finally {
-        this.loading = false
+        if (folio === ultimaCarga) this.loading = false
       }
     },
     async crearReservacion(body: ReservacionesCreate) {

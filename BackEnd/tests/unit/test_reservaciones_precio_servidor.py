@@ -343,8 +343,12 @@ async def test_alta_simple_con_precio_manipulado_responde_409(repos: dict) -> No
 def _existente(**cambios: Any) -> dict[str, Any]:
     datos = {
         "id": uuid4(),
+        "sucursal_id": SUCURSAL_ID,
         "paquete_id": PAQUETE_ID,
         "activo": True,
+        "estado": "confirmada",
+        "fecha_evento": HOY + timedelta(days=30),
+        "notas": None,
         "numero_personas": 20,
         "horas_reservadas": 4,
         "hora_inicio": time(11, 0),
@@ -366,6 +370,7 @@ def _existente(**cambios: Any) -> dict[str, Any]:
 def edicion(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     actual = _existente()
     monkeypatch.setattr(paquetes_repository, "obtener", AsyncMock(return_value=PAQUETE_PREMIUM))
+    monkeypatch.setattr(reservaciones_repository, "hoy_en_sucursal", AsyncMock(return_value=HOY))
     monkeypatch.setattr(
         reservaciones_repository, "obtener_para_actualizar", AsyncMock(return_value=actual)
     )

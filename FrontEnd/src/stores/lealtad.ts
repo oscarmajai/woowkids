@@ -5,6 +5,7 @@ import {
   buscarClientesLealtad,
   exportarReporteLealtad,
   listarMovimientosLealtad,
+  obtenerConfiguracionCanjeLealtad,
   obtenerConfiguracionLealtad,
   obtenerReporteLealtad,
   obtenerSaldoLealtad,
@@ -14,6 +15,7 @@ import type { ApiError } from '@/types/auth'
 import type {
   AjustePuntosInput,
   ClienteLealtad,
+  ConfiguracionCanje,
   ConfiguracionLealtad,
   ConfiguracionLealtadInput,
   MovimientoPuntos,
@@ -57,6 +59,16 @@ export const useLealtadStore = defineStore('lealtad', {
       } finally {
         this.loading = false
       }
+    },
+    /**
+     * Valor del punto y mínimo de canje de la sucursal, para cobrar (A6). Usa
+     * el endpoint de solo lectura que permite `lealtad:redimir`: el de
+     * `configuracion` exige el permiso de configurar y al cajero le da 403.
+     * Igual que `cargarSaldo`, devuelve el dato sin guardarlo en el estado y
+     * deja pasar el error para que quien cobra deshabilite el canje.
+     */
+    async cargarConfiguracionCanje(sucursalId: string): Promise<ConfiguracionCanje> {
+      return obtenerConfiguracionCanjeLealtad(sucursalId)
     },
     async guardarConfiguracion(sucursalId: string, body: ConfiguracionLealtadInput) {
       this.configuracion = await actualizarConfiguracionLealtad(sucursalId, body)

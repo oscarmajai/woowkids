@@ -173,14 +173,18 @@ describe('PaymentModal', () => {
       branchName: 'Sucursal',
       permissions: [],
     }
-    lealtad.configuracion = { valor_punto: 1 } as unknown as typeof lealtad.configuracion
 
     type Saldo = { sucursal_id: string; celular: string; saldo: number; por_vencer: number }
     const pendientes = new Map<string, (s: Saldo) => void>()
     vi.spyOn(lealtad, 'cargarSaldo').mockImplementation(
       (_suc, celular) => new Promise<Saldo>((resolve) => pendientes.set(celular, resolve)),
     )
-    vi.spyOn(lealtad, 'cargarConfiguracion').mockResolvedValue(undefined)
+    vi.spyOn(lealtad, 'cargarConfiguracionCanje').mockResolvedValue({
+      sucursal_id: 'suc-1',
+      activo: true,
+      valor_punto: 1,
+      minimo_canje: 0,
+    })
 
     const input = wrapper.findComponent({ name: 'QInput' })
     await input.vm.$emit('update:modelValue', '5511111111')

@@ -17,6 +17,8 @@ export interface ActiveChild extends ActivoDto {
 }
 
 const EXPIRING_THRESHOLD_MINUTES = 15
+// Antigüedad máxima de la lista de pulseras para reutilizarla sin pedirla otra vez.
+const PULSERAS_MAX_EDAD_MS = 60_000
 
 export const useAccessControlStore = defineStore('accessControl', () => {
   const authStore = useAuthStore()
@@ -106,12 +108,84 @@ export const useAccessControlStore = defineStore('accessControl', () => {
     // registro; requieren un permiso aparte (pulseras:listar) y no deben
     // bloquear la lista de activos.
     // Ambas ramas se capturan: el polling no debe producir rechazos sin manejar.
+    const ok = await cargarPulseras()
+    if (!ok && puedeVerPulseras.value) error.value ??= 'No se pudo cargar la lista de pulseras.'
+  }
+
+  // ── Pulseras libres (A14) ────────────────────────────────────────────────
+  // El registro de entrada las necesita aunque se abra por URL o tras F5, sin
+  // pasar antes por Control de Acceso o Inicio. `pulserasCargadas` dice si la
+  // lista actual viene del servidor (y de qué sucursal), para no volver a
+  // pedirla si otra pantalla la acaba de traer; las peticiones simultáneas se
+  // comparten en vez de duplicarse.
+  const pulserasCargadas = ref(false)
+  let pulserasActualizadasEn = 0
+  const isLoadingPulseras = ref(false)
+  const errorPulseras = ref<string | null>(null)
+  let pulserasSucursalId: string | null = null
+  let pulserasEnCurso: Promise<boolean> | null = null
+
+  async function ejecutarCargaPulseras(sucursalId: string): Promise<boolean> {
     try {
-      pulserasDisponibles.value = await fetchPulseras(authStore.currentBranchId)
+      const lista = await fetchPulseras(sucursalId)
+      // Si mientras tanto cambió la sucursal, esta respuesta ya no aplica.
+      if (pulserasSucursalId !== sucursalId) return false
+      pulserasDisponibles.value = lista
+      pulserasCargadas.value = true
+      pulserasActualizadasEn = Date.now()
+      return true
     } catch (err) {
-      if (puedeVerPulseras.value) error.value ??= 'No se pudo cargar la lista de pulseras.'
+      if (pulserasSucursalId === sucursalId) {
+        errorPulseras.value = 'No se pudo cargar la lista de pulseras disponibles.'
+      }
       console.error(err)
+      return false
     }
+  }
+
+  /** Pide las pulseras libres al servidor. Nunca lanza: devuelve si lo logró. */
+  function cargarPulseras(): Promise<boolean> {
+    const sucursalId = authStore.currentBranchId
+    if (!sucursalId) {
+      errorPulseras.value = 'No hay una sucursal activa en la sesión.'
+      return Promise.resolve(false)
+    }
+    if (pulserasEnCurso && pulserasSucursalId === sucursalId) return pulserasEnCurso
+
+    isLoadingPulseras.value = true
+    errorPulseras.value = null
+    if (pulserasSucursalId !== sucursalId) {
+      pulserasCargadas.value = false
+      pulserasDisponibles.value = []
+    }
+    pulserasSucursalId = sucursalId
+    const peticion: Promise<boolean> = ejecutarCargaPulseras(sucursalId).finally(() => {
+      if (pulserasEnCurso === peticion) {
+        pulserasEnCurso = null
+        isLoadingPulseras.value = false
+      }
+    })
+    pulserasEnCurso = peticion
+    return peticion
+  }
+
+  /**
+   * Garantiza que las pulseras de la sucursal actual estén cargadas: si otra
+   * pantalla las trajo hace menos de `maxEdadMs` (o las está trayendo) no
+   * repite la petición; si la lista es más vieja, la refresca.
+   */
+  function asegurarPulserasCargadas(maxEdadMs = PULSERAS_MAX_EDAD_MS): Promise<boolean> {
+    const mismaSucursal = pulserasSucursalId === authStore.currentBranchId
+    const reciente = Date.now() - pulserasActualizadasEn <= maxEdadMs
+    if (pulserasCargadas.value && mismaSucursal && reciente && !pulserasEnCurso) {
+      return Promise.resolve(true)
+    }
+    return cargarPulseras()
+  }
+
+  /** Quita de la lista local las pulseras que se acaban de asignar en un registro. */
+  function descartarPulseras(ids: string[]) {
+    pulserasDisponibles.value = pulserasDisponibles.value.filter((p) => !ids.includes(p.id))
   }
 
   function formatMinutosLabel(item: ActiveChild): string {
@@ -153,6 +227,12 @@ export const useAccessControlStore = defineStore('accessControl', () => {
     pulserasLibres,
     pulserasDisponibles,
     puedeVerPulseras,
+    pulserasCargadas,
+    isLoadingPulseras,
+    errorPulseras,
+    cargarPulseras,
+    asegurarPulserasCargadas,
+    descartarPulseras,
     loadActivos,
     formatMinutosLabel,
     formatRemainingLabel,
