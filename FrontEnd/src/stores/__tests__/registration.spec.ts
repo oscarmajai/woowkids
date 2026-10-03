@@ -45,6 +45,7 @@ describe('registration store: pagos en completeRegistration', () => {
       total: 100,
       pagado: 100,
       estado: 'activo',
+      codigoAccesoPadres: 'codigo-opaco-r1',
     })
   })
 
@@ -69,5 +70,18 @@ describe('registration store: pagos en completeRegistration', () => {
 
     expect(postOnboarding).not.toHaveBeenCalled()
     expect(store.submitError).toBeTruthy()
+  })
+
+  it('guarda el código opaco del portal de padres que devuelve el backend (A17)', async () => {
+    const store = prepararRegistroListo()
+
+    await store.proceedToRFID([], 0, 100, 100)
+    await store.completeRegistration()
+
+    expect(store.codigoAccesoPadres).toBe('codigo-opaco-r1')
+    expect(store.codigoAccesoPadres).not.toBe(store.registroId)
+
+    store.reset()
+    expect(store.codigoAccesoPadres).toBe('')
   })
 })

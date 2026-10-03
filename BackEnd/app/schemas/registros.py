@@ -36,6 +36,10 @@ class OnboardingResponse(BaseModel):
     pagado: float
     estado: str
     advertenciaEfectivo: str | None = None  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    # A17 — código opaco del QR del portal de padres, en claro solo en esta
+    # respuesta (en BD queda su sha256). Caduca a las 24 h o al checkout del
+    # último niño del registro.
+    codigoAccesoPadres: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
 
 
 class CheckoutRequest(BaseModel):

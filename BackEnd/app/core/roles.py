@@ -18,3 +18,8 @@ ROL_SISTEMA = "AdministradorSistema"
 ROL_ADMINISTRADOR = "Administrador"
 
 ROLES_SIN_SUCURSAL_FIJA = (ROL_SISTEMA, ROL_ADMINISTRADOR)
+
+# Rol del token de sesión del portal de padres (POST /api/padres/auth). No es
+# una fila de ``roles``: lo emite padres_service y su ``sub`` es el id del
+# registro de estancia.
+ROL_PADRE = "PadreVisor"

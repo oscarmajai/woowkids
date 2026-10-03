@@ -70,3 +70,23 @@ async def get_fotos_llegada_by_registro_id(
         TipoFoto.LLEGADA.value,
     )
     return [dict(row) for row in rows]
+
+
+async def get_registro_id_by_foto_ine(
+    conn: asyncpg.Connection,
+    storage_url: str,
+) -> UUID | None:
+    """registro_id dueño de la foto de INE guardada en storage_url, o None si
+    no hay una INE activa con esa ruta (C6: la descarga se autoriza por el
+    registro, no por el nombre del archivo)."""
+    registro_id: UUID | None = await conn.fetchval(
+        """
+        SELECT registro_id
+        FROM fotos
+        WHERE storage_url = $1 AND tipo = $2 AND activo = TRUE
+        LIMIT 1
+        """,
+        storage_url,
+        TipoFoto.INE.value,
+    )
+    return registro_id

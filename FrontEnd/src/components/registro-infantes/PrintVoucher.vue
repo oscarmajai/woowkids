@@ -146,8 +146,11 @@ const branchName = computed(() => authStore.currentBranchName || 'Sucursal')
 const cashierName = computed(() => authStore.currentUser?.name || 'Cajero')
 
 async function generarQR() {
-  if (store.registroId) {
-    const url = `${window.location.origin}/padres/access?code=${store.registroId}`
+  // El QR lleva el código opaco del portal de padres (A17), nunca el
+  // registroId: el UUID del registro ya no da acceso.
+  if (store.codigoAccesoPadres) {
+    const code = encodeURIComponent(store.codigoAccesoPadres)
+    const url = `${window.location.origin}/padres/access?code=${code}`
     qrCodeUrl.value = await QRCode.toDataURL(url, {
       width: 100,
       margin: 1,
