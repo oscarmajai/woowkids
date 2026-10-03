@@ -66,6 +66,7 @@
               @click="abrirEditar(props.row)"
             />
             <q-btn
+              v-if="puedeEliminar"
               flat
               round
               dense
@@ -210,6 +211,8 @@ import type { Proveedor } from '@/types/proveedor'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
+// M20: eliminar (desactivar) exige inventario:eliminar_proveedor.
+const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_proveedor'))
 const store = useProveedoresStore()
 
 const cargar = () => {

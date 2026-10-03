@@ -135,6 +135,7 @@
                     <q-item-section>Editar</q-item-section>
                   </q-item>
                   <q-item
+                    v-if="puedeEliminar"
                     v-close-popup
                     clickable
                     class="text-negative"
@@ -565,6 +566,8 @@ import type { TipoMovimientoManual } from '@/types/movimientoInventario'
 const $q = useQuasar()
 const router = useRouter()
 const authStore = useAuthStore()
+// M20: eliminar (desactivar) exige inventario:eliminar_insumo.
+const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_insumo'))
 const store = useInsumosStore()
 const proveedoresStore = useProveedoresStore()
 const unidadesStore = useUnidadesMedidaStore()
