@@ -81,3 +81,40 @@ class PinTokenRequeridoError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "PIN_TOKEN_REQUERIDO", "message": mensaje},
         )
+
+
+class PrecioCambiadoError(HTTPException):
+    """El precio o el total que mandó el cliente no coincide con el que
+    calcula el servidor con el catálogo vigente (C2). No se cobra nada; el
+    frontend debe refrescar el catálogo y volver a cobrar."""
+
+    def __init__(self, mensaje: str, code: str = "PRECIO_CAMBIADO") -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": code, "message": mensaje},
+        )
+
+
+class ProductoNoDisponibleError(HTTPException):
+    """El producto existe en la sucursal pero ya no está activo (C2)."""
+
+    def __init__(self, nombre: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PRODUCTO_NO_DISPONIBLE",
+                "message": f"«{nombre}» ya no está disponible. Actualiza el pedido.",
+            },
+        )
+
+
+class PedidoInvalidoError(HTTPException):
+    """El pedido no se puede procesar tal como viene: producto inexistente o de
+    otra sucursal, cantidad fuera de rango, combo que no corresponde a su
+    definición, pago sin referencia, etc. (C2, M3, M11)."""
+
+    def __init__(self, mensaje: str, code: str = "PEDIDO_INVALIDO") -> None:
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": code, "message": mensaje},
+        )

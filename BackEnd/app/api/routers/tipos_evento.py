@@ -1,15 +1,15 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 import app.services.tipos_evento as svc
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.core.roles import ROL_SISTEMA
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.schemas.auth import TokenData
 from app.schemas.tipos_evento import TiposEventoCreate, TiposEventoOut, TiposEventoUpdate
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/tipos-evento", tags=["Tipos de Evento"])
 
@@ -29,8 +29,9 @@ async def listar_tipos_evento(
 async def obtener_tipo_evento(
     tipo_evento_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("tipos_evento:ver")),
+    current_user: TokenData = Depends(require_permission("tipos_evento:ver")),
 ) -> TiposEventoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "tipo_evento", tipo_evento_id)
     return await svc.obtener(conn, tipo_evento_id)
 
 
@@ -43,14 +44,9 @@ async def crear_tipo_evento(
     # sucursal_id siempre se deriva del usuario autenticado, nunca se confía
     # en lo que mande el cliente -- ya no existe el concepto de tipo de
     # evento "global" (sucursal_id NULL).
-    if current_user.role == ROL_SISTEMA:
-        if body.sucursal_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Debes indicar sucursal_id (AdministradorSistema ve todas).",
-            )
-    else:
-        body.sucursal_id = current_user.branch_id
+    # C1: roles con sucursal fija → la de la sesión (403 si mandan otra);
+    # AdministradorSistema → la del body o la del selector (422 sin ninguna).
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await svc.crear(conn, body)
 
 
@@ -59,8 +55,9 @@ async def actualizar_tipo_evento(
     tipo_evento_id: UUID,
     body: TiposEventoUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("tipos_evento:editar")),
+    current_user: TokenData = Depends(require_permission("tipos_evento:editar")),
 ) -> TiposEventoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "tipo_evento", tipo_evento_id)
     return await svc.actualizar(conn, tipo_evento_id, body)
 
 
@@ -68,6 +65,7 @@ async def actualizar_tipo_evento(
 async def eliminar_tipo_evento(
     tipo_evento_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("tipos_evento:eliminar")),
+    current_user: TokenData = Depends(require_permission("tipos_evento:eliminar")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "tipo_evento", tipo_evento_id)
     await svc.eliminar(conn, tipo_evento_id)

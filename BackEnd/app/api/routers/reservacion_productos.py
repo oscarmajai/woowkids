@@ -12,6 +12,7 @@ from app.schemas.reservacion_productos import (
     ReservacionProductosOut,
     ReservacionProductosUpdate,
 )
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/reservacion-productos", tags=["Reservación Productos"])
 
@@ -22,6 +23,7 @@ async def listar_por_reservacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> list[ReservacionProductosOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     return await svc.listar_por_reservacion(conn, reservacion_id, current_user)
 
 
@@ -29,8 +31,11 @@ async def listar_por_reservacion(
 async def obtener_reservacion_producto(
     reservacion_producto_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> ReservacionProductosOut:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_producto", reservacion_producto_id
+    )
     return await svc.obtener(conn, reservacion_producto_id)
 
 
@@ -40,6 +45,9 @@ async def crear_reservacion_producto(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> ReservacionProductosOut:
+    # C1: la reservación y el producto deben ser de la sucursal de la sesión.
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", body.producto_id)
     return await svc.crear(conn, body, current_user)
 
 
@@ -48,8 +56,11 @@ async def actualizar_reservacion_producto(
     reservacion_producto_id: UUID,
     body: ReservacionProductosUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> ReservacionProductosOut:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_producto", reservacion_producto_id
+    )
     return await svc.actualizar(conn, reservacion_producto_id, body)
 
 
@@ -57,6 +68,9 @@ async def actualizar_reservacion_producto(
 async def eliminar_reservacion_producto(
     reservacion_producto_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> None:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_producto", reservacion_producto_id
+    )
     await svc.eliminar(conn, reservacion_producto_id)

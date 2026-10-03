@@ -370,9 +370,9 @@ const productosTotalNum = computed(() =>
 const totalNum = computed(() => parseFloat(reservacion.value?.precio_total ?? '0'))
 
 // ── Pagos y saldo ────────────────────────────────────────────────────────────
-// El saldo se calcula sumando los pagos reales (pagos_reservacion) en vez de
-// confiar en reservaciones.saldo_pendiente: esa columna generada se basa en el
-// campo anticipo, que no se actualiza automáticamente al registrar un pago.
+// El saldo viene del servidor: desde la migración 075 `saldo_pendiente` es
+// precio_total - monto_pagado, y monto_pagado suma todos los pagos menos el
+// cambio entregado. Sumar aquí los pagos contaba ese cambio como ingreso.
 
 const pagosDetallados = computed(() =>
   pagos.value
@@ -385,9 +385,8 @@ const pagosDetallados = computed(() =>
     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()),
 )
 
-const totalPagado = computed(() => pagos.value.reduce((sum, p) => sum + parseFloat(p.monto), 0))
 const saldoPendiente = computed(() =>
-  Math.max(0, redondear2(redondear2(totalNum.value) - redondear2(totalPagado.value))),
+  Math.max(0, redondear2(parseFloat(reservacion.value?.saldo_pendiente ?? '0') || 0)),
 )
 const tieneSaldo = computed(() => saldoPendiente.value > TOLERANCIA_MONTO)
 

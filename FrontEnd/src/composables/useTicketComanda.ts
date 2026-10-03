@@ -262,6 +262,51 @@ export function useTicketComanda() {
     }
   }
 
+  /**
+   * Alinea el pedido con el catálogo vigente después de que el backend rechazó
+   * el cobro porque un precio cambió o un producto ya no está (409, C2): cada
+   * producto toma el precio y los datos del catálogo, y los que ya no aparecen
+   * se quitan junto con sus hijos de combo. Devuelve los nombres afectados
+   * para avisarle al cajero antes de que vuelva a cobrar.
+   */
+  function actualizarPrecios(catalogo: Producto[]): {
+    actualizados: string[]
+    eliminados: string[]
+  } {
+    const vigentes = new Map(catalogo.map((p) => [p.id, p]))
+    const actualizados = new Set<string>()
+    const eliminados = new Set<string>()
+    const padresEliminados = new Set<string>()
+
+    for (const item of itemsTicket.value) {
+      if (item.es_hijo_combo) continue
+      const vigente = vigentes.get(item.producto.id)
+      if (!vigente) {
+        eliminados.add(item.producto.nombre)
+        padresEliminados.add(item.id)
+        continue
+      }
+      if (vigente.precio_unitario !== item.producto.precio_unitario) {
+        actualizados.add(vigente.nombre)
+      }
+      item.producto = { ...item.producto, ...vigente }
+    }
+
+    if (padresEliminados.size > 0) {
+      itemsTicket.value = itemsTicket.value.filter(
+        (i) =>
+          !padresEliminados.has(i.id) &&
+          !(i.padreTicketId && padresEliminados.has(i.padreTicketId)),
+      )
+      for (const id of padresEliminados) {
+        comboInstances.delete(id)
+        prevParentQty.delete(id)
+      }
+    }
+
+    return { actualizados: [...actualizados], eliminados: [...eliminados] }
+  }
+
   function cancelarOrden() {
     itemsTicket.value = []
     comboInstances.clear()
@@ -336,6 +381,7 @@ export function useTicketComanda() {
     cancelarOrden,
     guardarNotas,
     detallesParaEnvio,
+    actualizarPrecios,
     nombreCliente,
   }
 }

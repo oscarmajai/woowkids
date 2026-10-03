@@ -93,6 +93,19 @@ jobs:
     needs: cambios
     if: needs.cambios.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    # PostgreSQL real para los tests de BD (concurrencia, SQL): tests/db.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: woowkids
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d woowkids"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     defaults:
       run:
         working-directory: BackEnd
@@ -114,6 +127,13 @@ jobs:
         run: mypy app
       - name: Pytest (unitarios)
         run: pytest tests/unit -q
+      - name: Pytest (BD real)
+        env:
+          TEST_DATABASE_URL: postgresql://dev:dev@localhost:5432/woowkids
+          PGPASSWORD: dev
+        run: |
+          psql -h localhost -U dev -d woowkids -v ON_ERROR_STOP=1 -q -f sql/schema_maestro.sql
+          pytest tests/db -q
 
   backend-migraciones:
     name: Backend · migraciones y schema maestro
@@ -158,5 +178,12 @@ jobs:
         with:
           context: BackEnd
           push: false
+          load: true
+          tags: woowkids-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
+      # El arranque aplica las migraciones pendientes: se prueba contra un
+      # PostgreSQL real (BD nueva, BD previa al control, migración nueva y una
+      # que falla).
+      - name: Control de migraciones del arranque
+        run: BackEnd/scripts/probar_control_migraciones.sh woowkids-backend:ci

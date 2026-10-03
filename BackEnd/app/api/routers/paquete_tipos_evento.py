@@ -8,6 +8,7 @@ from app.api.deps import require_permission
 from app.core.database import get_db
 from app.schemas.auth import TokenData
 from app.schemas.paquete_tipos_evento import PaqueteTiposEventoCreate, PaqueteTiposEventoOut
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/paquete-tipos-evento", tags=["Paquete Tipos de Evento"])
 
@@ -16,8 +17,9 @@ router = APIRouter(prefix="/api/paquete-tipos-evento", tags=["Paquete Tipos de E
 async def listar_por_paquete(
     paquete_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("paquetes:ver")),
+    current_user: TokenData = Depends(require_permission("paquetes:ver")),
 ) -> list[PaqueteTiposEventoOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "paquete", paquete_id)
     return await svc.listar_por_paquete(conn, paquete_id)
 
 
@@ -25,8 +27,10 @@ async def listar_por_paquete(
 async def agregar_tipo_evento(
     body: PaqueteTiposEventoCreate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("paquetes:editar")),
+    current_user: TokenData = Depends(require_permission("paquetes:editar")),
 ) -> PaqueteTiposEventoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "paquete", body.paquete_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "tipo_evento", body.tipo_evento_id)
     return await svc.agregar(conn, body)
 
 
@@ -35,6 +39,7 @@ async def eliminar_tipo_evento(
     paquete_id: UUID,
     tipo_evento_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("paquetes:editar")),
+    current_user: TokenData = Depends(require_permission("paquetes:editar")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "paquete", paquete_id)
     await svc.eliminar(conn, paquete_id, tipo_evento_id)

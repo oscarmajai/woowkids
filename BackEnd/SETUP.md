@@ -77,6 +77,23 @@ docker compose -f docker-compose.dev.yml up -d     # Postgres :5433 + MinIO :900
 `sql/migrations/` en orden. Es la forma de comprobar que una migración nueva
 funciona desde cero, no solo sobre una BD que ya tiene datos.
 
+### Cómo se aplican las migraciones en producción
+
+Al arrancar, `docker/entrypoint.sh` aplica solo las migraciones de
+`sql/migrations/` que falten (orden byte a byte del nombre) y registra cada una
+en `public.schema_migraciones`. Una BD vacía se crea con `sql/schema_maestro.sql`
+y todas quedan registradas. Reglas para una migración nueva:
+
+- **No la edites una vez publicada**: se aplica una sola vez por instalación;
+  un cambio posterior va en otra migración.
+- **Sin `BEGIN`/`COMMIT` propios**: el arranque la corre en una transacción
+  junto con su registro. Si falla, no queda a medias ni registrada y el
+  contenedor no arranca (el error queda en los logs).
+- **Regenera el maestro** (`./scripts/generar_schema_maestro.sh`) y commitéalo
+  con la migración; el CI lo verifica.
+- `./scripts/probar_control_migraciones.sh <imagen>` prueba el mecanismo
+  completo contra un PostgreSQL real (el CI lo corre en cada cambio del backend).
+
 El `.env` ya apunta al stack local; las cadenas de la BD compartida quedaron
 comentadas ahí mismo para volver a ellas cuando haga falta.
 

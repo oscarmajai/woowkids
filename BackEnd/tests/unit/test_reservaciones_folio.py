@@ -7,14 +7,16 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from app.repositories import reservaciones_repository
+from app.repositories import paquetes_repository, reservaciones_repository
 from app.schemas.reservaciones import ReservacionesCrear, ReservacionesOut
 from app.services import reservaciones
+
+SUCURSAL_ID = uuid4()
 
 
 def _body() -> ReservacionesCrear:
     return ReservacionesCrear(
-        sucursal_id=uuid4(),
+        sucursal_id=SUCURSAL_ID,
         tipo_evento_id=uuid4(),
         paquete_id=uuid4(),
         nombre_cliente="Cliente de prueba",
@@ -33,6 +35,28 @@ def _body() -> ReservacionesCrear:
 async def test_crear_asigna_el_folio_antes_de_insertar(monkeypatch):
     monkeypatch.setattr(
         reservaciones_repository, "siguiente_folio", AsyncMock(return_value="R-0042")
+    )
+    # crear() recalcula el precio con el paquete y revisa el plazo (C2/C3):
+    # paquete de $500 sin pulseras y evento lejano.
+    monkeypatch.setattr(
+        paquetes_repository,
+        "obtener",
+        AsyncMock(
+            return_value={
+                "id": uuid4(),
+                "sucursal_id": SUCURSAL_ID,
+                "nombre": "Básico",
+                "activo": True,
+                "min_invitados": 1,
+                "max_invitados": 10,
+                "precio_base": Decimal("500.00"),
+                "precio_hora_pulsera": Decimal("0"),
+                "anticipo_porcentaje": None,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        reservaciones_repository, "hoy_en_sucursal", AsyncMock(return_value=date(2025, 12, 1))
     )
 
     capturado: dict = {}

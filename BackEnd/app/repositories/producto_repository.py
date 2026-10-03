@@ -252,3 +252,45 @@ async def get_producto_estancia_by_branch_id(
         sucursal_id,
     )
     return row if row else None
+
+
+async def obtener_para_venta(
+    conn: asyncpg.Connection, producto_ids: list[UUID]
+) -> dict[UUID, dict[str, Any]]:
+    """Datos de catálogo que el cobro necesita para recalcular precios en el
+    servidor (C2): precio vigente, tipo, si es combo, si está activo y su
+    sucursal. Devuelve un dict por id; los ids que no existen no aparecen."""
+    if not producto_ids:
+        return {}
+    rows = await conn.fetch(
+        """
+        SELECT id, nombre, precio_unitario, tipo, es_combo, activo, sucursal_id
+        FROM public.productos
+        WHERE id = ANY($1::uuid[])
+        """,
+        producto_ids,
+    )
+    return {r["id"]: dict(r) for r in rows}
+
+
+async def obtener_definiciones_combo(
+    conn: asyncpg.Connection, combo_ids: list[UUID]
+) -> dict[UUID, dict[UUID, int]]:
+    """Composición vigente (producto_combo activo) de cada combo:
+    {combo_id: {producto_id: cantidad}}. Un combo sin integrantes activos no
+    aparece en el resultado."""
+    if not combo_ids:
+        return {}
+    rows = await conn.fetch(
+        """
+        SELECT combo_id, producto_id, SUM(cantidad)::int AS cantidad
+        FROM public.producto_combo
+        WHERE combo_id = ANY($1::uuid[]) AND activo = TRUE
+        GROUP BY combo_id, producto_id
+        """,
+        combo_ids,
+    )
+    definiciones: dict[UUID, dict[UUID, int]] = {}
+    for r in rows:
+        definiciones.setdefault(r["combo_id"], {})[r["producto_id"]] = r["cantidad"]
+    return definiciones

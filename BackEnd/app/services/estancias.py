@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -32,6 +32,7 @@ from app.repositories.tutores import get_tutor_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
 from app.services import lealtad_service
+from app.services.padres_service import emitir_codigo_acceso
 from app.services.tramos_estancia import tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
 
@@ -53,6 +54,10 @@ async def _validar_pulseras_disponibles(
             raise HTTPException(409, "La pulsera seleccionada ya fue usada o no está disponible")
 
         pulseras_validadas.add(pulsera_id)
+
+
+def _a_centavos(valor: Decimal) -> Decimal:
+    return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 async def create_estancia(
@@ -295,6 +300,8 @@ async def create_estancia(
                             "configuración de estancia",
                         )
 
+                # Se guarda el producto de estancia con el que se calculó el
+                # precio, no el productoId que mande el cliente (C2).
                 await insert_detalle_registro(
                     conn,
                     data.sucursalId,
@@ -307,7 +314,7 @@ async def create_estancia(
                     usuario_id,
                     d.cantidad,
                     precio,
-                    d.productoId,
+                    producto_estancia["id"],
                 )
 
                 # El precio del tramo es por hora (igual que el frontend y el checkout).
@@ -329,6 +336,27 @@ async def create_estancia(
                     registro_id=registro_id,
                 )
                 total = max(total - descuento_puntos, Decimal(0))
+
+            # 4.6 C2: el total lo calcula el servidor con los tramos del
+            # producto de estancia (arriba). Lo que entra a caja menos el
+            # cambio tiene que ser exactamente ese total; si no, el cliente
+            # cobró con otro precio y se rechaza sin registrar nada.
+            neto_pagado = (
+                sum((Decimal(str(p.monto)) for p in data.pagos or []), Decimal(0)) - cambio
+            )
+            if _a_centavos(neto_pagado) != _a_centavos(total):
+                raise HTTPException(
+                    409,
+                    detail={
+                        "code": "MONTO_NO_COINCIDE",
+                        "message": (
+                            f"El total de la estancia es ${_a_centavos(total):,.2f} y los "
+                            f"pagos menos el cambio suman ${_a_centavos(neto_pagado):,.2f}. "
+                            "Vuelve a cobrar."
+                        ),
+                        "total": float(total),
+                    },
+                )
 
             # 5. pagos
             total_pagado = 0.0
@@ -374,20 +402,19 @@ async def create_estancia(
             # 6. actualizar total
             await registro_update_total(conn, usuario_id, registro_id, total)
 
-            # 7. activar si ya pagó todo
-            if total_pagado >= total:
-                await change_registro_estado(conn, EstadoRegistro.ACTIVO, usuario_id, registro_id)
-            else:
-                raise HTTPException(
-                    400, "No se pudo activar el registro porque no se pagó el total"
-                )
+            # 7. activar: el pago ya se validó contra el total en 4.6
+            await change_registro_estado(conn, EstadoRegistro.ACTIVO, usuario_id, registro_id)
 
             resultado = {
                 "registroId": registro_id,
                 "total": total,
                 "pagado": total_pagado,
-                "estado": "A" if total_pagado >= total else "P",
+                "estado": "A",
             }
+
+        # A17 — código opaco del QR del comprobante (portal de padres), dentro
+        # de la transacción: si el registro se revierte, el código también.
+        resultado["codigoAccesoPadres"] = await emitir_codigo_acceso(conn, registro_id, usuario_id)
 
     # Se notifica ya fuera de la transacción, para no avisar a los clientes
     # de datos que todavía podrían revertirse por un rollback.

@@ -25,6 +25,7 @@ from app.repositories.caja_repository import (
     actualizar_admin_autorizacion,
     actualizar_conteo_apertura,
     actualizar_estado_apertura,
+    bloquear_apertura,
     calcular_efectivo_disponible,
     contar_historial_cierres,
     contar_ventas_apertura,
@@ -354,43 +355,52 @@ async def obtener_turno_activo(
 async def iniciar_conteo(
     conn: asyncpg.Connection, user_id: str, turno_id: str
 ) -> TurnoActivoResponse:
-    apertura = await get_apertura_por_id(conn, turno_id)
-    if not apertura or str(apertura["cajero_id"]) != user_id:
-        raise TurnoNoEncontradoError()
+    # C4: la validación del estado y la transición van bajo el bloqueo de la
+    # apertura, igual que retiros/ingresos, para que nada entre en medio.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, turno_id)
+        if not apertura or str(apertura["cajero_id"]) != user_id:
+            raise TurnoNoEncontradoError()
 
-    if apertura["estado"] != "ABIERTA":
-        raise TransicionInvalidaError(
-            "Solo se puede iniciar el conteo desde un turno operando (ABIERTA)."
-        )
+        if apertura["estado"] != "ABIERTA":
+            raise TransicionInvalidaError(
+                "Solo se puede iniciar el conteo desde un turno operando (ABIERTA)."
+            )
 
-    await actualizar_estado_apertura(conn, turno_id, "EN_CORTE")
+        await actualizar_estado_apertura(conn, turno_id, "EN_CORTE")
     return await obtener_turno_activo(conn, user_id)
 
 
 async def enviar_conteo(
     conn: asyncpg.Connection, user_id: str, payload: ConteoPayload
 ) -> TurnoActivoResponse:
-    apertura = await get_apertura_por_id(conn, payload.turno_id)
-    if not apertura or str(apertura["cajero_id"]) != user_id:
-        raise TurnoNoEncontradoError()
-
-    if apertura["estado"] != "EN_CORTE":
-        raise TransicionInvalidaError("Debes iniciar el conteo antes de enviar la declaración.")
-
-    # RN-VAL-001: una vez enviado el conteo queda congelado hasta que se cancele explícitamente.
-    if apertura["monto_declarado"] is not None:
-        raise TransicionInvalidaError(
-            "El conteo ya fue enviado y está congelado esperando revisión del administrador."
-        )
-
     conteo_json = json.dumps(
         {
             "desglose_efectivo": payload.desglose_efectivo.model_dump(mode="json"),
             "metodos_pago": [m.model_dump(mode="json") for m in payload.metodos_pago],
         }
     )
-    await actualizar_conteo_apertura(conn, payload.turno_id, payload.total_declarado, conteo_json)
-    await actualizar_estado_apertura(conn, payload.turno_id, "EN_CORTE")
+    # C4: con el bloqueo, un segundo envío simultáneo ve el conteo ya guardado
+    # y se rechaza en vez de sobrescribirlo.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, payload.turno_id)
+        if not apertura or str(apertura["cajero_id"]) != user_id:
+            raise TurnoNoEncontradoError()
+
+        if apertura["estado"] != "EN_CORTE":
+            raise TransicionInvalidaError("Debes iniciar el conteo antes de enviar la declaración.")
+
+        # RN-VAL-001: una vez enviado el conteo queda congelado hasta que se cancele
+        # explícitamente.
+        if apertura["monto_declarado"] is not None:
+            raise TransicionInvalidaError(
+                "El conteo ya fue enviado y está congelado esperando revisión del administrador."
+            )
+
+        await actualizar_conteo_apertura(
+            conn, payload.turno_id, payload.total_declarado, conteo_json
+        )
+        await actualizar_estado_apertura(conn, payload.turno_id, "EN_CORTE")
     res = await obtener_turno_activo(conn, user_id)
     res.estado = "ESPERANDO_REVISION"
     return res
@@ -543,28 +553,32 @@ async def autenticar_admin_revision(
         conn, payload.admin_email, payload.admin_password
     )
 
-    # 3. Calcular montos esperados reales para el turno
-    apertura = await get_apertura_por_id(conn, payload.turno_id)
-    if not apertura:
-        raise TurnoNoEncontradoError()
+    # 3. Calcular montos esperados reales para el turno. C4: bajo el bloqueo de
+    # la apertura, para no autorizar un conteo que otra petición está cancelando.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, payload.turno_id)
+        if not apertura:
+            raise TurnoNoEncontradoError()
 
-    if apertura["estado"] == "CERRADA":
-        raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
+        if apertura["estado"] == "CERRADA":
+            raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
-    # Validar que el administrador pertenezca a la misma sucursal de la caja
-    admin_sucursal = admin_row.get("sucursal_id")
-    turno_sucursal = apertura.get("sucursal_id")
-    if admin_sucursal and turno_sucursal and str(admin_sucursal) != str(turno_sucursal):
-        raise CredencialesAdminInvalidasError("El administrador no está asignado a esta sucursal.")
+        # Validar que el administrador pertenezca a la misma sucursal de la caja
+        admin_sucursal = admin_row.get("sucursal_id")
+        turno_sucursal = apertura.get("sucursal_id")
+        if admin_sucursal and turno_sucursal and str(admin_sucursal) != str(turno_sucursal):
+            raise CredencialesAdminInvalidasError(
+                "El administrador no está asignado a esta sucursal."
+            )
 
-    if apertura["monto_declarado"] is None:
-        raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
+        if apertura["monto_declarado"] is None:
+            raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
 
-    total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
-        conn, apertura, payload.turno_id
-    )
+        total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
+            conn, apertura, payload.turno_id
+        )
 
-    await actualizar_admin_autorizacion(conn, payload.turno_id, str(admin_row["id"]))
+        await actualizar_admin_autorizacion(conn, payload.turno_id, str(admin_row["id"]))
 
     return RevisionAdminResponse(
         autorizado=True,
@@ -679,21 +693,25 @@ async def validar_pin_admin(
 async def cancelar_conteo(
     conn: asyncpg.Connection, user_id: str, turno_id: str
 ) -> TurnoActivoResponse:
-    apertura = await get_apertura_por_id(conn, turno_id)
-    if not apertura:
-        raise TurnoNoEncontradoError()
+    # C4: bajo el bloqueo de la apertura, para que una revisión del admin que
+    # llega al mismo tiempo no quede autorizada sobre un conteo ya cancelado.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, turno_id)
+        if not apertura:
+            raise TurnoNoEncontradoError()
 
-    if apertura["estado"] != "EN_CORTE":
-        raise TransicionInvalidaError("Solo se puede cancelar un conteo en curso.")
+        if apertura["estado"] != "EN_CORTE":
+            raise TransicionInvalidaError("Solo se puede cancelar un conteo en curso.")
 
-    # RN-VAL-001: una vez que el admin autorizó la revisión, el cajero ya no puede cancelar.
-    if apertura["token_admin_jti"] is not None:
-        raise TransicionInvalidaError(
-            "No se puede cancelar: la revisión del administrador ya fue autorizada."
-        )
+        # RN-VAL-001: una vez que el admin autorizó la revisión, el cajero ya no puede
+        # cancelar.
+        if apertura["token_admin_jti"] is not None:
+            raise TransicionInvalidaError(
+                "No se puede cancelar: la revisión del administrador ya fue autorizada."
+            )
 
-    await resetear_conteo_apertura(conn, turno_id)
-    await actualizar_estado_apertura(conn, turno_id, "ABIERTA")
+        await resetear_conteo_apertura(conn, turno_id)
+        await actualizar_estado_apertura(conn, turno_id, "ABIERTA")
     return await obtener_turno_activo(conn, user_id)
 
 
@@ -724,25 +742,29 @@ async def verificar_turno_abierto(conn: asyncpg.Connection, user_id: str) -> Non
 async def crear_retiro(
     conn: asyncpg.Connection, user_id: str, payload: RetiroParcialCreate
 ) -> RetiroParcialResponse:
-    apertura = await get_apertura_por_id(conn, payload.apertura_caja_id)
-    if not apertura or str(apertura["cajero_id"]) != user_id:
-        raise TurnoNoEncontradoError()
-
-    if apertura["estado"] != "ABIERTA":
-        raise TransicionInvalidaError(
-            "No se pueden registrar retiros mientras el turno está en conteo o cierre."
-        )
-
-    # RN: un retiro no puede dejar el efectivo esperado en negativo -- misma fórmula
-    # que _calcular_balance para "efectivo esperado", pero evaluada en el momento del
-    # retiro (sin depender del conteo de cierre, que aún no existe con el turno ABIERTA).
-    efectivo_disponible = await calcular_efectivo_disponible(
-        conn, payload.apertura_caja_id, Decimal(str(apertura["fondo_inicial"]))
-    )
-    if payload.monto > efectivo_disponible:
-        raise EfectivoInsuficienteError(efectivo_disponible)
-
+    # C4: bloquear la apertura ANTES de calcular el disponible. Sin el bloqueo,
+    # dos retiros simultáneos leían el mismo disponible, ambos pasaban la
+    # validación y la caja quedaba en negativo. Con él, el segundo espera a que
+    # el primero confirme y calcula el disponible ya descontado.
     async with conn.transaction():
+        apertura = await bloquear_apertura(conn, payload.apertura_caja_id)
+        if not apertura or str(apertura["cajero_id"]) != user_id:
+            raise TurnoNoEncontradoError()
+
+        if apertura["estado"] != "ABIERTA":
+            raise TransicionInvalidaError(
+                "No se pueden registrar retiros mientras el turno está en conteo o cierre."
+            )
+
+        # RN: un retiro no puede dejar el efectivo esperado en negativo -- misma fórmula
+        # que _calcular_balance para "efectivo esperado", pero evaluada en el momento del
+        # retiro (sin depender del conteo de cierre, que aún no existe con el turno ABIERTA).
+        efectivo_disponible = await calcular_efectivo_disponible(
+            conn, payload.apertura_caja_id, Decimal(str(apertura["fondo_inicial"]))
+        )
+        if payload.monto > efectivo_disponible:
+            raise EfectivoInsuficienteError(efectivo_disponible)
+
         row = await crear_retiro_parcial(
             conn,
             apertura_caja_id=payload.apertura_caja_id,
@@ -826,22 +848,26 @@ async def listar_retiros(conn: asyncpg.Connection, turno_id: str) -> list[Retiro
 async def crear_ingreso(
     conn: asyncpg.Connection, user_id: str, payload: IngresoEfectivoCreate
 ) -> IngresoEfectivoResponse:
-    apertura = await get_apertura_por_id(conn, payload.apertura_caja_id)
-    if not apertura or str(apertura["cajero_id"]) != user_id:
-        raise TurnoNoEncontradoError()
+    # C4: mismo bloqueo que crear_retiro, para que un ingreso no entre después de
+    # que otra petición pasó el turno a conteo.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, payload.apertura_caja_id)
+        if not apertura or str(apertura["cajero_id"]) != user_id:
+            raise TurnoNoEncontradoError()
 
-    if apertura["estado"] != "ABIERTA":
-        raise TransicionInvalidaError(
-            "No se pueden registrar ingresos de efectivo mientras el turno está en conteo o cierre."
+        if apertura["estado"] != "ABIERTA":
+            raise TransicionInvalidaError(
+                "No se pueden registrar ingresos de efectivo mientras el turno está en conteo "
+                "o cierre."
+            )
+
+        row = await registrar_ingreso_efectivo(
+            conn,
+            apertura_caja_id=payload.apertura_caja_id,
+            referencia_id=payload.apertura_caja_id,
+            monto=payload.monto,
+            creado_por=user_id,
         )
-
-    row = await registrar_ingreso_efectivo(
-        conn,
-        apertura_caja_id=payload.apertura_caja_id,
-        referencia_id=payload.apertura_caja_id,
-        monto=payload.monto,
-        creado_por=user_id,
-    )
     return IngresoEfectivoResponse(
         id=str(row["id"]),
         apertura_caja_id=str(row["apertura_caja_id"]),
@@ -855,53 +881,61 @@ async def confirmar_cierre(
     user_id: str,
     payload: ConfirmarCierrePayload,
 ) -> ConfirmarCierreResponse:
-    apertura = await get_apertura_por_id(conn, payload.turno_id)
-    if not apertura:
-        raise TurnoNoEncontradoError()
+    # C4: todo el cierre bajo el bloqueo de la apertura y en una sola transacción.
+    # Dos confirmaciones simultáneas: la segunda espera, ve el turno CERRADA y
+    # recibe 409 (antes chocaba con el índice único de cierre_caja y daba 500).
+    # Si algo falla a medias, no queda un cierre_caja sin la apertura cerrada ni
+    # tokens de PIN consumidos.
+    async with conn.transaction():
+        apertura = await bloquear_apertura(conn, payload.turno_id)
+        if not apertura:
+            raise TurnoNoEncontradoError()
 
-    if apertura["estado"] == "CERRADA":
-        raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
+        if apertura["estado"] == "CERRADA":
+            raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
-    if apertura["monto_declarado"] is None:
-        raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
+        if apertura["monto_declarado"] is None:
+            raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
 
-    if apertura["token_admin_jti"] is None:
-        raise TransicionInvalidaError("Aún no se ha autorizado la revisión de un administrador.")
+        if apertura["token_admin_jti"] is None:
+            raise TransicionInvalidaError(
+                "Aún no se ha autorizado la revisión de un administrador."
+            )
 
-    # QA #14: exige y consume los tokens de un solo uso de cajero y admin.
-    if settings.exigir_pin_token:
-        if not payload.token_pin_cajero or not payload.token_pin_admin:
-            raise PinTokenRequeridoError()
-        await _validar_y_consumir_token_pin(
-            conn, payload.token_pin_cajero, payload.turno_id, "cajero"
+        # QA #14: exige y consume los tokens de un solo uso de cajero y admin.
+        if settings.exigir_pin_token:
+            if not payload.token_pin_cajero or not payload.token_pin_admin:
+                raise PinTokenRequeridoError()
+            await _validar_y_consumir_token_pin(
+                conn, payload.token_pin_cajero, payload.turno_id, "cajero"
+            )
+            await _validar_y_consumir_token_pin(
+                conn, payload.token_pin_admin, payload.turno_id, "admin"
+            )
+
+        admin_id = str(apertura["token_admin_jti"])
+        total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
+            conn, apertura, payload.turno_id
         )
-        await _validar_y_consumir_token_pin(
-            conn, payload.token_pin_admin, payload.turno_id, "admin"
+
+        # Las observaciones son siempre opcionales, haya o no diferencia — el cajero/admin
+        # las agrega si quiere dejar contexto, pero el sistema no lo exige.
+
+        # Crear el registro inmutable en cierre_caja
+        cierre = await crear_cierre_caja(
+            conn,
+            apertura_caja_id=payload.turno_id,
+            tipo_cierre=payload.tipo_cierre.value,
+            monto_sistema=total_esperado,
+            monto_cierre=total_declarado,
+            cajero_id=str(apertura["cajero_id"]),
+            administrador_id=admin_id,
+            observaciones=payload.observaciones,
+            creado_por=user_id,
         )
 
-    admin_id = str(apertura["token_admin_jti"])
-    total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
-        conn, apertura, payload.turno_id
-    )
-
-    # Las observaciones son siempre opcionales, haya o no diferencia — el cajero/admin
-    # las agrega si quiere dejar contexto, pero el sistema no lo exige.
-
-    # Crear el registro inmutable en cierre_caja
-    cierre = await crear_cierre_caja(
-        conn,
-        apertura_caja_id=payload.turno_id,
-        tipo_cierre=payload.tipo_cierre.value,
-        monto_sistema=total_esperado,
-        monto_cierre=total_declarado,
-        cajero_id=str(apertura["cajero_id"]),
-        administrador_id=admin_id,
-        observaciones=payload.observaciones,
-        creado_por=user_id,
-    )
-
-    # Transicionar el estado de la apertura a CERRADA (RN-VAL-007)
-    await actualizar_estado_apertura(conn, payload.turno_id, "CERRADA")
+        # Transicionar el estado de la apertura a CERRADA (RN-VAL-007)
+        await actualizar_estado_apertura(conn, payload.turno_id, "CERRADA")
 
     return ConfirmarCierreResponse(
         arqueo_id=str(cierre["id"]),

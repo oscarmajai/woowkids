@@ -5,7 +5,7 @@ from uuid import UUID
 
 import asyncpg
 
-from app.core.roles import ROL_ADMINISTRADOR, ROL_SISTEMA
+from app.core.roles import ROL_SISTEMA
 from app.repositories.branch_repository import (
     SucursalRecord,
     create_sucursal,
@@ -87,11 +87,17 @@ async def list_branches(conn: asyncpg.Connection, current_user: TokenData) -> li
     return [_to_response(record)] if record else []
 
 
+def _asegurar_sucursal_propia(current_user: TokenData, branch_id: UUID) -> None:
+    """C1: cualquier rol con sucursal fija (no solo Administrador) solo opera
+    sobre su propia sucursal; AdministradorSistema sobre todas."""
+    if current_user.role != ROL_SISTEMA and current_user.branch_id != branch_id:
+        raise InsufficientPermissionsError
+
+
 async def get_branch(
     conn: asyncpg.Connection, branch_id: UUID, current_user: TokenData
 ) -> BranchResponse:
-    if current_user.role == ROL_ADMINISTRADOR and current_user.branch_id != branch_id:
-        raise InsufficientPermissionsError
+    _asegurar_sucursal_propia(current_user, branch_id)
     record = await get_sucursal_by_id(conn, branch_id)
     if record is None:
         raise BranchNotFoundError
@@ -145,6 +151,7 @@ async def update_branch(
     data: BranchUpdateRequest,
     current_user: TokenData,
 ) -> BranchResponse:
+    _asegurar_sucursal_propia(current_user, branch_id)
     record = await get_sucursal_by_id(conn, branch_id)
     if record is None:
         raise BranchNotFoundError
@@ -196,6 +203,7 @@ async def update_branch(
 async def deactivate_branch(
     conn: asyncpg.Connection, branch_id: UUID, current_user: TokenData
 ) -> None:
+    _asegurar_sucursal_propia(current_user, branch_id)
     deactivated = await deactivate_sucursal(conn, branch_id, UUID(current_user.sub))
     if not deactivated:
         raise BranchNotFoundError
@@ -204,6 +212,7 @@ async def deactivate_branch(
 async def reactivate_branch(
     conn: asyncpg.Connection, branch_id: UUID, current_user: TokenData
 ) -> None:
+    _asegurar_sucursal_propia(current_user, branch_id)
     reactivated = await reactivate_sucursal(conn, branch_id, UUID(current_user.sub))
     if not reactivated:
         raise BranchNotFoundError
@@ -216,8 +225,7 @@ async def get_indicadores(
     hasta: date,
     current_user: TokenData,
 ) -> IndicadoresSucursalResponse:
-    if current_user.role == ROL_ADMINISTRADOR and current_user.branch_id != branch_id:
-        raise InsufficientPermissionsError
+    _asegurar_sucursal_propia(current_user, branch_id)
     record = await get_sucursal_by_id(conn, branch_id)
     if record is None:
         raise BranchNotFoundError

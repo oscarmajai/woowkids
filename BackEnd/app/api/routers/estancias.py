@@ -19,7 +19,7 @@ from starlette import status
 
 from app.api.deps import apertura_operando_id, require_permission, resolve_ws_auth
 from app.core.database import get_db
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
 from app.schemas.pagos import PagoEstanciaExtraRequest
@@ -32,7 +32,7 @@ from app.schemas.registros import (
     OnboardingResponse,
     ProductoResponse,
 )
-from app.services import turnos_caja_service
+from app.services import alcance_service, turnos_caja_service
 from app.services.chekouts import cotizar_checkout, create_chekout
 from app.services.estancias import (
     create_estancia,
@@ -90,6 +90,16 @@ async def onboarding(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
+    # C1: la entrada se registra en la sucursal de la sesión (403 si no).
+    data.sucursalId = resolver_sucursal_obligatoria(current_user, data.sucursalId)
+    if data.reservacionId is not None:
+        await alcance_service.asegurar_recurso(
+            conn, current_user, "reservacion", data.reservacionId
+        )
+    await alcance_service.asegurar_recursos(
+        conn, current_user, "producto", [d.productoId for d in data.detalles if d.productoId]
+    )
+
     usuario_id = UUID(current_user.sub)
 
     disponible_antes = await turnos_caja_service.efectivo_disponible_actual(conn, apertura_id)
@@ -112,13 +122,15 @@ async def onboarding(
 async def pago_estancia_extra(
     registro_id: UUID,
     body: PagoEstanciaExtraRequest,
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("estancias:gestionar_pagos")),
     apertura_id: str = Depends(apertura_operando_id),
 ) -> None:
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "registro", registro_id)
     usuario_id = UUID(current_user.sub)
-    return await pago_create_service(conn, body, sucursal_id, registro_id, usuario_id, apertura_id)
+    return await pago_create_service(conn, body, sucursal, registro_id, usuario_id, apertura_id)
 
 
 # Endpoint para cotizar el checkout (solo lectura, no registra nada)
@@ -136,8 +148,9 @@ async def pago_estancia_extra(
 async def get_cotizacion_checkout(
     detalle_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("estancias:checkout")),
+    current_user: TokenData = Depends(require_permission("estancias:checkout")),
 ) -> dict[str, Any]:
+    await alcance_service.asegurar_recurso(conn, current_user, "detalle_registro", detalle_id)
     return await cotizar_checkout(conn, detalle_id)
 
 
@@ -161,6 +174,7 @@ async def checkout(
     current_user: TokenData = Depends(require_permission("estancias:checkout")),
     apertura_id: str = Depends(apertura_operando_id),
 ) -> dict[str, Any]:
+    await alcance_service.asegurar_recurso(conn, current_user, "detalle_registro", detalle_id)
     usuario_id = UUID(current_user.sub)
 
     return await create_chekout(conn, detalle_id, usuario_id, body.pagos, apertura_id)
@@ -175,9 +189,10 @@ async def checkout(
 async def get_productos(
     sucursal_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("estancias:checkin")),
+    current_user: TokenData = Depends(require_permission("estancias:checkin")),
 ) -> list[dict[str, Any]]:
-    return await get_productos_estancia_by_id_sucursal(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await get_productos_estancia_by_id_sucursal(conn, sucursal)
 
 
 @router.websocket("/ws")

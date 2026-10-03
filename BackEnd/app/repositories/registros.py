@@ -1,5 +1,6 @@
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -95,6 +96,22 @@ async def change_registro_estado(
     )
 
 
+async def get_registro_alcance(
+    conn: asyncpg.Connection, registro_id: UUID
+) -> dict[str, Any] | None:
+    """Sucursal y estado de un registro activo (no borrado), para autorizar el
+    acceso a sus archivos (C6). None si no existe o está desactivado."""
+    row = await conn.fetchrow(
+        """
+        SELECT id, sucursal_id, estado
+        FROM registros
+        WHERE id = $1 AND activo = TRUE
+        """,
+        registro_id,
+    )
+    return dict(row) if row else None
+
+
 async def exists_registro(
     conn: asyncpg.Connection,
     registro_id: UUID,
@@ -138,3 +155,26 @@ async def contar_ninos_registrados_por_reservacion(
         reservacion_id,
     )
     return int(total or 0)
+
+
+async def obtener_saldo_para_cobro(
+    conn: asyncpg.Connection, registro_id: UUID
+) -> dict[str, Any] | None:
+    """Bloquea el registro (FOR UPDATE) y devuelve su sucursal, su total y lo
+    neto ya cobrado: pagos_estancia menos el cambio entregado (movimientos de
+    caja tipo 'C' del registro). Llamar dentro de una transacción."""
+    row = await conn.fetchrow(
+        """
+        SELECT r.id, r.sucursal_id, r.total,
+               COALESCE((SELECT SUM(pe.monto) FROM pagos_estancia pe
+                         WHERE pe.registros_id = r.id), 0)
+             - COALESCE((SELECT SUM(mc.monto) FROM movimientos_caja mc
+                         WHERE mc.referencia_id = r.id AND mc.tipo_movimiento = 'C'), 0)
+               AS pagado_neto
+        FROM registros r
+        WHERE r.id = $1 AND r.activo = TRUE
+        FOR UPDATE OF r
+        """,
+        registro_id,
+    )
+    return dict(row) if row else None

@@ -99,3 +99,21 @@ export function mensajeDeError(err: unknown, fallback: string): string {
 
   return fallback
 }
+
+/**
+ * Códigos con los que el backend rechaza un cobro del POS porque el pedido ya
+ * no corresponde al catálogo (C2): un precio cambió, el total no cuadra, o un
+ * producto se desactivó o ya no es de la sucursal. No se cobró nada; hay que
+ * refrescar el catálogo y volver a cobrar.
+ */
+export const CODIGOS_PEDIDO_DESACTUALIZADO: ReadonlySet<string> = new Set([
+  'PRECIO_CAMBIADO',
+  'TOTAL_NO_COINCIDE',
+  'PRODUCTO_NO_DISPONIBLE',
+  'PRODUCTO_INVALIDO',
+])
+
+/** `true` si el cobro se rechazó porque el pedido quedó desactualizado. */
+export function esPedidoDesactualizado(error: unknown): error is ApiError {
+  return isApiErrorLike(error) && CODIGOS_PEDIDO_DESACTUALIZADO.has(error.code)
+}

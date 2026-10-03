@@ -19,14 +19,18 @@ from app.schemas.reservaciones import ReservacionesCrear, ReservacionesOut
 
 class ReservacionCompletaExtraItem(BaseModel):
     extra_id: UUID
-    cantidad: int = Field(..., ge=1)
-    precio_unitario: Decimal = Field(..., ge=0)
+    # El servidor cobra cada extra una vez (cantidad 1) al precio de catálogo,
+    # igual que el asistente de alta (pendiente M15). Se aceptan por
+    # compatibilidad, pero no se usan.
+    cantidad: int = Field(1, ge=1)
+    precio_unitario: Decimal | None = Field(None, ge=0)
 
 
 class ReservacionCompletaProductoItem(BaseModel):
     producto_id: UUID
     cantidad: int = Field(..., ge=1)
-    precio_unitario: Decimal = Field(..., ge=0)
+    # Se ignora: el precio sale del catálogo del producto (C2).
+    precio_unitario: Decimal | None = Field(None, ge=0)
     notas: str | None = None
 
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import require_role
 from app.core.database import get_db
+from app.core.roles import ROL_PADRE
 from app.schemas.auth import TokenData
 from app.schemas.padres import (
     PadreAuthRequest,
@@ -19,11 +20,13 @@ from app.services.padres_service import (
 
 router = APIRouter(prefix="/api/padres", tags=["Padres"])
 
+# A17 — mismo error para código mal formado, inexistente, revocado, expirado
+# o de un registro ya cerrado: no se revela cuál de esos casos fue.
 _TOKEN_INVALIDO = HTTPException(
     status_code=status.HTTP_400_BAD_REQUEST,
     detail={
         "code": "TOKEN_INVALIDO",
-        "message": "El código de acceso no es válido o está mal formado.",
+        "message": "El código de acceso no es válido o ya expiró.",
     },
 )
 _SESION_INVALIDA = HTTPException(
@@ -48,7 +51,7 @@ async def auth_padre(
 
 @router.get("/ninos-activos", response_model=PadreNinosActivosResponse)
 async def ninos_activos_endpoint(
-    current_user: TokenData = Depends(require_role("PadreVisor")),
+    current_user: TokenData = Depends(require_role(ROL_PADRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> PadreNinosActivosResponse:
     """QA #31 — polling del dashboard con el token de `/padres/auth`

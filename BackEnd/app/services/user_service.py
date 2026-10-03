@@ -81,8 +81,9 @@ def _to_response(record: UsuarioRecord) -> UserResponse:
 
 
 def _assert_admin_scope(current_user: TokenData, target: UsuarioRecord) -> None:
-    """Valida que un Administrador solo opere sobre usuarios de su sucursal."""
-    if current_user.role == ROL_ADMINISTRADOR:
+    """Valida que un Administrador (o cualquier rol con sucursal fija que
+    tenga permisos de usuarios, C1) solo opere sobre usuarios de su sucursal."""
+    if current_user.role != ROL_SISTEMA:
         if target["sucursal_id"] != current_user.branch_id:
             raise InsufficientPermissionsError
         if not _role_requires_branch(target["rol"]):
@@ -117,7 +118,7 @@ async def create_user(
     if data.role == ROL_SISTEMA:
         raise InsufficientPermissionsError
     await _assert_role_valid(conn, data.role)
-    if current_user.role == ROL_ADMINISTRADOR:
+    if current_user.role != ROL_SISTEMA:
         if not _role_requires_branch(data.role):
             raise InsufficientPermissionsError
         if data.branch_id != current_user.branch_id:
@@ -173,7 +174,7 @@ async def update_user(
     if data.role == ROL_SISTEMA:
         raise InsufficientPermissionsError
     await _assert_role_valid(conn, data.role)
-    if current_user.role == ROL_ADMINISTRADOR:
+    if current_user.role != ROL_SISTEMA:
         if not _role_requires_branch(data.role):
             raise InsufficientPermissionsError
         if data.branch_id != current_user.branch_id:

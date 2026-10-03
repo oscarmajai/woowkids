@@ -32,7 +32,7 @@ docker compose up -d --build
 
 En los dos casos se entra con **`admin@woowkids.com` / `admin1234`**. Los valores por defecto son genéricos: antes de producción copia `.env.example` a `.env` y cámbialos (o pásalos con `-e` al contenedor único). Con `SEED_DEMO=true`, la primera vez se cargan datos de prueba.
 
-La primera vez, el backend crea la base de datos con [`BackEnd/sql/schema_maestro.sql`](BackEnd/sql/schema_maestro.sql), que se genera desde las migraciones de `BackEnd/sql/migrations/`.
+La primera vez, el backend crea la base de datos con [`BackEnd/sql/schema_maestro.sql`](BackEnd/sql/schema_maestro.sql), que se genera desde las migraciones de `BackEnd/sql/migrations/`. En cada arranque aplica solo las migraciones que falten y las registra en `schema_migraciones`, así que actualizar es solo cambiar la imagen.
 
 ## Imagen publicada (GHCR)
 

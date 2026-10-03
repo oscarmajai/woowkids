@@ -22,7 +22,7 @@ from app.schemas.movimiento_inventario import (
     MovimientoInventarioOut,
     MovimientoManualCreate,
 )
-from app.services import inventario_service
+from app.services import alcance_service, inventario_service
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/insumos", tags=["Movimientos de Inventario"])
@@ -46,10 +46,11 @@ async def listar_movimientos(
     desde: date | None = None,
     hasta: date | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver_movimientos")),
+    current_user: TokenData = Depends(require_permission("inventario:ver_movimientos")),
 ) -> list[MovimientoInventarioOut]:
     """Historial de movimientos del insumo (kardex), opcionalmente acotado
     a un rango de fechas con `desde`/`hasta` (YYYY-MM-DD)."""
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await inventario_service.listar_movimientos(conn, insumo_id, desde, hasta)
 
 
@@ -62,8 +63,9 @@ async def exportar_movimientos(
     desde: date | None = None,
     hasta: date | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver_movimientos")),
+    current_user: TokenData = Depends(require_permission("inventario:ver_movimientos")),
 ) -> StreamingResponse:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     movimientos = await inventario_service.listar_movimientos(conn, insumo_id, desde, hasta)
     filas = (m.model_dump() for m in movimientos)
     return csv_streaming_response(_KARDEX_CSV_CAMPOS, filas, f"kardex_{insumo_id}.csv")
@@ -80,6 +82,7 @@ async def registrar_movimiento(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:registrar_movimiento")),
 ) -> MovimientoInventarioOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await inventario_service.registrar_ajuste_manual(
         conn, insumo_id, body, UUID(current_user.sub)
     )
@@ -97,6 +100,7 @@ async def registrar_conteo(
     current_user: TokenData = Depends(require_permission("inventario:registrar_movimiento")),
 ) -> MovimientoInventarioOut:
     """Conteo físico: ajusta el stock al valor real contado."""
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await inventario_service.registrar_conteo_fisico(
         conn, insumo_id, body, UUID(current_user.sub)
     )

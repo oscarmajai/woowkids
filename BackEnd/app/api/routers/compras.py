@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.compra import (
     CompraCrear,
@@ -21,7 +22,7 @@ from app.schemas.compra import (
     CompraUpdate,
     RecibirCompraRequest,
 )
-from app.services import compra_service
+from app.services import alcance_service, compra_service
 
 router = APIRouter(prefix="/api/compras", tags=["Compras"])
 
@@ -30,17 +31,18 @@ router = APIRouter(prefix="/api/compras", tags=["Compras"])
 async def listar_compras(
     sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[CompraOut]:
-    return await compra_service.listar(conn, sucursal_id)
+    return await compra_service.listar(conn, resolver_sucursal(current_user, sucursal_id))
 
 
 @router.get("/{compra_id}", response_model=CompraOut)
 async def obtener_compra(
     compra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> CompraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "compra", compra_id)
     return await compra_service.obtener(conn, compra_id)
 
 
@@ -50,6 +52,9 @@ async def crear_compra(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
+    # C1: la compra se crea en la sucursal de la sesión; otra → 403. El
+    # service ya valida que proveedor e insumos sean de esa sucursal.
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await compra_service.crear(conn, body, UUID(current_user.sub))
 
 
@@ -58,8 +63,9 @@ async def actualizar_compra(
     compra_id: UUID,
     body: CompraUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:gestionar_compras")),
+    current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "compra", compra_id)
     return await compra_service.actualizar(conn, compra_id, body)
 
 
@@ -68,8 +74,9 @@ async def editar_compra(
     compra_id: UUID,
     body: CompraEditar,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:gestionar_compras")),
+    current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "compra", compra_id)
     return await compra_service.editar(conn, compra_id, body)
 
 
@@ -80,6 +87,7 @@ async def recibir_compra(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "compra", compra_id)
     return await compra_service.recibir(conn, compra_id, UUID(current_user.sub), body)
 
 
@@ -87,6 +95,7 @@ async def recibir_compra(
 async def cancelar_compra(
     compra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:gestionar_compras")),
+    current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "compra", compra_id)
     return await compra_service.cancelar(conn, compra_id)

@@ -6,8 +6,13 @@ from uuid import UUID
 
 import asyncpg
 
-from app.core.security import create_access_token
-from app.repositories import lealtad_repository
+from app.core.roles import ROL_PADRE
+from app.core.security import (
+    create_access_token,
+    generate_codigo_acceso_padres,
+    hash_codigo_acceso_padres,
+)
+from app.repositories import codigos_acceso_padres, lealtad_repository
 from app.repositories.branch_repository import get_sucursal_by_id
 from app.repositories.tutores import get_tutor_by_id
 from app.schemas.padres import (
@@ -38,6 +43,39 @@ async def _get_lealtad_tutor(
 
 class TokenAccesoInvalidoError(Exception):
     pass
+
+
+# A17 — vigencia máxima del código del QR (además deja de valer al hacer
+# checkout del último niño del registro) y de la sesión que se obtiene con él.
+VIGENCIA_CODIGO_ACCESO = timedelta(hours=24)
+VIGENCIA_SESION_PADRE = timedelta(hours=2)
+# token_urlsafe(24) produce 32 caracteres; cualquier cosa mucho más larga no
+# es un código nuestro y no vale la pena ni hashearla.
+_LONGITUD_MAXIMA_CODIGO = 128
+
+
+async def emitir_codigo_acceso(
+    conn: asyncpg.Connection, registro_id: UUID, usuario_id: UUID | None
+) -> str:
+    """A17 — emite el código opaco del QR del comprobante para un registro y
+    revoca cualquier código anterior del mismo registro (un solo código vigente
+    por registro: reimprimir el comprobante debe invalidar el QR viejo).
+    Devuelve el código en claro; en BD solo queda su sha256."""
+    codigo, codigo_hash = generate_codigo_acceso_padres()
+    await codigos_acceso_padres.revocar_codigos_de_registro(conn, registro_id)
+    await codigos_acceso_padres.crear_codigo(
+        conn,
+        registro_id,
+        codigo_hash,
+        datetime.now(UTC) + VIGENCIA_CODIGO_ACCESO,
+        usuario_id,
+    )
+    return codigo
+
+
+async def revocar_codigos_acceso(conn: asyncpg.Connection, registro_id: UUID) -> None:
+    """A17 — el QR deja de valer al hacer checkout de todos los niños."""
+    await codigos_acceso_padres.revocar_codigos_de_registro(conn, registro_id)
 
 
 async def _get_hijos_visita(conn: asyncpg.Connection, registro_id: UUID) -> list[dict[str, Any]]:
@@ -125,24 +163,20 @@ def _build_nino_activo(hijo: dict[str, Any], now: datetime) -> NinoActivoRespons
 
 
 async def get_padre_dashboard(conn: asyncpg.Connection, raw_code: str) -> PadreDashboardResponse:
-    try:
-        registro_id = UUID(raw_code)
-    except ValueError:
-        raise TokenAccesoInvalidoError from None
+    """A17 — canjea el código opaco del QR por una sesión de padre. El código
+    se busca por su sha256 (índice único): no se compara el código en claro y
+    la respuesta es la misma excepción para código mal formado, inexistente,
+    revocado, expirado o de un registro ya cerrado. Los códigos viejos (el
+    UUID del registro) ya no existen en la tabla y se rechazan igual."""
+    if not raw_code or len(raw_code) > _LONGITUD_MAXIMA_CODIGO:
+        raise TokenAccesoInvalidoError
 
-    registro = await conn.fetchrow(
-        """
-        SELECT r.tutores_id AS "tutorId",
-               r.sucursal_id AS "sucursalId"
-        FROM registros r
-        WHERE r.id = $1
-          AND r.activo = TRUE
-          AND r.estado = 'A'
-        """,
-        registro_id,
+    registro = await codigos_acceso_padres.get_registro_por_codigo(
+        conn, hash_codigo_acceso_padres(raw_code)
     )
     if registro is None:
         raise TokenAccesoInvalidoError
+    registro_id: UUID = registro["registroId"]
 
     tutor = await get_tutor_by_id(conn, registro["tutorId"])
     if tutor is None:
@@ -156,15 +190,16 @@ async def get_padre_dashboard(conn: asyncpg.Connection, raw_code: str) -> PadreD
     now = datetime.now(UTC)
     lealtad = await _get_lealtad_tutor(conn, sucursal["id"], tutor["telefono"])
 
-    expires_delta = timedelta(hours=2)
+    # La sesión nunca dura más que el código con el que se obtuvo.
+    expires_delta = min(VIGENCIA_SESION_PADRE, registro["expira"] - now)
     access_token = create_access_token(
         payload={
             "sub": str(registro_id),
             "email": f"{tutor['telefono']}@tutor.woowkids.local",
             "tutor_id": str(tutor["id"]),
             "branch_id": str(sucursal["id"]),
-            "role": "PadreVisor",
-            "permissions": get_permissions("PadreVisor"),
+            "role": ROL_PADRE,
+            "permissions": get_permissions(ROL_PADRE),
         },
         expires_delta=expires_delta,
     )
