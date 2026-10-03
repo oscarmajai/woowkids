@@ -59,7 +59,13 @@
               "
             />
             <span
-              v-if="saldoDisponible !== null && saldoDisponible > 0 && !debajoDelMinimoCanje"
+              v-if="saldoDisponible !== null && saldoDisponible > 0 && errorCanje"
+              class="pay__points pay__points--warn"
+            >
+              {{ saldoDisponible }} pts disponibles · {{ errorCanje }}
+            </span>
+            <span
+              v-else-if="saldoDisponible !== null && saldoDisponible > 0 && !debajoDelMinimoCanje"
               class="pay__points"
             >
               {{ saldoDisponible }} pts disponibles · ${{ valorPunto?.toFixed(2) }} c/u
@@ -212,6 +218,7 @@ import type { PaymentProps, AppliedPayment } from '@/types/payments'
 import { CATEGORIAS_METODO_PAGO, type MetodosPago } from '@/types/metodos_pago'
 import { useAuthStore } from '@/stores/auth'
 import { useLealtadStore } from '@/stores/lealtad'
+import type { ConfiguracionCanje } from '@/types/lealtad'
 import { TOLERANCIA_MONTO, redondear2 } from '@/utils/dinero'
 
 import MethodSelector from './MethodSelector.vue'
@@ -267,6 +274,10 @@ const celularCliente = ref('')
 const puntosARedimir = ref(0)
 const saldoDisponible = ref<number | null>(null)
 const valorPunto = ref<number | null>(null)
+const minimoCanje = ref<number | null>(null)
+// A6: motivo por el que no se puede canjear (no se pudo leer la configuración
+// de canje de la sucursal). Mientras tenga valor, el canje queda deshabilitado.
+const errorCanje = ref<string | null>(null)
 const mostrarModalTarjeta = ref(false)
 const tarjetaMontoTemporal = ref(0)
 const tarjetaTipo = ref<'DEBITO' | 'CREDITO'>('CREDITO')
@@ -304,6 +315,8 @@ watch(
     if (visible) {
       saldoDisponible.value = null
       valorPunto.value = null
+      minimoCanje.value = null
+      errorCanje.value = null
       puntosARedimir.value = 0
       metodoSeleccionado.value = primeraCategoriaDisponible.value
       if (props.permitirLealtad && props.celularPrellenado) {
@@ -320,6 +333,8 @@ watch(
       celularCliente.value = ''
       saldoDisponible.value = null
       valorPunto.value = null
+      minimoCanje.value = null
+      errorCanje.value = null
       puntosARedimir.value = 0
       mostrarModalTarjeta.value = false
       tarjetaMontoTemporal.value = 0
@@ -342,32 +357,53 @@ watch(celularCliente, async (val) => {
   // Mientras se consulta no se muestra el saldo del celular anterior.
   saldoDisponible.value = null
   let saldo = 0
-  try {
-    const [respuesta] = await Promise.all([
-      lealtadStore.cargarSaldo(sucursalId, consultado),
-      lealtadStore.cargarConfiguracion(sucursalId),
-    ])
-    saldo = respuesta.saldo
-  } catch (error: unknown) {
+  // Saldo y configuración por separado: si falla uno no debe perderse el otro.
+  const [resSaldo, resConfig] = await Promise.allSettled([
+    lealtadStore.cargarSaldo(sucursalId, consultado),
+    lealtadStore.cargarConfiguracionCanje(sucursalId),
+  ])
+  if (resSaldo.status === 'fulfilled') {
+    saldo = resSaldo.value.saldo
+  } else if ((resSaldo.reason as ApiError).statusCode !== 404) {
     // 404 = cliente sin cuenta de puntos: saldo 0. Otro error: también 0, con aviso.
-    if ((error as ApiError).statusCode !== 404) {
-      $q.notify({
-        type: 'warning',
-        message: 'No se pudo consultar el saldo de puntos del cliente.',
-        position: 'top',
-        timeout: 3000,
-      })
-    }
+    $q.notify({
+      type: 'warning',
+      message: 'No se pudo consultar el saldo de puntos del cliente.',
+      position: 'top',
+      timeout: 3000,
+    })
   }
   // Respuesta tardía: el celular cambió o el modal se cerró mientras esperaba.
   if (celularCliente.value !== consultado || !props.modelValue) return
   saldoDisponible.value = saldo
-  valorPunto.value = lealtadStore.configuracion?.valor_punto ?? null
+  aplicarConfiguracionCanje(resConfig)
 })
 
-const minimoCanje = computed(() => lealtadStore.configuracion?.minimo_canje ?? 0)
+/**
+ * A6: sin la configuración de canje no se conoce el valor del punto ni el
+ * mínimo; en vez de suponer $0.00 o mínimo 0, se deshabilita el canje y se
+ * dice por qué. El servidor valida igualmente el mínimo al cobrar.
+ */
+const aplicarConfiguracionCanje = (res: PromiseSettledResult<ConfiguracionCanje>) => {
+  if (res.status === 'fulfilled') {
+    valorPunto.value = res.value.valor_punto
+    minimoCanje.value = res.value.minimo_canje
+    errorCanje.value = null
+    return
+  }
+  valorPunto.value = null
+  minimoCanje.value = null
+  errorCanje.value =
+    (res.reason as ApiError).statusCode === 404
+      ? 'Canje no disponible: la sucursal no tiene configurado el programa de puntos.'
+      : 'Canje no disponible: no se pudo cargar la configuración de puntos.'
+}
+
 const debajoDelMinimoCanje = computed(
-  () => saldoDisponible.value !== null && saldoDisponible.value < minimoCanje.value,
+  () =>
+    saldoDisponible.value !== null &&
+    minimoCanje.value !== null &&
+    saldoDisponible.value < minimoCanje.value,
 )
 
 const maxPuntosRedimibles = computed(() => {
@@ -470,6 +506,16 @@ const aplicarRedencionLealtad = (monto: number) => {
       timeout: 3000,
     })
     celularInputRef.value?.focus()
+    return
+  }
+
+  if (errorCanje.value || !valorPunto.value) {
+    $q.notify({
+      type: 'warning',
+      message: errorCanje.value ?? 'Canje no disponible: falta la configuración de puntos.',
+      position: 'top',
+      timeout: 3000,
+    })
     return
   }
 
