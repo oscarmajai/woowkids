@@ -3,6 +3,7 @@ import { downloadBlob } from '@/utils/downloadBlob'
 import type {
   AjustePuntosInput,
   ClienteLealtad,
+  ConfiguracionCanje,
   ConfiguracionLealtad,
   ConfiguracionLealtadInput,
   MovimientoPuntos,
@@ -14,6 +15,12 @@ export async function obtenerConfiguracionLealtad(
   sucursalId: string,
 ): Promise<ConfiguracionLealtad> {
   return lealtadApi.obtenerConfiguracion(sucursalId)
+}
+
+export async function obtenerConfiguracionCanjeLealtad(
+  sucursalId: string,
+): Promise<ConfiguracionCanje> {
+  return lealtadApi.obtenerConfiguracionCanje(sucursalId)
 }
 
 export async function actualizarConfiguracionLealtad(
