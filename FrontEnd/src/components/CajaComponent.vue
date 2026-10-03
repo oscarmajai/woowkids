@@ -183,7 +183,7 @@ import { useTicketComanda } from '@/composables/useTicketComanda'
 import { useCajaMetrics } from '@/composables/useCajaMetrics'
 import { useAuthStore } from '@/stores/auth'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
-import { isTimeoutError, resolveErrorMessage } from '@/utils/errorHandler'
+import { esPedidoDesactualizado, isTimeoutError, resolveErrorMessage } from '@/utils/errorHandler'
 import { redondear2 } from '@/utils/dinero'
 import type { ApiError } from '@/types/auth'
 import type { TipoProducto } from '@/types/producto'
@@ -252,6 +252,7 @@ const {
   cancelarOrden,
   guardarNotas,
   detallesParaEnvio,
+  actualizarPrecios,
   nombreCliente,
 } = useTicketComanda()
 
@@ -530,7 +531,9 @@ const procesarPago = async (
       pagos: pagos.map((p) => ({
         metodo_pago_id: mapearMetodoPago(p.method),
         monto: p.amount,
-        notas_pago: p.cardType ? `${p.cardType} - Folio: ${p.authCode ?? ''}` : '',
+        // Métodos con referencia obligatoria (transferencia, etc.): el folio
+        // viaja en authCode; el backend la exige (M11).
+        notas_pago: p.cardType ? `${p.cardType} - Folio: ${p.authCode ?? ''}` : (p.authCode ?? ''),
         ...(p.ultimos4 ? { ultimos4: p.ultimos4 } : {}),
       })),
       ...(celularCliente ? { celular_cliente: celularCliente } : {}),
@@ -562,6 +565,10 @@ const procesarPago = async (
     // Mantener efectivoDisponible actualizado con las ventas en efectivo del turno
     void turno.cargarTurnoActivo()
   } catch (err) {
+    if (esPedidoDesactualizado(err)) {
+      await refrescarPedidoDesactualizado(err.message)
+      return
+    }
     if (axios.isAxiosError(err) && err.response?.data) {
       console.error(
         '[CajaComponent] backend error detail:',
@@ -581,6 +588,32 @@ const procesarPago = async (
     console.error('[CajaComponent] procesarPago:', err)
   } finally {
     enviando.value = false
+  }
+}
+
+// C2: el backend cobra con el catálogo y rechaza (409/422, sin cobrar) un
+// pedido con precios viejos o productos que ya no están. Se muestra su
+// mensaje, se recarga el catálogo y se actualiza el pedido para que el cajero
+// revise el total nuevo y vuelva a cobrar.
+const refrescarPedidoDesactualizado = async (mensaje: string) => {
+  $q.notify({
+    type: 'warning',
+    message: mensaje,
+    caption: 'No se cobró nada. Se actualizó el pedido; revisa el total y vuelve a cobrar.',
+    position: 'top-right',
+    timeout: 8000,
+  })
+  await cargarProductos()
+  if (error.value) return
+  const { eliminados } = actualizarPrecios(productos.value)
+  if (eliminados.length > 0) {
+    $q.notify({
+      type: 'warning',
+      message: `Se quitaron del pedido: ${eliminados.join(', ')}`,
+      caption: 'Ya no están disponibles en esta sucursal.',
+      position: 'top-right',
+      timeout: 8000,
+    })
   }
 }
 

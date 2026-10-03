@@ -81,4 +81,42 @@ describe('useTicketComanda', () => {
     expect(padre.cantidad).toBe(1)
     expect(itemsTicket.value.filter((i) => !i.es_hijo_combo)).toHaveLength(2)
   })
+
+  describe('actualizarPrecios (C2: el backend rechazó el cobro por precio viejo)', () => {
+    const pizza = {
+      id: 'pizza',
+      nombre: 'Pizza individual',
+      precio_unitario: 90,
+      tipo: 'A',
+      imagen: null,
+      sucursal_id: 's1',
+      descripcion: null,
+      es_combo: false,
+    } as Producto
+
+    it('toma el precio vigente del catálogo y lo usa en el envío', async () => {
+      const { itemsTicket, agregarProducto, actualizarPrecios, detallesParaEnvio } =
+        useTicketComanda()
+      await agregarProducto(pizza)
+      await agregarProducto(pizza)
+
+      const resultado = actualizarPrecios([{ ...pizza, precio_unitario: 95 }])
+
+      expect(resultado).toEqual({ actualizados: ['Pizza individual'], eliminados: [] })
+      expect(itemsTicket.value[0]?.producto.precio_unitario).toBe(95)
+      expect(detallesParaEnvio()[0]).toMatchObject({ precio_unitario: 95, subtotal: 190 })
+    })
+
+    it('quita los productos que ya no están en el catálogo, con sus hijos de combo', async () => {
+      mockHijos.mockResolvedValue(HIJOS as never)
+      const { itemsTicket, agregarProducto, actualizarPrecios } = useTicketComanda()
+      await agregarProducto(pizza)
+      await agregarProducto(combo)
+
+      const resultado = actualizarPrecios([pizza])
+
+      expect(resultado).toEqual({ actualizados: [], eliminados: ['Combo Kids'] })
+      expect(itemsTicket.value.map((i) => i.producto.id)).toEqual(['pizza'])
+    })
+  })
 })
