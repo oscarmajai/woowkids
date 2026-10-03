@@ -47,14 +47,20 @@ class InsumoUpdate(BaseModel):
     """No permite cambiar unidad_base_id/unidad_compra_id ni stock_actual una
     vez creado el insumo: la unidad define en qué se guarda el stock (cambiarla
     requeriría reconvertir el stock existente) y stock_actual solo se moverá
-    a través de movimientos_inventario en fase 3."""
+    a través de movimientos_inventario en fase 3.
+
+    B9: tampoco `costo_unitario`. Es el promedio PEPS de las capas de costo y
+    `costeo_service` lo recalcula en cada movimiento, así que un valor editado
+    a mano se perdía en silencio en el siguiente. El campo sigue en el schema
+    solo para rechazarlo con un mensaje claro (422 COSTO_NO_EDITABLE en
+    `insumo_service.actualizar`) en lugar de ignorarlo."""
 
     nombre: str | None = Field(None, max_length=150)
     descripcion: str | None = None
     stock_minimo: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
     punto_reorden: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
     stock_maximo: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
-    costo_unitario: Decimal | None = Field(None, ge=0)
+    costo_unitario: Decimal | None = None
     proveedor_principal_id: UUID | None = None
     activo: bool | None = None
 

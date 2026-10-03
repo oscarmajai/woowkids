@@ -13,7 +13,7 @@ from uuid import UUID
 import asyncpg
 
 from app.exceptions import DatosInvalidos, NoEncontrado
-from app.exceptions.inventario import RecursoInactivoError
+from app.exceptions.inventario import CostoNoEditableError, RecursoInactivoError
 from app.repositories import (
     insumo_repository,
     movimiento_inventario_repository,
@@ -158,6 +158,11 @@ async def actualizar(
 ) -> InsumoOut:
     actual = await obtener(conn, insumo_id)
     updates = body.model_dump(exclude_unset=True)
+    # B9: el costo unitario es el promedio PEPS de las capas (costeo_service lo
+    # recalcula en cada movimiento): un valor editado a mano se sobrescribía en
+    # silencio con el siguiente movimiento. Se rechaza en lugar de ignorarlo.
+    if "costo_unitario" in updates:
+        raise CostoNoEditableError()
     # Solo se valida un proveedor nuevo: si el actual se eliminó después, el
     # insumo se puede seguir editando sin cambiarlo.
     nuevo_proveedor = updates.get("proveedor_principal_id")
