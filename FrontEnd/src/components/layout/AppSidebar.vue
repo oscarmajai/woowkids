@@ -8,6 +8,7 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { getInitials, getAvatarColor } from '@/utils/avatar'
+import { sumarBadgesGrupo } from '@/utils/inventario'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
 import type { NavGroup } from '@/types/navigation'
 
@@ -69,8 +70,10 @@ function toggleGroup(label: string): void {
   openGroups.value = next
 }
 
+// B7: Insumos y Reporte de Stock muestran las mismas alertas; el grupo las
+// cuenta una vez (antes las sumaba dos veces).
 function groupBadge(group: NavGroup): number {
-  return group.items.reduce((sum, item) => sum + (badgeFor(item.routeName)?.count ?? 0), 0)
+  return sumarBadgesGrupo(group.items.map((item) => badgeFor(item.routeName)))
 }
 
 function isActive(routeName: string): boolean {
