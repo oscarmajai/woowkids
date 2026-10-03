@@ -14,12 +14,18 @@ import asyncpg
 
 from app.core.scope import sucursal_scope
 from app.core.ws_manager import manager
+from app.exceptions.comandas import (
+    AutorizacionAdminRequeridaError,
+    ComandaCanceladaError,
+    ComandaPagadaRequiereCancelacionError,
+    TransicionComandaInvalidaError,
+)
 from app.models.comanda import Comanda, DetalleComanda
 from app.repositories import comanda_repository, producto_repository
 from app.repositories.caja_repository import registrar_movimiento_caja
 from app.schemas.auth import TokenData
 from app.schemas.comanda import ComandaCreate
-from app.services import inventario_service, lealtad_service, precios_venta
+from app.services import devolucion_service, inventario_service, lealtad_service, precios_venta
 
 
 def _producto_id_de_detalle(item: Any) -> str:
@@ -195,28 +201,119 @@ async def listar_pendientes(conn: asyncpg.Connection, current_user: TokenData) -
     return comandas
 
 
+# A2: máquina de estados de la comanda. Solo avanza un paso a la vez
+# (P → E → L → T) y se cancela (C) desde los estados en que sigue en cocina.
+# T (entregada) y C (cancelada) son terminales: lo entregado ya consumió sus
+# insumos, así que no se cancela ni se revierte su stock.
+ESTADOS_COMANDA = frozenset({"P", "E", "L", "T", "C"})
+_SIGUIENTE_ESTADO = {"P": "E", "E": "L", "L": "T"}
+_ESTADOS_CANCELABLES = frozenset({"P", "E", "L"})
+_NOMBRE_ESTADO = {
+    "P": "Pendiente",
+    "E": "En preparación",
+    "L": "Lista",
+    "T": "Entregada",
+    "C": "Cancelada",
+}
+
+
+def _nombre_estado(estado: str) -> str:
+    return _NOMBRE_ESTADO.get(estado, estado or "sin estado")
+
+
+def validar_transicion(estado_actual: str, activo: bool, nuevo_estado: str) -> None:
+    """Lanza 409 si la comanda no puede pasar de `estado_actual` a `nuevo_estado`.
+    Una comanda cancelada o inactiva ya no admite ningún cambio (antes volvía
+    al tablero de cocina como "zombie" y un C → T → C revertía el stock dos
+    veces)."""
+    if not activo or estado_actual == "C":
+        raise ComandaCanceladaError()
+    if nuevo_estado == "C":
+        if estado_actual not in _ESTADOS_CANCELABLES:
+            raise TransicionComandaInvalidaError(
+                f"Una comanda «{_nombre_estado(estado_actual)}» ya no se puede cancelar."
+            )
+        return
+    if _SIGUIENTE_ESTADO.get(estado_actual) != nuevo_estado:
+        siguiente = _SIGUIENTE_ESTADO.get(estado_actual)
+        detalle = (
+            f" El siguiente paso es «{_nombre_estado(siguiente)}»."
+            if siguiente
+            else " Ya no avanza a ningún otro estado."
+        )
+        raise TransicionComandaInvalidaError(
+            f"No se puede pasar una comanda de «{_nombre_estado(estado_actual)}» a "
+            f"«{_nombre_estado(nuevo_estado)}».{detalle}"
+        )
+
+
 async def cambiar_estado(
     conn: asyncpg.Connection,
     comanda_id: str,
     nuevo_estado: str,
     current_user: TokenData,
     motivo_cancelacion: str | None = None,
+    token_pin_admin: str | None = None,
 ) -> Comanda | None:
     """
-    Actualiza el estado de una comanda y notifica a los clientes conectados.
-    Registra auditoría (modificado, modificado_por). Si nuevo_estado == 'C'
-    (y no lo estaba ya, para no revertir dos veces), desactiva la comanda,
-    requiere motivo_cancelacion y revierte el stock que se descontó al
-    crearla. Retorna None si la comanda no existe.
-    """
-    usuario_id = str(UUID(current_user.sub))
-    anterior = await comanda_repository.get_comanda_por_id(conn, comanda_id)
-    if anterior is None:
-        return None
+    Cambia el estado de una comanda siguiendo la máquina de estados (A2) y
+    notifica a los clientes conectados (una sola vez, M27). Registra auditoría
+    (modificado, modificado_por). Retorna None si la comanda no existe.
 
-    es_cancelacion = nuevo_estado == "C" and anterior.estado_actual != "C"
+    Cancelar ('C') exige motivo, desactiva la comanda y revierte el stock y
+    los puntos de lealtad. Todo bajo el bloqueo de la fila de la comanda: la
+    reversión ocurre una sola vez aunque lleguen cancelaciones simultáneas.
+    Si la comanda tiene pagos (A4), además exige `token_pin_admin` (PIN de un
+    administrador de la sucursal) y registra la devolución en el turno de
+    caja abierto de quien cancela (ver devolucion_service).
+    """
+    if nuevo_estado not in ESTADOS_COMANDA:
+        raise ValueError(f"Estado de comanda inválido: «{nuevo_estado}».")
+    usuario_id = str(UUID(current_user.sub))
+
+    # Validación previa sin bloqueo, para responder rápido y en orden
+    # (transición, motivo, caja, autorización) antes de pedir el PIN.
+    previo = await comanda_repository.get_estado_comanda(conn, comanda_id)
+    if previo is None:
+        return None
+    validar_transicion(previo["estado_actual"], previo["activo"], nuevo_estado)
+
+    es_cancelacion = nuevo_estado == "C"
+    plan: devolucion_service.PlanDevolucion | None = None
+    if es_cancelacion:
+        if not motivo_cancelacion or not motivo_cancelacion.strip():
+            raise ValueError("El motivo de cancelación es obligatorio al cancelar una comanda.")
+        plan = await devolucion_service.planear(conn, comanda_id, usuario_id)
+        if plan is not None and not token_pin_admin:
+            raise AutorizacionAdminRequeridaError(plan.apertura_cancelador_id)
 
     async with conn.transaction():
+        if plan is not None:
+            await devolucion_service.bloquear_turnos(conn, plan)
+        actual = await comanda_repository.bloquear_comanda(conn, comanda_id)
+        if actual is None:
+            return None
+        # Otra petición pudo cambiarla mientras esperábamos el bloqueo.
+        validar_transicion(actual["estado_actual"], actual["activo"], nuevo_estado)
+
+        sucursal_id = str(actual["sucursal_id"])
+        detalles: list[DetalleComanda] = []
+        if es_cancelacion:
+            # Detalles leídos ya con la comanda bloqueada (siempre DetalleComanda,
+            # antes de pasar por expandir_detalles_comanda).
+            bloqueada = await comanda_repository.get_comanda_por_id(conn, comanda_id)
+            if bloqueada is not None:
+                detalles = cast(list[DetalleComanda], bloqueada.detalles)
+            if plan is not None:
+                await devolucion_service.registrar(
+                    conn,
+                    plan,
+                    comanda_id=comanda_id,
+                    sucursal_id=sucursal_id,
+                    token_pin_admin=cast(str, token_pin_admin),
+                    usuario_id=usuario_id,
+                )
+
         comanda = await comanda_repository.actualizar_estado_comanda(
             conn,
             comanda_id,
@@ -226,15 +323,10 @@ async def cambiar_estado(
             desactivar=es_cancelacion,
         )
         if comanda is not None and es_cancelacion:
-            # anterior viene directo de get_comanda_por_id, antes de pasar por
-            # expandir_detalles_comanda — siempre son DetalleComanda, nunca dicts.
-            detalles_anteriores = cast(list[DetalleComanda], anterior.detalles)
             await inventario_service.revertir_por_cancelacion(
-                conn, anterior.sucursal_id, detalles_anteriores, comanda_id, UUID(current_user.sub)
+                conn, sucursal_id, detalles, comanda_id, UUID(usuario_id)
             )
-            await lealtad_service.revertir_por_cancelacion(
-                conn, UUID(comanda_id), UUID(current_user.sub)
-            )
+            await lealtad_service.revertir_por_cancelacion(conn, UUID(comanda_id), UUID(usuario_id))
 
     if comanda is not None:
         comanda.detalles = await expandir_detalles_comanda(conn, comanda.detalles)
@@ -258,7 +350,18 @@ async def modificar_comanda_parcial(
 
     Retorna None si la comanda no existe o no está en estado 'P'.
     Notifica a cocina vía WebSocket después de la modificación.
+
+    A4: quitar todos los productos de una comanda cobrada equivale a
+    cancelarla, y eso exige la autorización y la devolución de cambiar_estado:
+    responde 409 para que el cliente use ese flujo.
     """
+    actual = await comanda_repository.get_comanda_por_id(conn, comanda_id)
+    if actual is not None:
+        detalles = cast(list[DetalleComanda], actual.detalles)
+        restantes = {d.id for d in detalles} - set(detalles_ids_a_eliminar)
+        if not restantes and await devolucion_service.comanda_tiene_pagos(conn, comanda_id):
+            raise ComandaPagadaRequiereCancelacionError()
+
     comanda = await comanda_repository.modificar_comanda_parcial(
         conn,
         comanda_id,

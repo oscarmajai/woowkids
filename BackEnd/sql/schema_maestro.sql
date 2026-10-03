@@ -4,7 +4,7 @@
 -- GENERADO por scripts/generar_schema_maestro.sh. NO editar a mano: agrega una
 -- migración en sql/migrations/ y vuelve a correr el script.
 --
--- Equivale a aplicar las 103 migraciones de sql/migrations/ en orden
+-- Equivale a aplicar las 105 migraciones de sql/migrations/ en orden
 -- (última: 089_usuarios_email_minusculas.sql).
 -- Incluye el esquema y los datos de catálogo que esas migraciones insertan
 -- (roles, permisos, etc.). No incluye datos de prueba: para eso está
@@ -304,7 +304,8 @@ CREATE TABLE public.comandas (
     modificado_por uuid,
     reservacion_id uuid,
     nombre_cliente character varying(150),
-    mesa character varying(20)
+    mesa character varying(20),
+    CONSTRAINT chk_comandas_estado_actual CHECK (((estado_actual)::text = ANY ((ARRAY['P'::character varying, 'E'::character varying, 'L'::character varying, 'T'::character varying, 'C'::character varying])::text[])))
 );
 
 
@@ -423,6 +424,25 @@ CREATE TABLE public.detalles_registro (
     creado_por uuid,
     modificado timestamp with time zone DEFAULT now(),
     modificado_por uuid
+);
+
+
+--
+-- Name: devoluciones_comanda; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.devoluciones_comanda (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    comanda_id uuid NOT NULL,
+    apertura_caja_id uuid NOT NULL,
+    apertura_venta_id uuid,
+    metodo_pago_id uuid,
+    es_efectivo boolean NOT NULL,
+    monto numeric(12,2) NOT NULL,
+    autorizado_por uuid NOT NULL,
+    creado timestamp with time zone DEFAULT now() NOT NULL,
+    creado_por uuid,
+    CONSTRAINT chk_devoluciones_comanda_monto CHECK ((monto > (0)::numeric))
 );
 
 
@@ -1484,6 +1504,14 @@ ALTER TABLE ONLY public.detalles_registro
 
 
 --
+-- Name: devoluciones_comanda devoluciones_comanda_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: extras extras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2038,6 +2066,20 @@ CREATE INDEX idx_detalles_comanda_comanda ON public.detalles_comanda USING btree
 --
 
 CREATE INDEX idx_detalles_registro_sucursal_abiertos ON public.detalles_registro USING btree (sucursal_id, registros_id) WHERE (salida IS NULL);
+
+
+--
+-- Name: idx_devoluciones_comanda_apertura; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_devoluciones_comanda_apertura ON public.devoluciones_comanda USING btree (apertura_caja_id);
+
+
+--
+-- Name: idx_devoluciones_comanda_comanda; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_devoluciones_comanda_comanda ON public.devoluciones_comanda USING btree (comanda_id);
 
 
 --
@@ -2658,6 +2700,54 @@ ALTER TABLE ONLY public.detalles_registro
 
 ALTER TABLE ONLY public.detalles_registro
     ADD CONSTRAINT detalles_registro_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursales(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_apertura_caja_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_apertura_caja_id_fkey FOREIGN KEY (apertura_caja_id) REFERENCES public.apertura_caja(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_apertura_venta_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_apertura_venta_id_fkey FOREIGN KEY (apertura_venta_id) REFERENCES public.apertura_caja(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_autorizado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_autorizado_por_fkey FOREIGN KEY (autorizado_por) REFERENCES public.usuarios(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_comanda_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES public.comandas(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id);
+
+
+--
+-- Name: devoluciones_comanda devoluciones_comanda_metodo_pago_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devoluciones_comanda
+    ADD CONSTRAINT devoluciones_comanda_metodo_pago_id_fkey FOREIGN KEY (metodo_pago_id) REFERENCES public.metodos_pago(id);
 
 
 --
@@ -3606,11 +3696,11 @@ SET row_security = off;
 -- Data for Name: metodos_pago; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('0200f65f-60d9-4110-a4df-adfc70d99147', 'Efectivo', NULL, '2026-10-03 13:55:58.593807+00', NULL, '2026-10-03 13:55:58.593807+00', NULL, 'E', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('1cf1bfa8-9eb9-4dc9-9da9-d00f21f652ed', 'Otro', NULL, '2026-10-03 13:55:58.593807+00', NULL, '2026-10-03 13:55:58.593807+00', NULL, 'O', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8d496fe9-2fc9-4aec-8797-70305f108753', 'Cupones', NULL, '2026-10-03 13:55:58.593807+00', NULL, '2026-10-03 13:55:58.593807+00', NULL, 'C', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('07241bde-eb5d-4a87-b6da-e740d9eed175', 'Lealtad', NULL, '2026-10-03 13:55:58.593807+00', NULL, '2026-10-03 13:55:58.593807+00', NULL, 'L', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('e07f083b-6b97-496a-b437-b1f54fc04792', 'Tarjeta', NULL, '2026-10-03 13:55:58.593807+00', NULL, '2026-10-03 13:55:58.593807+00', NULL, 'T', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('ef250291-7aa4-4fe8-a73d-43ac5930e7eb', 'Efectivo', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'E', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('c0dff070-62c6-47a7-b3ac-7518285c2cda', 'Otro', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'O', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('6b2e18d6-2fac-4442-bc2d-b2ded5832543', 'Cupones', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'C', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('cfeb5b29-d4ef-4728-ac14-9f65ad5713e9', 'Lealtad', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'L', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8963ca17-95ad-4803-b5bb-bb239c664b68', 'Tarjeta', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'T', NULL, false);
 
 
 --
@@ -3966,27 +4056,27 @@ INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (3, 123);
 -- Data for Name: usuarios; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 13:55:58.048033+00', NULL, '2026-10-03 13:55:58.048033+00', NULL, 1, NULL, NULL, NULL, NULL);
+INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 14:01:18.631823+00', NULL, '2026-10-03 14:01:18.631823+00', NULL, 1, NULL, NULL, NULL, NULL);
 
 
 --
 -- Data for Name: turnos; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('6fce55d8-5cee-4b50-9451-6f94325a331e', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 13:55:57.03484+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('fd58a2b6-ade3-4a88-a300-9d14bbfb77c6', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 13:55:57.03484+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('8e19a020-c938-4de7-be29-aae05140c296', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 13:55:57.03484+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('fd419fb4-53f4-449e-ae6c-58bce5eef2a7', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('c485521b-85e9-4cc9-8447-be23d2dd5c55', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('f6d73dfb-727c-4146-962b-d350c8eea09e', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
 
 
 --
 -- Data for Name: unidades_medida; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('a0762ad0-5b41-4ffa-8310-39903d8dcf52', 'g', 'Gramo', 'masa', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('84d98403-c48a-4313-8ee9-a2ae21de23d2', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('89e27f23-8e46-4794-af61-7d53fba512c2', 'ml', 'Mililitro', 'volumen', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('8b662741-2e9d-4541-8f41-4f74d0cf8334', 'l', 'Litro', 'volumen', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('a8f7b9cc-e698-4186-8e6e-5c3ecb19ea13', 'pza', 'Pieza', 'pieza', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c4790b7d-c72a-40ea-a8c9-220dc55082e7', 'g', 'Gramo', 'masa', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c65cff90-9bb4-4852-82a2-ffa802df9188', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('630502b4-7ac0-4591-adc4-8f9b61ffef0a', 'ml', 'Mililitro', 'volumen', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('f1b9864a-d7ac-4906-892d-0e9ba79f0d7c', 'l', 'Litro', 'volumen', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('5f698b0b-ae93-4f99-afdf-842ac5c20ac3', 'pza', 'Pieza', 'pieza', 1.000000, true);
 
 
 --

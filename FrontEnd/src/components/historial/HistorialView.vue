@@ -199,7 +199,7 @@
                         <q-item-section>Editar orden</q-item-section>
                       </q-item>
                       <q-item
-                        v-if="!esEstadoFinal(tx.estado_actual)"
+                        v-if="esCancelable(tx.estado_actual)"
                         v-close-popup
                         clickable
                         class="text-negative"
@@ -256,7 +256,7 @@ import type { FilterChip, UiTone } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
 import { mensajeDeError, resolveErrorMessage } from '@/utils/errorHandler'
 import type { ApiError } from '@/types/auth'
-import { comandasApi } from '@/api/comandasApi'
+import { useCancelarComanda } from '@/composables/useCancelarComanda'
 import {
   obtenerHistorial,
   obtenerEstadisticas,
@@ -270,6 +270,7 @@ import type { Estadisticas } from '@/api/historialApi'
 import type { CajaItem } from '@/types/turnoCaja'
 
 const $q = useQuasar()
+const { cancelarComanda } = useCancelarComanda()
 const authStore = useAuthStore()
 const metodosPagoStore = useMetodosPagoStore()
 
@@ -545,6 +546,12 @@ function esEditable(estado: string): boolean {
   return estado.toUpperCase() === 'P'
 }
 
+// A2: solo se cancela mientras sigue en cocina (Pendiente, En preparación,
+// Lista). Una entregada ya consumió sus insumos; el backend responde 409.
+function esCancelable(estado: string): boolean {
+  return ['P', 'E', 'L'].includes(estado.toUpperCase())
+}
+
 function abrirCancelar(comandaId: string) {
   comandaSeleccionadaId.value = comandaId
   $q.dialog({
@@ -556,7 +563,9 @@ function abrirCancelar(comandaId: string) {
     },
   }).onOk(async (motivo: string) => {
     try {
-      await comandasApi.cambiarEstado(comandaId, 'C', motivo)
+      // A4: si la orden está pagada, pide el PIN de un administrador.
+      const cancelada = await cancelarComanda(comandaId, motivo)
+      if (!cancelada) return
       $q.notify({
         type: 'positive',
         message: 'Orden cancelada correctamente.',
@@ -568,6 +577,7 @@ function abrirCancelar(comandaId: string) {
     } catch (err: unknown) {
       const msg = mensajeDeError(err, 'No se pudo cancelar la orden.')
       $q.notify({ type: 'negative', message: msg, position: 'top', timeout: 4000 })
+      void cargarDatos()
     }
   })
 }

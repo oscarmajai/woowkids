@@ -830,7 +830,8 @@ async def calcular_efectivo_disponible(
     """Efectivo físico esperado en el cajón en este momento (turno aún ABIERTA,
     sin depender del conteo de cierre). Misma fórmula que _calcular_balance usa
     para "efectivo esperado" al cerrar, evaluada en vivo -- fondo inicial +
-    ventas en efectivo + ingresos - retiros - cambio entregado. Único origen de
+    ventas en efectivo + ingresos - retiros - cambio entregado - devoluciones en
+    efectivo de comandas canceladas (A4). Único origen de
     verdad, reusado por crear_retiro (bloquea si el retiro la deja negativa) y
     por la advertencia de cambio insuficiente en pagos/reservaciones/estancias
     (no bloquea, solo informa)."""
@@ -840,7 +841,25 @@ async def calcular_efectivo_disponible(
         + await sumar_ingresos_por_apertura(conn, apertura_caja_id)
         - await sumar_retiros_por_apertura(conn, apertura_caja_id)
         - await sumar_cambio_apertura(conn, apertura_caja_id)
+        - await sumar_devoluciones_efectivo_apertura(conn, apertura_caja_id)
     )
+
+
+async def sumar_devoluciones_efectivo_apertura(
+    conn: asyncpg.Connection, apertura_caja_id: str
+) -> Decimal:
+    """A4: efectivo devuelto a clientes desde el cajón de este turno al
+    cancelar comandas cobradas (devoluciones_comanda.es_efectivo). Resta del
+    efectivo esperado igual que un retiro."""
+    val = await conn.fetchval(
+        """
+        SELECT COALESCE(SUM(monto), 0)
+        FROM public.devoluciones_comanda
+        WHERE apertura_caja_id = $1 AND es_efectivo
+        """,
+        uuid.UUID(apertura_caja_id),
+    )
+    return Decimal(str(val))
 
 
 async def sumar_ventas_efectivo_apertura(
