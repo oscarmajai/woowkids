@@ -71,10 +71,8 @@ async def crear_comanda(
     # el sucursal_id que mande el cliente en el body.
     active_branch_id = get_active_branch(current_user)
     comanda_in = comanda_in.model_copy(update={"sucursal_id": active_branch_id})
-    # C1: los productos deben ser de la sucursal de la sesión (404 si no).
-    await alcance_service.asegurar_recursos(
-        conn, current_user, "producto", [d.id for d in comanda_in.detalles_comanda]
-    )
+    # Productos de otra sucursal: los rechaza precios_venta (422 PRODUCTO_INVALIDO,
+    # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
 
     try:
         comanda = await comanda_service.crear_comanda_pos(

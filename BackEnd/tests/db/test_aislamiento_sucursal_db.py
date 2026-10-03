@@ -260,7 +260,7 @@ def _reservacion(suc: str) -> dict[str, Any]:
 
 
 def _venta() -> dict[str, Any]:
-    """Venta POS con un producto de la sucursal A (para B: 404)."""
+    """Venta POS con un producto de la sucursal A (para B: 422)."""
     return {
         "total_final": 95,
         "detalles_comanda": [
@@ -475,7 +475,8 @@ CASOS: list[Caso] = [
     Caso("GET", "/api/pagos/detalles/estancia/{registro}", 404),
     Caso("GET", "/api/pagos/detalles/reservacion/{reservacion}", 404),
     Caso("PATCH", "/api/comandas/{comanda}/estado", 404, json=lambda s: {"estado_actual": "E"}),
-    Caso("POST", "/api/pagos/completar", 404, json=lambda s: _venta()),
+    # Producto de otra sucursal: lo rechaza el cálculo de precios del servidor (C2).
+    Caso("POST", "/api/pagos/completar", 422, json=lambda s: _venta()),
     # ── Lealtad y sucursal ──
     Caso("GET", "/api/lealtad/configuracion?sucursal_id={suc}", 403),
     Caso("GET", "/api/lealtad/reporte?sucursal_id={suc}", 403),

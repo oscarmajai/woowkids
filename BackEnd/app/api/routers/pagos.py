@@ -87,10 +87,8 @@ async def completar_pago(
 ) -> dict[str, Any]:
     usuario_id = UUID(current_user.sub)
     sucursal_id = _get_active_branch(current_user)
-    # C1: los productos deben ser de la sucursal de la sesión (404 si no).
-    await alcance_service.asegurar_recursos(
-        conn, current_user, "producto", [d.id for d in body.detalles_comanda]
-    )
+    # Productos de otra sucursal: los rechaza precios_venta (422 PRODUCTO_INVALIDO,
+    # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
     disponible_antes = await turnos_caja_service.efectivo_disponible_actual(conn, apertura_id)
     comanda = await svc.completar_pago(
         conn, body, usuario_id, sucursal_id, apertura_id, idempotency_key
