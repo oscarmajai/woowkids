@@ -36,7 +36,7 @@ from app.schemas.reservaciones import EventoDelDiaOut
 from app.services import lealtad_service
 from app.services.padres_service import emitir_codigo_acceso
 from app.services.pagos_estancia import validar_referencias_pago
-from app.services.tramos_estancia import tramos_de_producto
+from app.services.tramos_estancia import precio_por_hora, tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -307,37 +307,15 @@ async def _crear_estancia_tx(
                 entrada = datetime.now(UTC)
                 salida_esperada = entrada + timedelta(hours=d.cantidad)
 
-                # Buscar el precio correspondiente en los tramos
-                precio = None
-                horas_solicitadas = float(d.cantidad)
-
-                for config in precios:
-                    min_h = float(config["min_horas"])
-                    max_h = float(config["max_horas"])
-                    p_val = Decimal(str(config["precio"]))
-
-                    if min_h <= horas_solicitadas <= max_h:
-                        precio = p_val
-                        break
-
+                # Precio por hora del tramo que cubre las horas (ver
+                # tramos_estancia.precio_por_hora: tramos ordenados; el de
+                # min_horas más bajo si ninguno las cubre).
+                precio = precio_por_hora(precios, float(d.cantidad))
                 if precio is None:
-                    precio_mas_bajo = None
-                    min_horas_mas_bajo = float("inf")
-
-                    for config in precios:
-                        min_h = float(config["min_horas"])
-                        if min_h < min_horas_mas_bajo:
-                            min_horas_mas_bajo = min_h
-                            precio_mas_bajo = Decimal(str(config["precio"]))
-
-                    if precio_mas_bajo is not None:
-                        precio = precio_mas_bajo
-                    else:
-                        raise HTTPException(
-                            400,
-                            "No se encontró ningún precio disponible en la "
-                            "configuración de estancia",
-                        )
+                    raise HTTPException(
+                        400,
+                        "No se encontró ningún precio disponible en la configuración de estancia",
+                    )
 
                 # Se guarda el producto de estancia con el que se calculó el
                 # precio, no el productoId que mande el cliente (C2).

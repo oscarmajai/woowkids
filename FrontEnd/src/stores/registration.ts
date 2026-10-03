@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAccessControlStore } from '@/stores/accessControl'
 import { reservacionesApi } from '@/api/reservacionesApi'
 import { horasFacturables } from '@/utils/horario'
+import { tramoParaHoras } from '@/utils/tramosEstancia'
 import type { EventoDelDia } from '@/types/reservaciones'
 import type { PrecioEstancia, TramoEstancia } from '@/types/producto'
 import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
@@ -220,22 +221,10 @@ export const useRegistrationStore = defineStore('registration', () => {
   // Cada niño puede contratar un tiempo distinto (B2 #4); en modo evento
   // todos usan horasEvento (el tiempo lo define el evento, no el selector).
 
+  // Misma regla que el backend (tramos ordenados; en un extremo compartido,
+  // "0–1 h" y "1–2 h", gana el que termina ahí): ver utils/tramosEstancia.
   function tramoFor(horasSolicitadas: number): TramoEstancia | null {
-    if (!productoBase.value?.config_estancia?.length) return null
-
-    // Primero buscar tramo exacto
-    const tramoExacto = productoBase.value.config_estancia.find(
-      (tramo) => horasSolicitadas >= tramo.min_horas && horasSolicitadas <= tramo.max_horas,
-    )
-
-    if (tramoExacto) return tramoExacto
-
-    // Si no encuentra, usar el tramo con min_horas más bajo
-    const tramoMasBajo = productoBase.value.config_estancia.reduce((min, tramo) =>
-      tramo.min_horas < min.min_horas ? tramo : min,
-    )
-
-    return tramoMasBajo ?? null
+    return tramoParaHoras(productoBase.value?.config_estancia ?? [], horasSolicitadas)
   }
 
   const tieneTarifaValida = computed(() => {

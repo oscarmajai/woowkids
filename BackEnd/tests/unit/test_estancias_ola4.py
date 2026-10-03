@@ -22,6 +22,7 @@ from app.schemas.pagos import PagoEstanciaExtraRequest, PagoIn
 from app.schemas.registros import DetalleIn, OnboardingRequest
 from app.schemas.tutores import TutorIn
 from app.services import chekouts, estancias, pagos_estancia
+from app.services.tramos_estancia import precio_por_hora
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -389,3 +390,35 @@ def test_n5_la_ruta_exige_el_permiso_de_checkin() -> None:
     dependencias = [d.call for d in rutas[0].dependant.dependencies]  # type: ignore[attr-defined]
     nombres = {getattr(d, "__qualname__", "") for d in dependencias}
     assert any("require_permission" in n for n in nombres)
+
+
+# --- Tramos contiguos --------------------------------------------------------
+
+
+def test_tramos_contiguos_el_extremo_compartido_es_del_tramo_que_termina_ahi() -> None:
+    tramos = [
+        {"min_horas": 1, "max_horas": 2, "precio": 130},
+        {"min_horas": 0, "max_horas": 1, "precio": 150},
+    ]
+    # El orden en que se guardaron no importa.
+    assert precio_por_hora(tramos, 1) == Decimal("150")
+    assert precio_por_hora(tramos, 2) == Decimal("130")
+    assert precio_por_hora(list(reversed(tramos)), 1) == Decimal("150")
+
+
+def test_tramos_sin_extremos_compartidos_se_cotizan_igual_que_antes() -> None:
+    tramos = [
+        {"min_horas": 4, "max_horas": 8, "precio": 110},
+        {"min_horas": 1, "max_horas": 1, "precio": 150},
+        {"min_horas": 2, "max_horas": 3, "precio": 130},
+    ]
+    assert [precio_por_hora(tramos, h) for h in (1, 2, 3, 4, 8)] == [
+        Decimal("150"),
+        Decimal("130"),
+        Decimal("130"),
+        Decimal("110"),
+        Decimal("110"),
+    ]
+    # Fuera de todos los tramos: el de min_horas más bajo, como antes.
+    assert precio_por_hora(tramos, 12) == Decimal("150")
+    assert precio_por_hora([], 2) is None

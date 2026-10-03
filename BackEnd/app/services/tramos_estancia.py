@@ -9,6 +9,15 @@ checkout y el frontend (`stores/registration.ts`, `priceForChild`).
 Si un producto no tiene tramos configurados (config_estancia NULL o vacío) pero
 sí un `precio_unitario` mayor a cero, se usa un tramo único por hora con ese
 precio, en lugar de impedir el check-in de toda la sucursal.
+
+Tramos contiguos (UX de la ola 4): la pantalla de productos ya acepta rangos
+que comparten un extremo ("0-1 h" y "1-2 h"), porque los compara como
+semiabiertos. Para que el precio no dependa del orden en que se guardaron, la
+búsqueda recorre los tramos ordenados por `min_horas` y toma el primero que
+cubre las horas (inclusivo): en el extremo compartido gana el tramo que
+termina ahí (1 h → "0-1 h", 2 h → "1-2 h"). Los tramos sin extremos
+compartidos ("1-1", "2-3") se cotizan igual que antes. El frontend aplica la
+misma regla (`stores/registration.ts`, `tramoFor`).
 """
 
 from __future__ import annotations
@@ -53,3 +62,16 @@ def tramos_de_producto(
             }
         ]
     return []
+
+
+def precio_por_hora(tramos: list[dict[str, Any]], horas: float) -> Decimal | None:
+    """Precio por hora que corresponde a `horas` según los tramos (ver la
+    cabecera del módulo). Si ningún tramo cubre las horas, se usa el de
+    `min_horas` más bajo, como hasta ahora. None si no hay tramos."""
+    if not tramos:
+        return None
+    ordenados = sorted(tramos, key=lambda t: (float(t["min_horas"]), float(t["max_horas"])))
+    for tramo in ordenados:
+        if float(tramo["min_horas"]) <= horas <= float(tramo["max_horas"]):
+            return Decimal(str(tramo["precio"]))
+    return Decimal(str(ordenados[0]["precio"]))
