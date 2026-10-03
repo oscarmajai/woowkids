@@ -274,7 +274,7 @@ export function useAppNavigation(): AppNavigation {
   function badgeFor(routeName: string): NavBadge | null {
     if (routeName === 'insumos-listar' || routeName === 'reportes-inventario') {
       const count = alertasInventario.totalAlertas
-      return count > 0 ? { count, tone: 'warn' } : null
+      return count > 0 ? { count, tone: 'warn', fuente: 'alertas-inventario' } : null
     }
     if (routeName === 'pos-cocina') {
       const count = shellIndicadores.comandasPendientes

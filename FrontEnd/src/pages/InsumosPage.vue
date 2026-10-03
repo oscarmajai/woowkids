@@ -84,7 +84,7 @@
         </template>
         <template #body-cell-costo_unitario="props">
           <q-td :props="props" class="text-weight-bold">
-            {{ props.row.costo_unitario ? formatMXN(Number(props.row.costo_unitario)) : '—' }}
+            {{ props.row.costo_unitario ? formatCostoUnitario(props.row.costo_unitario) : '—' }}
           </q-td>
         </template>
         <template #body-cell-proveedor_principal_id="props">
@@ -246,16 +246,29 @@
               step="0.001"
             />
           </div>
-          <div class="col">
-            <div class="field-label">Costo unitario (opcional)</div>
+          <div v-if="!editando" class="col">
+            <div class="field-label">Costo unitario inicial (opcional)</div>
             <q-input
               v-model.number="formDialog.costo_unitario"
               dense
               outlined
               type="number"
               min="0"
-              step="0.01"
+              step="any"
               prefix="$"
+              hint="Por unidad base; es el costo del stock inicial"
+            />
+          </div>
+          <div v-else class="col">
+            <div class="field-label">Costo unitario</div>
+            <q-input
+              :model-value="
+                editando.costo_unitario ? formatCostoUnitario(editando.costo_unitario) : '—'
+              "
+              dense
+              outlined
+              readonly
+              hint="Promedio PEPS de las compras y entradas; se actualiza solo con cada movimiento"
             />
           </div>
         </div>
@@ -300,11 +313,11 @@
           />
         </div>
 
-        <div v-if="editando" class="dlg-section">
+        <div class="dlg-section">
           <div class="dlg-section__title"><q-icon name="category" size="19px" />Presentaciones</div>
 
           <q-banner
-            v-if="presentacionesStore.error"
+            v-if="editando && presentacionesStore.error"
             dense
             rounded
             class="bg-red-1 text-red-8 q-mb-sm"
@@ -313,12 +326,13 @@
             {{ presentacionesStore.error }}
           </q-banner>
 
-          <q-list v-if="presentacionesActivas.length" separator bordered class="rounded-borders">
-            <q-item v-for="item in presentacionesActivas" :key="item.id">
+          <q-list v-if="presentacionesVisibles.length" separator bordered class="rounded-borders">
+            <q-item v-for="item in presentacionesVisibles" :key="item.id">
               <q-item-section>
                 <q-item-label>{{ item.nombre }}</q-item-label>
                 <q-item-label caption>
-                  {{ Number(item.equivalencia_base) }} {{ codigoUnidad(editando.unidad_base_id) }}
+                  {{ Number(item.equivalencia_base) }}
+                  {{ formDialog.unidad_base_id ? codigoUnidad(formDialog.unidad_base_id) : '' }}
                 </q-item-label>
               </q-item-section>
               <q-item-section side>
@@ -337,7 +351,11 @@
             </q-item>
           </q-list>
           <div v-else class="text-body2 text-grey-7 q-py-sm">
-            Este insumo todavía no tiene presentaciones registradas.
+            {{
+              editando
+                ? 'Este insumo todavía no tiene presentaciones registradas.'
+                : 'Opcional: empaques en que lo compras (ej. Caja 5 kg). Se guardan al crear el insumo.'
+            }}
           </div>
 
           <div class="row q-col-gutter-sm items-start q-mt-sm">
@@ -401,7 +419,8 @@
         <div class="q-mt-sm text-body2 text-grey-8">
           ¿Estás seguro de que deseas eliminar
           <strong>{{ filaEliminar?.nombre }}</strong
-          >? Esta acción no se puede deshacer.
+          >? Quedará como inactivo: ya no se podrá usar en compras ni registrar movimientos, y su
+          historial (kardex y compras) se conserva.
         </div>
       </div>
 
@@ -487,15 +506,21 @@
           </div>
           <q-banner v-if="insumoAjuste" dense rounded class="bg-blue-1 text-blue-9">
             <template #avatar><q-icon name="calculate" color="blue-9" /></template>
-            <template v-if="deltaConteo === 0">Coincide con el sistema, no hay ajuste.</template>
-            <template v-else-if="deltaConteo > 0">
-              Entrada de <strong>+{{ deltaConteo }}</strong>
+            <template v-if="diferencia.tipo === 'igual'">
+              Coincide con el sistema, no hay ajuste.
+            </template>
+            <template v-else-if="diferencia.tipo === 'entrada'">
+              Entrada de <strong>{{ diferencia.cantidad }}</strong>
               {{ codigoUnidad(insumoAjuste.unidad_base_id) }} (sobra stock).
             </template>
             <template v-else>
-              Merma de <strong>{{ deltaConteo }}</strong>
+              Merma de <strong>{{ diferencia.cantidad }}</strong>
               {{ codigoUnidad(insumoAjuste.unidad_base_id) }} (falta stock).
             </template>
+            <div class="text-caption q-mt-xs">
+              Stock del sistema: {{ Number(insumoAjuste.stock_actual) }}
+              {{ codigoUnidad(insumoAjuste.unidad_base_id) }}
+            </div>
           </q-banner>
         </template>
 
@@ -531,7 +556,7 @@
           color="primary"
           label="Aplicar conteo"
           :loading="guardandoAjuste"
-          :disable="deltaConteo === 0"
+          :disable="diferencia.tipo === 'igual'"
           @click="guardarConteo"
         />
       </template>
@@ -546,7 +571,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
-import { formatMXN } from '@/utils/formatoMoneda'
+import { diferenciaConteo, formatCostoUnitario } from '@/utils/inventario'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
@@ -559,6 +584,7 @@ import { useMovimientosInventarioStore } from '@/stores/movimientosInventario'
 import { usePresentacionesInsumoStore } from '@/stores/presentacionesInsumo'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { calcularRindePorInsumo } from '@/utils/estimacionRinde'
+import { obtenerInsumo } from '@/services/insumoService'
 import type { ApiError } from '@/types/auth'
 import type { Insumo } from '@/types/insumo'
 import type { TipoMovimientoManual } from '@/types/movimientoInventario'
@@ -691,6 +717,8 @@ const formDialog = ref(formVacio())
 const abrirCrear = () => {
   editando.value = null
   formDialog.value = formVacio()
+  formPresentacion.value = { nombre: '', equivalencia_base: 0 }
+  presentacionesNuevas.value = []
   dialogOpen.value = true
 }
 
@@ -709,6 +737,7 @@ const abrirEditar = (row: Insumo) => {
     proveedor_principal_id: row.proveedor_principal_id,
   }
   formPresentacion.value = { nombre: '', equivalencia_base: 0 }
+  presentacionesNuevas.value = []
   dialogOpen.value = true
   presentacionesStore.cargarPorInsumo(row.id)
 }
@@ -742,14 +771,13 @@ const guardar = async () => {
           formDialog.value.punto_reorden != null ? String(formDialog.value.punto_reorden) : null,
         stock_maximo:
           formDialog.value.stock_maximo != null ? String(formDialog.value.stock_maximo) : null,
-        costo_unitario:
-          formDialog.value.costo_unitario != null ? String(formDialog.value.costo_unitario) : null,
+        // B9: el costo unitario no se manda; lo calcula el backend (PEPS).
         proveedor_principal_id: formDialog.value.proveedor_principal_id,
       })
       $q.notify({ type: 'positive', message: 'Insumo actualizado', position: 'top-right' })
     } else {
       if (!authStore.currentBranchId) return
-      await store.crear({
+      const nuevo = await store.crear({
         nombre: formDialog.value.nombre.trim(),
         descripcion: formDialog.value.descripcion.trim() || null,
         unidad_base_id: formDialog.value.unidad_base_id!,
@@ -765,7 +793,16 @@ const guardar = async () => {
         proveedor_principal_id: formDialog.value.proveedor_principal_id,
         sucursal_id: authStore.currentBranchId,
       })
-      $q.notify({ type: 'positive', message: 'Insumo creado', position: 'top-right' })
+      const fallidas = await crearPresentacionesNuevas(nuevo.id)
+      if (fallidas.length) {
+        $q.notify({
+          type: 'warning',
+          message: `Insumo creado, pero no se guardaron las presentaciones: ${fallidas.join(', ')}. Agrégalas desde Editar.`,
+          position: 'top-right',
+        })
+      } else {
+        $q.notify({ type: 'positive', message: 'Insumo creado', position: 'top-right' })
+      }
     }
     cerrarDialog()
   } catch (err) {
@@ -824,12 +861,12 @@ const formAjuste = ref({
 
 const formConteo = ref({ stock_contado: 0 })
 
-const deltaConteo = computed(() => {
-  if (!insumoAjuste.value) return 0
-  return Number(
-    (formConteo.value.stock_contado - Number(insumoAjuste.value.stock_actual)).toFixed(3),
-  )
-})
+// Sin doble negativo: "Merma de 100 g", no "Merma de -100 g".
+const diferencia = computed(() =>
+  insumoAjuste.value
+    ? diferenciaConteo(formConteo.value.stock_contado, Number(insumoAjuste.value.stock_actual))
+    : diferenciaConteo(0, 0),
+)
 
 const abrirKardex = (row: Insumo) => {
   router.push({ name: 'insumos-kardex', params: { id: row.id } })
@@ -841,6 +878,31 @@ const abrirAjuste = (row: Insumo) => {
   formAjuste.value = { tipo: 'E', cantidad: 0, notas: '' }
   formConteo.value = { stock_contado: Number(row.stock_actual) }
   dialogAjuste.value = true
+  // La lista se cargó al abrir la página: con ventas en curso el stock ya pudo
+  // cambiar. Se relee para que la vista previa compare contra el stock real.
+  void refrescarStockAjuste().then((cambio) => {
+    if (cambio && insumoAjuste.value?.id === row.id) {
+      formConteo.value = { stock_contado: Number(insumoAjuste.value.stock_actual) }
+    }
+  })
+}
+
+/** Relee el stock del insumo del diálogo de ajuste. Devuelve true si cambió
+ * respecto al que se estaba mostrando. */
+const refrescarStockAjuste = async (): Promise<boolean> => {
+  const actual = insumoAjuste.value
+  if (!actual) return false
+  try {
+    const fresco = await obtenerInsumo(actual.id)
+    if (insumoAjuste.value?.id !== actual.id) return false
+    const cambio = Number(fresco.stock_actual) !== Number(actual.stock_actual)
+    insumoAjuste.value = { ...actual, stock_actual: fresco.stock_actual }
+    aplicarStockLocal(actual.id, fresco.stock_actual)
+    return cambio
+  } catch {
+    // Sin red: se usa el stock de la lista; el backend recalcula con el real.
+    return false
+  }
 }
 
 const cerrarAjuste = () => {
@@ -877,9 +939,21 @@ const guardarAjuste = async () => {
 }
 
 const guardarConteo = async () => {
-  if (!insumoAjuste.value || deltaConteo.value === 0) return
+  if (!insumoAjuste.value || diferencia.value.tipo === 'igual') return
   guardandoAjuste.value = true
   try {
+    // El ajuste se calcula contra el stock real al confirmar: si cambió desde
+    // que se abrió el diálogo, se actualiza la vista previa y se pide revisarla.
+    const anterior = Number(insumoAjuste.value.stock_actual)
+    if (await refrescarStockAjuste()) {
+      $q.notify({
+        type: 'warning',
+        message: `El stock cambió de ${anterior} a ${Number(insumoAjuste.value?.stock_actual)} mientras contabas. Revisa la diferencia y vuelve a aplicar el conteo.`,
+        position: 'top-right',
+      })
+      return
+    }
+    if (!insumoAjuste.value) return
     const movimiento = await movimientosStore.conteoFisico(insumoAjuste.value.id, {
       stock_contado: String(formConteo.value.stock_contado),
       notas: formAjuste.value.notas.trim() || null,
@@ -909,13 +983,47 @@ const formPresentacion = ref({
 
 const presentacionesActivas = computed(() => presentacionesStore.items.filter((p) => p.activo))
 
+// Presentaciones capturadas al crear el insumo: se guardan después del alta
+// (antes solo se podían agregar al editar).
+interface PresentacionNueva {
+  id: string
+  nombre: string
+  equivalencia_base: number | string
+}
+const presentacionesNuevas = ref<PresentacionNueva[]>([])
+
+const presentacionesVisibles = computed<PresentacionNueva[]>(() =>
+  editando.value ? presentacionesActivas.value : presentacionesNuevas.value,
+)
+
+/** Crea las presentaciones capturadas en el alta. Devuelve los nombres que fallaron. */
+const crearPresentacionesNuevas = async (insumoId: string): Promise<string[]> => {
+  const fallidas: string[] = []
+  for (const p of presentacionesNuevas.value) {
+    try {
+      await presentacionesStore.crear(insumoId, {
+        nombre: p.nombre,
+        equivalencia_base: String(p.equivalencia_base),
+      })
+    } catch {
+      fallidas.push(p.nombre)
+    }
+  }
+  presentacionesNuevas.value = []
+  return fallidas
+}
+
 const guardarPresentacion = async () => {
-  if (
-    !editando.value ||
-    !formPresentacion.value.nombre.trim() ||
-    !formPresentacion.value.equivalencia_base
-  )
+  if (!formPresentacion.value.nombre.trim() || !formPresentacion.value.equivalencia_base) return
+  if (!editando.value) {
+    presentacionesNuevas.value.push({
+      id: `nueva-${Date.now()}-${presentacionesNuevas.value.length}`,
+      nombre: formPresentacion.value.nombre.trim(),
+      equivalencia_base: Number(Number(formPresentacion.value.equivalencia_base).toFixed(3)),
+    })
+    formPresentacion.value = { nombre: '', equivalencia_base: 0 }
     return
+  }
   guardandoPresentacion.value = true
   try {
     await presentacionesStore.crear(editando.value.id, {
@@ -936,7 +1044,10 @@ const guardarPresentacion = async () => {
 }
 
 const quitarPresentacion = async (presentacionId: string) => {
-  if (!editando.value) return
+  if (!editando.value) {
+    presentacionesNuevas.value = presentacionesNuevas.value.filter((p) => p.id !== presentacionId)
+    return
+  }
   try {
     await presentacionesStore.eliminar(editando.value.id, presentacionId)
     $q.notify({ type: 'positive', message: 'Presentación eliminada', position: 'top-right' })

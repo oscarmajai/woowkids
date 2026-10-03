@@ -19,9 +19,15 @@
       <KpiCard
         label="Margen"
         :value="formatMXN(resumen?.margen ?? 0)"
+        note="ventas − costo − merma"
         :value-color="(resumen?.margen ?? 0) < 0 ? 'var(--tone-bad-fg)' : undefined"
       />
-      <KpiCard label="Merma" :value="formatMXN(resumen?.merma ?? 0)" note-tone="warn" />
+      <KpiCard
+        label="Merma"
+        :value="formatMXN(resumen?.merma ?? 0)"
+        :note="notaMerma"
+        note-tone="warn"
+      />
     </div>
 
     <DataTableCard hide-search :count="`${renglones.length} insumos`">
@@ -102,6 +108,13 @@ const loading = ref(false)
 const exportando = ref(false)
 const renglones = ref<CogsRenglon[]>([])
 const resumen = ref<ResumenCogs | null>(null)
+
+// M24: la merma incluye el faltante de los conteos físicos.
+const notaMerma = computed(() =>
+  resumen.value
+    ? `manual ${formatMXN(resumen.value.mermaManual)} · conteo ${formatMXN(resumen.value.mermaConteo)}`
+    : undefined,
+)
 
 const costoTotal = computed(() =>
   renglones.value.reduce((acc, r) => acc + Number(r.costo_total), 0),

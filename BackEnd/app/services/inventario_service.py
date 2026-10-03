@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import asyncpg
 
 from app.exceptions import DatosInvalidos, NoEncontrado, StockInsuficienteError
+from app.exceptions.inventario import RecursoInactivoError
 from app.models.comanda import DetalleComanda
 from app.repositories import (
     combo_repository,
@@ -177,6 +178,14 @@ async def revertir_por_cancelacion(
             )
 
 
+def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
+    """M22: un insumo eliminado (borrado lógico) no admite ajustes ni conteos."""
+    if not insumo["activo"]:
+        raise RecursoInactivoError(
+            f"El insumo «{insumo['nombre']}» está eliminado; no admite movimientos de inventario."
+        )
+
+
 async def registrar_ajuste_manual(
     conn: asyncpg.Connection,
     insumo_id: UUID,
@@ -186,6 +195,7 @@ async def registrar_ajuste_manual(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
+    _validar_insumo_activo(insumo)
     delta = body.cantidad if body.tipo == "E" else -body.cantidad
     async with conn.transaction():
         nuevo_stock = await insumo_repository.ajustar_stock(conn, insumo_id, delta)
@@ -238,6 +248,7 @@ async def registrar_conteo_fisico(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
+    _validar_insumo_activo(insumo)
     delta = body.stock_contado - insumo["stock_actual"]
     if delta == 0:
         raise DatosInvalidos(

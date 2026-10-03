@@ -13,6 +13,7 @@ import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
 import { formatMXN } from '@/utils/formatoMoneda'
 import { saludoPorHora } from '@/utils/saludo'
+import { tituloAlertasStock } from '@/utils/inventario'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
@@ -223,7 +224,8 @@ const pendientes = computed<Pendiente[]>(() => {
       key: 'stock',
       icon: 'inventory_2',
       tone: 'info',
-      title: `${insumos.length} insumos bajo mínimo`,
+      // B7: "bajo mínimo" y "por reordenar" son alertas distintas.
+      title: tituloAlertasStock(alertas.criticos.length, alertas.porReordenar.length),
       detail: insumos
         .slice(0, 3)
         .map((i) => i.nombre)

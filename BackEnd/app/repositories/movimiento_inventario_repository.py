@@ -124,7 +124,11 @@ async def listar_por_insumo(
         conditions.append(_hasta_local("mi.creado", len(params), _ZONA_INSUMO))
 
     where_clause = " AND ".join(conditions)
-    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.creado DESC", *params)
+    # B11: los movimientos de una misma transacción comparten `creado` (now() es
+    # la hora de inicio de la transacción) y salían en orden arbitrario. La
+    # secuencia (migración 098) es el orden real de inserción: para un mismo
+    # insumo coincide con el orden en que se encadena stock_resultante.
+    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.secuencia DESC", *params)
     return [dict(r) for r in rows]
 
 
@@ -170,8 +174,14 @@ async def resumen_costo_ventas(
 ) -> dict[str, Any]:
     """KPIs del reporte de costo de ventas (B7 pendiente #3): ventas totales
     de comandas en el periodo, costo de lo vendido (motivo venta_comanda),
-    margen (ventas - costo) y merma (motivo merma, por separado del costo
-    de venta).
+    merma y margen (ventas - costo de ventas - merma).
+
+    M24: la merma son todas las salidas tipo 'M' del periodo: la merma manual
+    (motivo merma) y el faltante de los conteos físicos (motivo conteo_fisico),
+    con su desglose en `merma_manual` / `merma_conteo`. Antes solo contaba la
+    manual: el faltante por conteo no aparecía en ningún KPI y el margen no
+    restaba ninguna merma, así que se veía mejor de lo que es. Un sobrante de
+    conteo (entrada 'E') no se resta de la merma.
 
     Las comandas canceladas (`estado_actual = 'C'` o `activo = FALSE`) no
     cuentan como venta, y al costo de lo vendido se le resta lo que su
@@ -216,9 +226,12 @@ async def resumen_costo_ventas(
     )
     merma_row = await conn.fetchrow(
         f"""
-        SELECT COALESCE(SUM(mi.costo_total), 0) AS merma
+        SELECT COALESCE(SUM(mi.costo_total) FILTER (WHERE mi.motivo = 'merma'), 0)
+                   AS merma_manual,
+               COALESCE(SUM(mi.costo_total) FILTER (WHERE mi.motivo = 'conteo_fisico'), 0)
+                   AS merma_conteo
         FROM public.movimientos_inventario mi
-        WHERE {where_mov} AND mi.motivo = 'merma'
+        WHERE {where_mov} AND mi.tipo = 'M'
         """,
         *params,
     )
@@ -231,11 +244,15 @@ async def resumen_costo_ventas(
         *params,
     )
     costo_ventas = Decimal(str(costo_venta_row["costo_ventas"]))
-    merma = Decimal(str(merma_row["merma"]))
+    merma_manual = Decimal(str(merma_row["merma_manual"]))
+    merma_conteo = Decimal(str(merma_row["merma_conteo"]))
+    merma = merma_manual + merma_conteo
     ventas_totales = Decimal(str(ventas_row["ventas_totales"]))
     return {
         "ventas_totales": ventas_totales,
         "costo_ventas": costo_ventas,
-        "margen": ventas_totales - costo_ventas,
+        "margen": ventas_totales - costo_ventas - merma,
         "merma": merma,
+        "merma_manual": merma_manual,
+        "merma_conteo": merma_conteo,
     }
