@@ -66,8 +66,7 @@ async def exportar_movimientos(
     current_user: TokenData = Depends(require_permission("inventario:ver_movimientos")),
 ) -> StreamingResponse:
     await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
-    movimientos = await inventario_service.listar_movimientos(conn, insumo_id, desde, hasta)
-    filas = (m.model_dump() for m in movimientos)
+    filas = await inventario_service.filas_export_movimientos(conn, insumo_id, desde, hasta)
     return csv_streaming_response(_KARDEX_CSV_CAMPOS, filas, f"kardex_{insumo_id}.csv")
 
 

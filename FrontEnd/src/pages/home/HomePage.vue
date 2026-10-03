@@ -12,6 +12,7 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { saludoPorHora } from '@/utils/saludo'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
@@ -37,6 +38,15 @@ const puede = {
   eventos: computed(() => auth.hasPermission('reservaciones:listar')),
   inventario: computed(() => auth.hasPermission('inventario:ver')),
   pos: computed(() => auth.hasPermission('pos:acceder')),
+  // "Nuevo pedido" abre Caja (POS): el Administrador de sucursal no vende en
+  // mostrador y AdministradorSistema necesita elegir sucursal antes (B21).
+  nuevoPedido: computed(
+    () =>
+      auth.hasPermission('pos:acceder') &&
+      !(auth.hasRole('Administrador') && !auth.isSistema) &&
+      !(auth.isSistema && !auth.currentBranchId),
+  ),
+  reporteStock: computed(() => auth.hasPermission('reportes:inventario')),
   checkin: computed(() => auth.hasPermission('estancias:checkin')),
   checkout: computed(() => auth.hasPermission('estancias:checkout')),
   nuevaReservacion: computed(() => auth.hasPermission('reservaciones:crear')),
@@ -53,7 +63,7 @@ const relojTimer = setInterval(() => {
 const saludo = computed(() => {
   const h = ahora.value.getHours()
   const nombre = (auth.currentUser?.name ?? '').split(' ')[0]
-  const parte = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'
+  const parte = saludoPorHora(h)
   return nombre ? `${parte}, ${nombre}` : parte
 })
 const subtitulo = computed(() => {
@@ -218,7 +228,9 @@ const pendientes = computed<Pendiente[]>(() => {
         .slice(0, 3)
         .map((i) => i.nombre)
         .join(' · '),
-      action: { label: 'Ver stock', run: () => router.push({ name: 'reportes-inventario' }) },
+      action: puede.reporteStock.value
+        ? { label: 'Ver stock', run: () => router.push({ name: 'reportes-inventario' }) }
+        : undefined,
     })
   }
   return lista
@@ -260,7 +272,7 @@ const sinModulos = computed(
           :to="{ name: 'eventos-reservaciones-crear' }"
         />
         <q-btn
-          v-if="puede.pos.value"
+          v-if="puede.nuevoPedido.value"
           outline
           icon="add_shopping_cart"
           label="Nuevo pedido"

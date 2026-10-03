@@ -288,7 +288,7 @@ async function realizarApertura() {
   if (esAdminSistema.value && !sucursalSeleccionada.value) {
     $q.notify({
       type: 'warning',
-      message: 'Selecciona una sucursal en el menú superior antes de abrir caja.',
+      message: 'Selecciona una sucursal en el menú lateral antes de abrir caja.',
     })
     return
   }

@@ -112,15 +112,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { Notify } from 'quasar'
 import type { ActiveChild } from '@/stores/accessControl'
 import { useAccessControlStore } from '@/stores/accessControl'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
+import { useAuthStore } from '@/stores/auth'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FotosRegistroDialog from './FotosRegistroDialog.vue'
 
 const props = defineProps<{ child: ActiveChild }>()
 const store = useAccessControlStore()
 const turno = useTurnoCajaStore()
+const auth = useAuthStore()
 const router = useRouter()
 
 const showDetails = ref(false)
@@ -160,7 +163,18 @@ function irACheckoutDesdeDetalle() {
 
 function handleCheckout() {
   if (!turno.estaOperando) {
-    router.push('/pos/cierre')
+    // Sin pos:acceder no puede abrir caja: mandarlo a Apertura y Cierre lo
+    // rebotaba a Inicio sin explicación (B21).
+    if (auth.hasPermission('pos:acceder')) {
+      router.push({ name: 'pos-cierre' })
+    } else {
+      Notify.create({
+        type: 'warning',
+        message:
+          'Se requiere un turno de caja abierto para hacer el checkout, y tu usuario no abre caja.',
+        position: 'top-right',
+      })
+    }
     return
   }
   store.setCheckoutChild(props.child)

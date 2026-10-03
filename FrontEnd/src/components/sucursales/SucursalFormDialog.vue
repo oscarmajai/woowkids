@@ -29,7 +29,7 @@
           placeholder="Ej. SUC-LP-01"
           lazy-rules
           hide-bottom-space
-          :rules="[(v: string) => !!v?.trim() || 'La clave es requerida']"
+          :rules="[reglaClaveSucursal(!!branchId)]"
         />
       </label>
       <label class="form-grid__field">
@@ -188,6 +188,7 @@ import BaseDialog from '@/components/ui/BaseDialog.vue'
 import { branchService } from '@/services/branchService'
 import { userService } from '@/services/userService'
 import { resolveErrorMessage } from '@/utils/errorHandler'
+import { reglaClaveSucursal } from '@/utils/validators'
 import type { ApiError } from '@/types/auth'
 
 interface AdminOption {

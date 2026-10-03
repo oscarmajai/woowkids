@@ -132,7 +132,6 @@ async function handleLogout(): Promise<void> {
       <img src="/woow-kids-mascot.png" alt="Woow Kids" class="sb-brand__img" />
       <div class="sb-brand__text">
         <span class="sb-brand__name">Woow Kids</span>
-        <span class="sb-brand__app">Mercurio</span>
       </div>
     </div>
 
@@ -306,12 +305,6 @@ async function handleLogout(): Promise<void> {
     font-weight: 800;
     color: var(--text-strong);
     letter-spacing: -0.01em;
-  }
-
-  &__app {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary);
   }
 }
 

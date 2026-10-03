@@ -14,6 +14,7 @@ import { branchService } from '@/services/branchService'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { rolTono } from '@/utils/rolTono'
+import { esCuentaProtegida, nombresSucursales } from '@/utils/usuarios'
 import type { EstadoUsuarios, UserListItem } from '@/types/user'
 import type { Branch } from '@/types/branch'
 import type { FilterChip } from '@/types/ui'
@@ -60,9 +61,15 @@ function limpiarFiltros() {
   estado.value = 'todos'
 }
 
+// Un Administrador no tiene sucursal fija: sale con las que administra.
 function sucursalDe(user: UserListItem): string {
-  if (!user.branchId) return '—'
-  return branches.value.find((b) => b.id === user.branchId)?.nombre ?? '—'
+  return nombresSucursales(user, branches.value)
+}
+
+// Ni la propia cuenta ni las de AdministradorSistema (incluida la de
+// sistema) se editan o eliminan desde aquí; el backend también las rechaza.
+function protegida(user: UserListItem): boolean {
+  return esCuentaProtegida(user, auth.currentUser?.id ?? null)
 }
 
 function ultimoAccesoDe(user: UserListItem): string {
@@ -246,7 +253,7 @@ async function eliminar() {
         <template #body-cell-actions="props">
           <q-td :props="props">
             <q-btn
-              v-if="auth.hasPermission('usuarios:editar')"
+              v-if="auth.hasPermission('usuarios:editar') && !protegida(props.row)"
               flat
               round
               dense
@@ -256,7 +263,7 @@ async function eliminar() {
               @click="abrirEditar(props.row.id)"
             />
             <q-btn
-              v-if="auth.hasPermission('usuarios:editar')"
+              v-if="auth.hasPermission('usuarios:eliminar') && !protegida(props.row)"
               flat
               round
               dense
@@ -283,6 +290,7 @@ async function eliminar() {
       v-model="formAbierto"
       :user-id="editandoId"
       :branches="branches"
+      :puede-eliminar="auth.hasPermission('usuarios:eliminar')"
       @saved="fetchUsers"
       @eliminar="eliminarDesdeFormulario"
     />
@@ -300,7 +308,8 @@ async function eliminar() {
       @confirm="eliminar"
     >
       <p class="dlg-text">
-        ¿Eliminar a "{{ usuarioAEliminar?.name }}"? Esta acción no se puede deshacer.
+        ¿Eliminar a "{{ usuarioAEliminar?.name }}"? El usuario queda inactivo y ya no podrá iniciar
+        sesión. Puedes reactivarlo después desde el filtro "Inactivos" con Editar → "Cuenta activa".
       </p>
     </BaseDialog>
   </q-page>

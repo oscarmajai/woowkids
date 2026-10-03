@@ -18,6 +18,8 @@ interface BackendUserResponse {
   is_active: boolean
   ultimo_acceso: string | null
   tiene_pin?: boolean
+  /** Sucursales activas del usuario (incluye las de un Administrador). */
+  sucursales_ids?: string[]
 }
 
 function mapUser(raw: BackendUserResponse): UserListItem {
@@ -32,6 +34,7 @@ function mapUser(raw: BackendUserResponse): UserListItem {
     isActive: raw.is_active,
     lastAccess: raw.ultimo_acceso,
     tienePin: raw.tiene_pin ?? false,
+    branchIds: raw.sucursales_ids ?? (raw.branch_id ? [raw.branch_id] : []),
   }
 }
 

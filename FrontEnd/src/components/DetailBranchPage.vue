@@ -18,6 +18,8 @@ import { cajaAdminService } from '@/services/cajaAdminService'
 import { horarioService } from '@/services/horarioService'
 import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
+import { perteneceASucursal } from '@/utils/usuarios'
+import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
 import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
@@ -77,7 +79,12 @@ async function exportarIndicadores() {
   if (!id.value) return
   exportando.value = true
   try {
-    await branchService.exportarIndicadores(id.value, periodoDesde.value, periodoHasta.value)
+    await branchService.exportarIndicadores(
+      id.value,
+      periodoDesde.value,
+      periodoHasta.value,
+      nombreArchivoIndicadores(branch.value?.clave, periodoDesde.value, periodoHasta.value),
+    )
   } catch {
     Notify.create({ type: 'negative', message: 'Error al exportar los indicadores.' })
   } finally {
@@ -102,8 +109,9 @@ async function cargar() {
       periodoDesde.value = primerDiaDelMesEnZona(b.value.zonaHoraria)
       periodoHasta.value = fechaEnZona(b.value.zonaHoraria)
     }
+    // Incluye a los administradores, que no tienen sucursal fija (branchId).
     usuarios.value =
-      users.status === 'fulfilled' ? users.value.filter((u) => u.branchId === id.value) : []
+      users.status === 'fulfilled' ? users.value.filter((u) => perteneceASucursal(u, id.value)) : []
   } finally {
     loading.value = false
   }
@@ -260,16 +268,21 @@ const horariosColumns: QTableColumn[] = [
       :back-to="{ name: 'sucursales-listar' }"
     >
       <template v-if="branch" #actions>
-        <template v-if="auth.hasPermission('sucursales:editar')">
-          <q-btn
-            v-if="branch.isActive"
-            outline
-            icon="block"
-            label="Desactivar"
-            @click="desactivarAbierto = true"
-          />
-          <q-btn v-else outline icon="restart_alt" label="Reactivar" @click="reactivar" />
-        </template>
+        <!-- Desactivar exige sucursales:eliminar y reactivar sucursales:editar (backend). -->
+        <q-btn
+          v-if="branch.isActive && auth.hasPermission('sucursales:eliminar')"
+          outline
+          icon="block"
+          label="Desactivar"
+          @click="desactivarAbierto = true"
+        />
+        <q-btn
+          v-else-if="!branch.isActive && auth.hasPermission('sucursales:editar')"
+          outline
+          icon="restart_alt"
+          label="Reactivar"
+          @click="reactivar"
+        />
         <q-btn
           v-if="auth.hasPermission('sucursales:editar')"
           unelevated
@@ -312,7 +325,7 @@ const horariosColumns: QTableColumn[] = [
             <KpiCard
               label="Administrador"
               :value="branch.administradorName ?? 'Sin asignar'"
-              :note="branch.correo ?? ''"
+              :note="branch.administradorEmail ?? ''"
             />
             <KpiCard
               label="Horario"

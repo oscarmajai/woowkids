@@ -54,5 +54,6 @@ class MovimientoInventarioOut(BaseModel):
     costo_total: Decimal | None
     creado: datetime
     creado_por: UUID | None
+    creado_por_nombre: str | None = None
 
     model_config = {"from_attributes": True}

@@ -16,6 +16,7 @@ from app.schemas.user import (
     UserUpdateRequest,
 )
 from app.services.user_service import (
+    AutoEliminacionError,
     BranchRequiredError,
     CredencialActualInvalidaError,
     EmailAlreadyExistsError,
@@ -166,3 +167,11 @@ async def delete_user_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+    except AutoEliminacionError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "AUTO_ELIMINACION",
+                "message": "No puedes eliminar tu propia cuenta.",
+            },
+        ) from None

@@ -17,9 +17,13 @@ import asyncpg
 _SELECT = """
     SELECT mi.id, mi.sucursal_id, mi.insumo_id, mi.tipo, mi.cantidad, mi.stock_resultante,
            mi.motivo, mi.referencia_id, mi.notas, mi.costo_total, mi.creado, mi.creado_por,
-           i.nombre AS insumo_nombre
+           i.nombre AS insumo_nombre,
+           ucp.nombre_completo AS creado_por_nombre,
+           smi.zona_horaria AS zona_horaria
     FROM public.movimientos_inventario mi
     JOIN public.insumos i ON i.id = mi.insumo_id
+    LEFT JOIN public.usuarios ucp ON ucp.id = mi.creado_por
+    LEFT JOIN public.sucursales smi ON smi.id = mi.sucursal_id
 """
 
 # Zona horaria de la sucursal $1 / de la sucursal del insumo $1.

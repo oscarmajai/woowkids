@@ -148,6 +148,14 @@
           :hint="branchOptions.length === 0 ? 'No hay sucursales activas.' : undefined"
         />
       </label>
+      <p v-if="esRolAdministrador" class="form-grid__field--full admin-hint">
+        <q-icon name="info" size="16px" />
+        <span>
+          El Administrador no tiene una sucursal fija: se asigna desde
+          <strong>Sucursales → Editar sucursal → Administrador</strong>.
+          <template v-if="sucursalesAsignadas"> Administra: {{ sucursalesAsignadas }}.</template>
+        </span>
+      </p>
       <label v-if="userId" class="form-grid__field">
         <span class="field-label">Cuenta activa</span>
         <q-toggle v-model="form.isActive" color="primary" />
@@ -158,7 +166,7 @@
       </label>
     </q-form>
 
-    <template v-if="userId && !cargando" #footer-extra>
+    <template v-if="userId && !cargando && puedeEliminar && !cuentaProtegida" #footer-extra>
       <q-btn
         flat
         color="negative"
@@ -178,10 +186,14 @@ import { userService } from '@/services/userService'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { resolveErrorMessage } from '@/utils/errorHandler'
+import { ROL_ADMINISTRADOR, esCuentaProtegida, nombresSucursales } from '@/utils/usuarios'
 import type { ApiError, UserRole } from '@/types/auth'
 import type { Branch } from '@/types/branch'
 
-const props = defineProps<{ userId: string | null; branches: Branch[] }>()
+const props = withDefaults(
+  defineProps<{ userId: string | null; branches: Branch[]; puedeEliminar?: boolean }>(),
+  { puedeEliminar: true },
+)
 const emit = defineEmits<{ (e: 'saved'): void; (e: 'eliminar'): void }>()
 const show = defineModel<boolean>({ required: true })
 
@@ -235,6 +247,27 @@ const requiresBranch = computed(
 )
 const showBranchSelector = computed(() => requiresBranch.value && !isBranchAdmin.value)
 
+// El rol Administrador no muestra selector de sucursal: se explica dónde se
+// asigna y, al editar, cuáles tiene.
+const esRolAdministrador = computed(() => form.role === ROL_ADMINISTRADOR)
+const sucursalesCargadas = ref<string[]>([])
+const sucursalesAsignadas = computed(() => {
+  const nombres = nombresSucursales(
+    { branchId: null, branchIds: sucursalesCargadas.value },
+    props.branches,
+  )
+  return nombres === '—' ? '' : nombres
+})
+const rolCargado = ref<UserRole | null>(null)
+const cuentaProtegida = computed(
+  () =>
+    !!props.userId &&
+    esCuentaProtegida(
+      { id: props.userId, role: rolCargado.value ?? '' },
+      authStore.currentUser?.id ?? null,
+    ),
+)
+
 const nameRules = [(v: string) => !!v.trim() || 'El nombre es requerido']
 const emailRules = [
   (v: string) => !!v || 'El correo es requerido',
@@ -276,6 +309,8 @@ async function cargar() {
   })
   verPassword.value = false
   ultimoAccesoRaw.value = null
+  sucursalesCargadas.value = []
+  rolCargado.value = null
   const solicitado = props.userId
   const obsoleto = () => props.userId !== solicitado || !show.value
   cargando.value = true
@@ -296,6 +331,8 @@ async function cargar() {
         isActive: user.isActive,
       })
       ultimoAccesoRaw.value = user.lastAccess
+      sucursalesCargadas.value = user.branchIds
+      rolCargado.value = user.role
     }
   } catch {
     if (obsoleto()) return
@@ -351,3 +388,15 @@ async function guardar() {
   }
 }
 </script>
+
+<style scoped lang="scss">
+.admin-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+</style>
