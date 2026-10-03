@@ -55,6 +55,10 @@ export async function exportarReporteCogs(
   downloadBlob(blob, nombreArchivo)
 }
 
+export async function obtenerInsumo(insumoId: string): Promise<Insumo> {
+  return insumosApi.obtener(insumoId)
+}
+
 export async function crearInsumo(body: InsumoCreate): Promise<Insumo> {
   return insumosApi.crear(body)
 }

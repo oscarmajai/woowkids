@@ -56,7 +56,7 @@
         </template>
         <template #body-cell-total="props">
           <q-td :props="props" class="text-weight-bold">{{
-            formatMXN(Number(props.row.total))
+            formatMXN(totalConIva(props.row.total, props.row.iva))
           }}</q-td>
         </template>
         <template #body-cell-fecha_pedido="props">
@@ -260,6 +260,9 @@
                     {{ linea.cantidad }} {{ linea.unidad_label }} ×
                     {{ formatCostoUnitario(linea.costo_unitario) }}
                     = {{ formatMXN(linea.cantidad * linea.costo_unitario) }}
+                    <span v-if="linea.costo_unitario === 0" class="text-warning text-weight-bold">
+                      · sin costo
+                    </span>
                   </q-item-label>
                 </q-item-section>
                 <q-item-section side>
@@ -270,9 +273,23 @@
               </q-item>
             </q-list>
 
+            <q-banner
+              v-if="lineasSinCosto.length"
+              dense
+              rounded
+              class="bg-orange-1 text-orange-10 q-mt-sm"
+            >
+              <template #avatar><q-icon name="warning" color="orange-9" /></template>
+              {{ lineasSinCosto.join(', ') }}
+              {{ lineasSinCosto.length === 1 ? 'tiene' : 'tienen' }} costo $0: entrará al inventario
+              sin costo y bajará su costo promedio. Revisa el costo si no es un obsequio.
+            </q-banner>
+
             <div class="row justify-end q-mt-sm text-subtitle2 text-weight-bold">
-              Total: ${{ totalCompra.toFixed(2) }}
-              <template v-if="ivaCompra > 0"> · IVA: ${{ ivaCompra.toFixed(2) }}</template>
+              <template v-if="ivaCompra > 0">
+                Subtotal: {{ formatMXN(totalCompra) }} · IVA: {{ formatMXN(ivaCompra) }} ·&nbsp;
+              </template>
+              Total: {{ formatMXN(totalConIva(totalCompra, ivaCompra)) }}
             </div>
           </div>
         </div>
@@ -397,10 +414,11 @@
         <div v-else class="text-body2 text-grey-7 q-py-sm">Sin líneas.</div>
         <div v-if="detalleCompra" class="row justify-end q-mt-sm text-subtitle2 text-weight-bold">
           <template v-if="detalleCompra.folio">{{ detalleCompra.folio }} ·&nbsp;</template>
-          Total: ${{ Number(detalleCompra.total).toFixed(2) }}
           <template v-if="Number(detalleCompra.iva) > 0">
-            · IVA: ${{ Number(detalleCompra.iva).toFixed(2) }}
+            Subtotal: {{ formatMXN(Number(detalleCompra.total)) }} · IVA:
+            {{ formatMXN(Number(detalleCompra.iva)) }} ·&nbsp;
           </template>
+          Total: {{ formatMXN(totalConIva(detalleCompra.total, detalleCompra.iva)) }}
         </div>
         <div v-if="detalleCompra?.notas" class="text-caption text-grey-7 q-mt-sm">
           Notas: {{ detalleCompra.notas }}
@@ -422,7 +440,7 @@ import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
-import { formatCostoUnitario } from '@/utils/inventario'
+import { formatCostoUnitario, totalConIva } from '@/utils/inventario'
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import type { QTableColumn } from 'quasar'
@@ -619,6 +637,11 @@ const ivaCompra = computed(() => {
 
 const totalCompra = computed(() =>
   lineas.value.reduce((acc, l) => acc + l.cantidad * l.costo_unitario, 0),
+)
+
+// Aviso: una línea a $0 entra al inventario sin costo y baja el promedio PEPS.
+const lineasSinCosto = computed(() =>
+  lineas.value.filter((l) => l.costo_unitario === 0).map((l) => l.insumo_nombre),
 )
 
 const lineaTemporalVacia = () => ({

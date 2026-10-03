@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   compraPorRecibir,
+  diferenciaConteo,
   formatCostoUnitario,
   sumarBadgesGrupo,
   tituloAlertasStock,
+  totalConIva,
 } from '../inventario'
 
 // Intl usa espacios especiales en algunos entornos: se comparan sin ellos.
@@ -22,12 +24,31 @@ describe('formatCostoUnitario (M21)', () => {
   })
 })
 
+describe('diferenciaConteo (conteo físico)', () => {
+  it('reporta la merma en positivo, sin doble negativo', () => {
+    expect(diferenciaConteo(6400, 6500)).toEqual({ tipo: 'merma', cantidad: 100 })
+  })
+
+  it('distingue sobrante y coincidencia, redondeando a 3 decimales', () => {
+    expect(diferenciaConteo(10.5, 10)).toEqual({ tipo: 'entrada', cantidad: 0.5 })
+    expect(diferenciaConteo(0.3, 0.1 + 0.2)).toEqual({ tipo: 'igual', cantidad: 0 })
+  })
+})
+
 describe('compraPorRecibir (B6)', () => {
   it('cuenta las pendientes y las parciales', () => {
     expect(compraPorRecibir('P')).toBe(true)
     expect(compraPorRecibir('PARCIAL')).toBe(true)
     expect(compraPorRecibir('R')).toBe(false)
     expect(compraPorRecibir('C')).toBe(false)
+  })
+})
+
+describe('totalConIva (UX compras)', () => {
+  it('suma el IVA capturado al total de las líneas', () => {
+    expect(totalConIva('1950.00', '300.00')).toBe(2250)
+    expect(totalConIva(100, null)).toBe(100)
+    expect(totalConIva(100, '')).toBe(100)
   })
 })
 
