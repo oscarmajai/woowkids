@@ -52,3 +52,15 @@ def generate_ws_ticket() -> tuple[str, str]:
 
 def hash_ws_ticket(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def generate_codigo_acceso_padres() -> tuple[str, str]:
+    """Código opaco del QR del portal de padres (A17). Devuelve
+    (codigo_crudo, hash_sha256); solo el hash se guarda en BD. 24 bytes
+    aleatorios (192 bits): no se puede adivinar por fuerza bruta."""
+    raw = secrets.token_urlsafe(24)
+    return raw, hash_codigo_acceso_padres(raw)
+
+
+def hash_codigo_acceso_padres(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()

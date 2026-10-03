@@ -96,6 +96,22 @@ async def change_registro_estado(
     )
 
 
+async def get_registro_alcance(
+    conn: asyncpg.Connection, registro_id: UUID
+) -> dict[str, Any] | None:
+    """Sucursal y estado de un registro activo (no borrado), para autorizar el
+    acceso a sus archivos (C6). None si no existe o está desactivado."""
+    row = await conn.fetchrow(
+        """
+        SELECT id, sucursal_id, estado
+        FROM registros
+        WHERE id = $1 AND activo = TRUE
+        """,
+        registro_id,
+    )
+    return dict(row) if row else None
+
+
 async def exists_registro(
     conn: asyncpg.Connection,
     registro_id: UUID,
