@@ -26,7 +26,9 @@ export function setupRouterGuards(router: Router): void {
       }
     }
 
-    if (to.meta.requiresTurno) {
+    // B4: sin permiso para consultar su turno la consulta solo daba un error; se
+    // deja pasar igual que cuando la carga falla (la página resuelve qué mostrar).
+    if (to.meta.requiresTurno && auth.hasPermission('turnos_caja:ver_activo')) {
       const turno = useTurnoCajaStore()
       // `asegurarTurnoCargado` nunca lanza: distingue "turno cargado" (resultado.ok)
       // de "no se pudo cargar" (red/5xx/403), que no debe expulsar a nadie (#13, #17).
