@@ -464,6 +464,8 @@
               type="number"
               min="0"
               step="0.001"
+              :rules="[reglaCantidadAjuste]"
+              hide-bottom-space
             />
           </div>
         </template>
@@ -482,6 +484,8 @@
               type="number"
               min="0"
               step="0.001"
+              :rules="[reglaStockContado]"
+              hide-bottom-space
             />
           </div>
           <q-banner v-if="insumoAjuste" dense rounded class="bg-blue-1 text-blue-9">
@@ -520,7 +524,7 @@
           color="primary"
           label="Registrar ajuste"
           :loading="guardandoAjuste"
-          :disable="!formAjuste.cantidad"
+          :disable="!cantidadAjusteValida"
           @click="guardarAjuste"
         />
         <q-btn
@@ -530,7 +534,7 @@
           color="primary"
           label="Aplicar conteo"
           :loading="guardandoAjuste"
-          :disable="deltaConteo === 0"
+          :disable="!conteoValido"
           @click="guardarConteo"
         />
       </template>
@@ -558,6 +562,12 @@ import { useMovimientosInventarioStore } from '@/stores/movimientosInventario'
 import { usePresentacionesInsumoStore } from '@/stores/presentacionesInsumo'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { calcularRindePorInsumo } from '@/utils/estimacionRinde'
+import {
+  esCantidadAjusteValida,
+  esStockContadoValido,
+  reglaCantidadAjuste,
+  reglaStockContado,
+} from '@/utils/ajusteStock'
 import type { ApiError } from '@/types/auth'
 import type { Insumo } from '@/types/insumo'
 import type { TipoMovimientoManual } from '@/types/movimientoInventario'
@@ -821,12 +831,18 @@ const formAjuste = ref({
 
 const formConteo = ref({ stock_contado: 0 })
 
+const cantidadAjusteValida = computed(() => esCantidadAjusteValida(formAjuste.value.cantidad))
+
 const deltaConteo = computed(() => {
   if (!insumoAjuste.value) return 0
   return Number(
     (formConteo.value.stock_contado - Number(insumoAjuste.value.stock_actual)).toFixed(3),
   )
 })
+
+const conteoValido = computed(
+  () => esStockContadoValido(formConteo.value.stock_contado) && deltaConteo.value !== 0,
+)
 
 const abrirKardex = (row: Insumo) => {
   router.push({ name: 'insumos-kardex', params: { id: row.id } })
@@ -851,7 +867,7 @@ const aplicarStockLocal = (insumoId: string, nuevoStock: string) => {
 }
 
 const guardarAjuste = async () => {
-  if (!insumoAjuste.value || !formAjuste.value.cantidad) return
+  if (!insumoAjuste.value || !cantidadAjusteValida.value) return
   guardandoAjuste.value = true
   try {
     const movimiento = await movimientosStore.registrar(insumoAjuste.value.id, {
@@ -874,7 +890,7 @@ const guardarAjuste = async () => {
 }
 
 const guardarConteo = async () => {
-  if (!insumoAjuste.value || deltaConteo.value === 0) return
+  if (!insumoAjuste.value || !conteoValido.value) return
   guardandoAjuste.value = true
   try {
     const movimiento = await movimientosStore.conteoFisico(insumoAjuste.value.id, {
