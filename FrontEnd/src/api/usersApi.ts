@@ -1,5 +1,10 @@
 import { apiClient } from './axiosClient'
-import type { UserListItem, CreateUserPayload, UpdateUserPayload } from '@/types/user'
+import type {
+  UserListItem,
+  CreateUserPayload,
+  UpdateUserPayload,
+  EstadoUsuarios,
+} from '@/types/user'
 import type { UserRole } from '@/types/auth'
 
 interface BackendUserResponse {
@@ -31,8 +36,11 @@ function mapUser(raw: BackendUserResponse): UserListItem {
 }
 
 export const usersApi = {
-  async list(): Promise<UserListItem[]> {
-    const { data } = await apiClient.get<BackendUserResponse[]>('/usuarios')
+  /** `estado` (A10): por defecto el backend devuelve solo los activos. */
+  async list(estado?: EstadoUsuarios): Promise<UserListItem[]> {
+    const { data } = await apiClient.get<BackendUserResponse[]>('/usuarios', {
+      params: estado ? { estado } : undefined,
+    })
     return data.map(mapUser)
   },
 

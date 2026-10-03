@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -90,11 +91,24 @@ def _assert_admin_scope(current_user: TokenData, target: UsuarioRecord) -> None:
             raise InsufficientPermissionsError
 
 
-async def list_users(conn: asyncpg.Connection, current_user: TokenData) -> list[UserResponse]:
+EstadoUsuarios = Literal["activos", "inactivos", "todos"]
+
+_FILTRO_ESTADO: dict[str, bool | None] = {"activos": True, "inactivos": False, "todos": None}
+
+
+async def list_users(
+    conn: asyncpg.Connection,
+    current_user: TokenData,
+    estado: EstadoUsuarios = "activos",
+) -> list[UserResponse]:
+    """A10: `estado` decide si se listan los activos (por defecto, como antes),
+    los inactivos o todos; sin esto un usuario desactivado desaparecía y no
+    se podía reactivar. El alcance por sucursal (C1) no cambia."""
+    activo = _FILTRO_ESTADO[estado]
     if current_user.branch_id is not None:
-        records = await get_usuarios_by_branch(conn, current_user.branch_id)
+        records = await get_usuarios_by_branch(conn, current_user.branch_id, activo)
     elif current_user.role == ROL_SISTEMA:
-        records = await get_all_usuarios(conn)
+        records = await get_all_usuarios(conn, activo)
     else:
         return []
     return [_to_response(r) for r in records]

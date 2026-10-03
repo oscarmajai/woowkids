@@ -83,14 +83,26 @@ async def get_usuario_by_id(conn: asyncpg.Connection, user_id: UUID) -> UsuarioR
     return _row_to_record(row) if row else None
 
 
-async def get_all_usuarios(conn: asyncpg.Connection) -> list[UsuarioRecord]:
-    rows = await conn.fetch(_SELECT + "WHERE u.activo = TRUE ORDER BY u.creado DESC")
+# A10: filtro de estado del listado. None = todos (activos e inactivos).
+_FILTRO_ACTIVO_SQL = "($1::boolean IS NULL OR u.activo = $1)"
+
+
+async def get_all_usuarios(
+    conn: asyncpg.Connection, activo: bool | None = True
+) -> list[UsuarioRecord]:
+    rows = await conn.fetch(
+        _SELECT + f"WHERE {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
+    )
     return [_row_to_record(r) for r in rows]
 
 
-async def get_usuarios_by_branch(conn: asyncpg.Connection, branch_id: UUID) -> list[UsuarioRecord]:
+async def get_usuarios_by_branch(
+    conn: asyncpg.Connection, branch_id: UUID, activo: bool | None = True
+) -> list[UsuarioRecord]:
     rows = await conn.fetch(
-        _SELECT + "WHERE us.sucursal_id = $1 AND u.activo = TRUE ORDER BY u.creado DESC",
+        _SELECT + f"WHERE us.sucursal_id = $2 AND {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
         branch_id,
     )
     return [_row_to_record(r) for r in rows]
@@ -157,7 +169,7 @@ async def update_usuario(
             modificado      = NOW(),
             modificado_por  = $8,
             pin_hash        = COALESCE($10, pin_hash)
-        WHERE id = $9 AND activo = TRUE
+        WHERE id = $9
         """,
         email,
         nombre_completo,
