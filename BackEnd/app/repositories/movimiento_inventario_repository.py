@@ -120,7 +120,11 @@ async def listar_por_insumo(
         conditions.append(_hasta_local("mi.creado", len(params), _ZONA_INSUMO))
 
     where_clause = " AND ".join(conditions)
-    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.creado DESC", *params)
+    # B11: los movimientos de una misma transacción comparten `creado` (now() es
+    # la hora de inicio de la transacción) y salían en orden arbitrario. La
+    # secuencia (migración 098) es el orden real de inserción: para un mismo
+    # insumo coincide con el orden en que se encadena stock_resultante.
+    rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.secuencia DESC", *params)
     return [dict(r) for r in rows]
 
 
