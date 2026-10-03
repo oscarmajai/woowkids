@@ -22,6 +22,7 @@ from app.repositories.registros import (
     registro_add_total,
 )
 from app.schemas.pagos import PagoIn
+from app.services.padres_service import revocar_codigos_acceso
 
 EXTRA_GRACE_MINUTES = 10
 
@@ -158,6 +159,9 @@ async def create_chekout(
             await change_registro_estado(
                 conn, EstadoRegistro.CERRADO, usuario_id, detalle["registros_id"]
             )
+            # A17 — el QR del comprobante deja de valer en cuanto sale el
+            # último niño del registro.
+            await revocar_codigos_acceso(conn, detalle["registros_id"])
 
         resultado = {
             "detalleId": str(detalle_id),

@@ -83,6 +83,9 @@ export const useRegistrationStore = defineStore('registration', () => {
   const noPreciosDisponibles = ref(false)
 
   const registroId = ref('')
+  // Código del QR del portal de padres (A17): solo lo devuelve el backend al
+  // crear el registro; no es el registroId.
+  const codigoAccesoPadres = ref('')
   const totalFromServer = ref<number | null>(null)
   const pagadoFromServer = ref<number | null>(null)
   const estadoFromServer = ref('')
@@ -437,6 +440,7 @@ export const useRegistrationStore = defineStore('registration', () => {
       )
 
       registroId.value = response.registroId
+      codigoAccesoPadres.value = response.codigoAccesoPadres
       totalFromServer.value = response.total
       pagadoFromServer.value = response.pagado
       estadoFromServer.value = response.estado
@@ -464,6 +468,7 @@ export const useRegistrationStore = defineStore('registration', () => {
 
   function reset() {
     step.value = 'form'
+    codigoAccesoPadres.value = ''
     modo.value = 'normal'
     eventoSeleccionado.value = null
     eventoNoEncontrado.value = false
@@ -504,6 +509,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     submitError,
     noPreciosDisponibles,
     registroId,
+    codigoAccesoPadres,
     totalFromServer,
     pagadoFromServer,
     estadoFromServer,
