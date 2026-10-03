@@ -21,6 +21,8 @@ export interface TurnoItem {
   nombre: string
   horaInicio?: string
   horaFin?: string
+  /** M8: el horario corresponde a la hora local actual de la sucursal. */
+  vigente?: boolean
 }
 
 export interface CajaItem {
@@ -79,6 +81,24 @@ export interface FilaMetodoPago {
   origen: 'sistema' | 'manual'
 }
 
+/** M7: lo cobrado en el turno por método (el efectivo, neto del cambio). */
+export interface VentaPorMetodo {
+  metodo: string
+  label: string
+  total: number
+}
+
+/** B23: el conteo que el cajero ya envió, congelado hasta la revisión. */
+export interface ConteoGuardado {
+  desgloseEfectivo: {
+    billetes: Array<{ denominacion: number; cantidad: number }>
+    monedas: Array<{ denominacion: number; cantidad: number }>
+    total: number
+  }
+  metodosPago: Array<{ metodo: string; monto: number }>
+  totalDeclarado: number
+}
+
 /** Movimiento real del turno — viene del backend al cargar el turno activo */
 export interface MovimientoTurno {
   metodo: string
@@ -112,18 +132,29 @@ export interface TurnoActivoResponse {
   cajeroId: string
   cajeroNombre: string
   terminal: string
+  /** Nombre de la caja ("Caja Patria 1"); `terminal` es el código ("CAJA 01"). */
+  cajaNombre?: string | null
   estado: EstadoTurno
   fondoInicial: number
   fechaApertura: string // ISO 8601
-  totalVentas: number // solo visible para el admin post-BALANCE_REVELADO
+  /** B13: notas capturadas al abrir la caja. */
+  observacionesApertura?: string | null
+  /** Bruto: lo recibido, incluido el efectivo que se devolvió como cambio. */
+  totalVentas: number
   totalRetiros: number
   totalIngresos: number
-  /** "Vendido en turno": numero de tickets y total vendido, visibles mientras
-   * el turno está abierto. Sin desglose por método ni efectivo esperado
-   * (el conteo sigue siendo a ciegas). */
+  /** M6: "vendido en turno": número de tickets (no de pagos) y lo aplicado
+   * (recibido menos cambio, como el esperado del arqueo). */
   numeroVentas: number
   totalVendido: number
+  totalCambio?: number
+  /** M7: efectivo que debería haber en el cajón ahora (negativo = caja en negativo).
+   * `null` si el backend no lo manda (versiones viejas). */
+  efectivoEsperado?: number | null
+  ventasPorMetodo?: VentaPorMetodo[]
   movimientos: MovimientoTurno[]
+  /** B23: solo con el conteo ya enviado (ESPERANDO_REVISION / BALANCE_REVELADO). */
+  conteoGuardado?: ConteoGuardado | null
   /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO' (QA #8). */
   adminEmail?: string | null
   /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO' (QA #8). */
@@ -243,12 +274,15 @@ export interface RetiroParcialResponse {
 export interface IngresoEfectivoPayload {
   turnoId: string
   monto: number
+  /** Motivo del ingreso (opcional). */
+  observaciones?: string
 }
 
 export interface IngresoEfectivoResponse {
   id: string
   turnoId: string
   monto: number
+  observaciones?: string | null
   creado: string
 }
 
@@ -269,6 +303,7 @@ export interface ArqueoResumen {
   id: string
   cajeroNombre: string
   terminal: string
+  cajaNombre?: string | null
   sucursalNombre: string
   fechaApertura: string
   fechaCierre: string
@@ -306,4 +341,8 @@ export interface DetalleArqueo extends ArqueoResumen {
   balancePorMetodo: FilaBalance[]
   observaciones: string
   adminNombre: string
+  /** B13: notas de la apertura de caja. */
+  observacionesApertura?: string | null
+  /** Ingresos de efectivo del turno, con su motivo. */
+  ingresos?: Array<{ id: string; monto: number; observaciones: string | null; creado: string }>
 }

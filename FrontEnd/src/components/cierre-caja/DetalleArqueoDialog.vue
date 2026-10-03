@@ -4,7 +4,7 @@
     :title="detalle ? `Arqueo · ${formatDia(detalle.fechaCierre)}` : 'Detalle de arqueo'"
     :subtitle="
       detalle
-        ? `${detalle.terminal} · ${detalle.cajeroNombre} · autorizó ${detalle.adminNombre}`
+        ? `${cajaEtiqueta} · ${detalle.cajeroNombre} · autorizó ${detalle.adminNombre}`
         : undefined
     "
     icon="receipt_long"
@@ -94,6 +94,16 @@
         <span>{{ detalle.sucursalNombre }}</span>
       </div>
 
+      <div v-if="detalle.ingresos?.length" class="arq-notes" data-test="arqueo-ingresos">
+        <span class="field-label">Ingresos de efectivo</span>
+        <p v-for="ingreso in detalle.ingresos" :key="ingreso.id">{{ textoIngreso(ingreso) }}</p>
+      </div>
+
+      <div v-if="detalle.observacionesApertura" class="arq-notes" data-test="arqueo-notas-apertura">
+        <span class="field-label">Notas de apertura</span>
+        <p>{{ detalle.observacionesApertura }}</p>
+      </div>
+
       <div v-if="detalle.observaciones" class="arq-notes">
         <span class="field-label">Observaciones</span>
         <p>{{ detalle.observaciones }}</p>
@@ -104,7 +114,7 @@
 
 <script setup lang="ts">
 import BaseDialog from '@/components/ui/BaseDialog.vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { formatMXN, formatEntero, formatDiferencia, claseDiferencia } from '@/utils/formatoMoneda'
 import { turnoCajaService } from '@/services/turnoCajaService'
 import { mensajeDeError } from '@/utils/errorHandler'
@@ -125,6 +135,19 @@ const detalle = ref<DetalleArqueo | null>(null)
 const cargando = ref(false)
 const error = ref<string | null>(null)
 const descargando = ref(false)
+
+// El código ("CAJA 01") se repite entre sucursales: se muestra con el nombre.
+const cajaEtiqueta = computed(() => {
+  if (!detalle.value) return ''
+  const { terminal, cajaNombre } = detalle.value
+  return cajaNombre ? `${cajaNombre} (${terminal})` : terminal
+})
+
+/** Monto del ingreso de efectivo con su motivo, si lo tiene. */
+function textoIngreso(ingreso: { monto: number; observaciones: string | null }): string {
+  const monto = formatMXN(ingreso.monto)
+  return ingreso.observaciones ? `${monto} · ${ingreso.observaciones}` : monto
+}
 
 // Carga el detalle cuando se abre el dialog con un ID válido
 watch(

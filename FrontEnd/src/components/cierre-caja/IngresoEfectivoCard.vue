@@ -33,6 +33,18 @@
             @keydown="filtrarTeclaDecimal"
           />
         </div>
+        <div class="ingreso-form__field">
+          <span class="field-label">Motivo</span>
+          <q-input
+            v-model="observaciones"
+            outlined
+            type="textarea"
+            rows="2"
+            maxlength="500"
+            placeholder="Opcional (reposición de cambio, fondo adicional...)"
+            data-test="ingreso-motivo"
+          />
+        </div>
       </div>
 
       <div class="ingreso-form__callout">
@@ -71,12 +83,13 @@ const $q = useQuasar()
 const turno = useTurnoCajaStore()
 
 const monto = ref<number | null>(null)
+const observaciones = ref('')
 
 const puedeRegistrar = computed(() => (monto.value ?? 0) > 0)
 
 async function registrar() {
   if (!monto.value) return
-  const ok = await turno.registrarIngreso(monto.value)
+  const ok = await turno.registrarIngreso(monto.value, observaciones.value)
   if (ok) {
     $q.notify({
       type: 'positive',
@@ -180,6 +193,9 @@ async function registrar() {
 
 .ingreso-form {
   padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 
   &__field {
     display: flex;

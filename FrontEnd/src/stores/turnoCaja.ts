@@ -30,6 +30,8 @@ import type {
   IngresoEfectivoPayload,
   ResultadoCierre,
   ResultadoCargaTurno,
+  ConteoGuardado,
+  VentaPorMetodo,
 } from '@/types/turnoCaja'
 
 // v-model.number sobre <q-input type="text"> no convierte "" a 0 ni a null: Vue
@@ -99,16 +101,24 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
   const turnoId = ref<string | null>(null)
   const cajeroNombre = ref('')
   const terminal = ref('')
+  /** Nombre de la caja ("Caja Patria 1"); `terminal` es el código ("CAJA 01"). */
+  const cajaNombre = ref('')
   const sucursalNombre = ref('')
+  /** B13: notas capturadas al abrir la caja. */
+  const observacionesApertura = ref('')
   const fondoInicial = ref(0)
   const totalRetiros = ref(0)
   const totalIngresos = ref(0)
   const totalVentas = ref(0)
   const totalVentasEfectivo = ref(0)
-  /** "Vendido en turno": numero de tickets y total vendido, visibles mientras
-   * el turno está abierto (sin desglose por método ni efectivo esperado). */
+  /** "Vendido en turno" (M6): número de tickets y lo aplicado (neto del cambio). */
   const numeroVentas = ref(0)
   const totalVendido = ref(0)
+  const totalCambio = ref(0)
+  /** M7: efectivo esperado en el cajón según el backend (null si no lo manda). */
+  const efectivoEsperado = ref<number | null>(null)
+  /** M7: lo cobrado en el turno por método (el efectivo, neto del cambio). */
+  const ventasPorMetodo = ref<VentaPorMetodo[]>([])
   const fechaApertura = ref<string | null>(null)
   const estado = ref<EstadoTurno>('SIN_TURNO')
 
@@ -181,10 +191,17 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
   /** true si hay diferencias (para forzar observaciones) */
   const hayDiferencias = computed(() => diferenciaNeta.value !== 0)
 
-  /** Efectivo físico esperado en caja: fondo + ingresos - retiros + ventas cobradas en efectivo. */
+  /** Efectivo físico esperado en caja. M7: el del backend (misma fórmula que el
+   * arqueo: también resta el cambio entregado y las devoluciones); el cálculo
+   * local queda solo para un backend que no lo mande. */
   const efectivoDisponible = computed(
-    () => fondoInicial.value + totalIngresos.value - totalRetiros.value + totalVentasEfectivo.value,
+    () =>
+      efectivoEsperado.value ??
+      fondoInicial.value + totalIngresos.value - totalRetiros.value + totalVentasEfectivo.value,
   )
+
+  /** M7: la caja quedó en negativo (más salidas que efectivo). */
+  const cajaEnNegativo = computed(() => efectivoDisponible.value < 0)
 
   // ─────────────────────────────────────────────────────────────────────────
   // Acciones
@@ -287,13 +304,18 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     turnoId.value = null
     cajeroNombre.value = ''
     terminal.value = ''
+    cajaNombre.value = ''
     sucursalNombre.value = ''
+    observacionesApertura.value = ''
     fondoInicial.value = 0
     totalRetiros.value = 0
     totalIngresos.value = 0
     totalVentasEfectivo.value = 0
     numeroVentas.value = 0
     totalVendido.value = 0
+    totalCambio.value = 0
+    efectivoEsperado.value = null
+    ventasPorMetodo.value = []
     fechaApertura.value = null
     estado.value = 'SIN_TURNO'
     error.value = null
@@ -481,12 +503,14 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     }
   }
 
-  async function registrarIngreso(monto: number): Promise<boolean> {
+  async function registrarIngreso(monto: number, observaciones?: string): Promise<boolean> {
     if (!turnoId.value) return false
     cargando.value = true
     error.value = null
     try {
       const payload: IngresoEfectivoPayload = { turnoId: turnoId.value, monto }
+      const motivo = observaciones?.trim()
+      if (motivo) payload.observaciones = motivo
       await turnoCajaService.registrarIngreso(payload)
       await cargarTurnoActivo()
       return true
@@ -547,13 +571,18 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     turnoId.value = turno.id
     cajeroNombre.value = turno.cajeroNombre
     terminal.value = turno.terminal
+    cajaNombre.value = turno.cajaNombre ?? ''
     sucursalNombre.value = turno.sucursalNombre
+    observacionesApertura.value = turno.observacionesApertura ?? ''
     fondoInicial.value = turno.fondoInicial
     totalRetiros.value = turno.totalRetiros
     totalIngresos.value = turno.totalIngresos
     totalVentas.value = turno.totalVentas ?? 0
     numeroVentas.value = turno.numeroVentas ?? 0
     totalVendido.value = turno.totalVendido ?? 0
+    totalCambio.value = turno.totalCambio ?? 0
+    efectivoEsperado.value = turno.efectivoEsperado ?? null
+    ventasPorMetodo.value = turno.ventasPorMetodo ?? []
     const movEfectivo = turno.movimientos.find((m) => m.metodo.trim().toLowerCase() === 'efectivo')
     totalVentasEfectivo.value = movEfectivo?.totalVentas ?? 0
     fechaApertura.value = turno.fechaApertura ?? null
@@ -602,6 +631,47 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
         origen: 'sistema' as const,
       }))
     metodosPago.value = [...filasSistema, ...filasManuales]
+
+    // B23: con el conteo ya enviado, el formulario muestra lo que se envió (antes,
+    // al recargar, el desglose salía en $0.00 detrás del aviso de espera).
+    if (
+      turno.conteoGuardado &&
+      (turno.estado === 'ESPERANDO_REVISION' || turno.estado === 'BALANCE_REVELADO')
+    ) {
+      _aplicarConteoGuardado(turno.conteoGuardado)
+    }
+  }
+
+  function _aplicarConteoGuardado(conteo: ConteoGuardado): void {
+    const cantidad = (lista: ConteoGuardado['desgloseEfectivo']['billetes'], valor: number) => {
+      const fila = lista.find((d) => d.denominacion === valor)
+      return fila && fila.cantidad > 0 ? fila.cantidad : null
+    }
+    desgloseEfectivo.value.billetes.forEach(
+      (b) => (b.amount = cantidad(conteo.desgloseEfectivo.billetes, b.value)),
+    )
+    desgloseEfectivo.value.monedas.forEach(
+      (m) => (m.amount = cantidad(conteo.desgloseEfectivo.monedas, m.value)),
+    )
+    desgloseEfectivo.value.total = conteo.desgloseEfectivo.total
+
+    const clave = (metodo: string) => metodo.trim().toLowerCase()
+    const declarados = new Map(conteo.metodosPago.map((m) => [clave(m.metodo), m]))
+    metodosPago.value.forEach((fila) => {
+      const declarado = declarados.get(clave(fila.metodo))
+      fila.monto = declarado ? declarado.monto : null
+      declarados.delete(clave(fila.metodo))
+    })
+    for (const m of declarados.values()) {
+      if (clave(m.metodo) === 'efectivo') continue
+      metodosPago.value.push({
+        id: crypto.randomUUID(),
+        metodo: m.metodo,
+        monto: m.monto,
+        origen: 'manual',
+      })
+    }
+    totalContadoDeclarado.value = conteo.totalDeclarado
   }
 
   function _aplicarRevision(revision: RevisionAdminResponse): void {
@@ -631,7 +701,9 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     turnoId,
     cajeroNombre,
     terminal,
+    cajaNombre,
     sucursalNombre,
+    observacionesApertura,
     fondoInicial,
     totalRetiros,
     totalIngresos,
@@ -639,7 +711,11 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     totalVentasEfectivo,
     numeroVentas,
     totalVendido,
+    totalCambio,
+    efectivoEsperado,
+    ventasPorMetodo,
     efectivoDisponible,
+    cajaEnNegativo,
     fechaApertura,
     estado,
     cargando,
