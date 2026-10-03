@@ -114,7 +114,7 @@
           <q-td :props="props" class="text-weight-bold">{{ fmt(props.row.saldo_resultante) }}</q-td>
         </template>
         <template #body-cell-notas="props">
-          <q-td :props="props" class="cell-muted cell-ellipsis">{{ props.row.notas }}</q-td>
+          <q-td :props="props" class="cell-muted cell-ellipsis">{{ notaKardex(props.row) }}</q-td>
         </template>
         <template #no-data>
           <StateBlock
@@ -201,6 +201,7 @@ import type { QTableColumn } from 'quasar'
 import { useAuthStore } from '@/stores/auth'
 import { useLealtadStore } from '@/stores/lealtad'
 import { mensajeDeError } from '@/utils/errorHandler'
+import { agruparCanjes, type MovimientoKardex } from '@/utils/kardexLealtad'
 
 import type { ClienteLealtad, TipoMovimientoPuntos } from '@/types/lealtad'
 
@@ -308,9 +309,14 @@ const FILTROS: FilterChip<Filtro>[] = [
   { label: 'Ajustes', value: 'A' },
 ]
 const filtro = ref<Filtro | null>('todos')
+// UX: un canje que consumió varios lotes se ve como un solo renglón.
 const movimientosVisibles = computed(() =>
-  store.movimientos.filter((m) => filtro.value === 'todos' || m.tipo === filtro.value),
+  agruparCanjes(store.movimientos).filter(
+    (m) => filtro.value === 'todos' || m.tipo === filtro.value,
+  ),
 )
+const notaKardex = (m: MovimientoKardex): string =>
+  [m.notas, m.lotes > 1 ? `Canje de ${m.lotes} lotes` : null].filter(Boolean).join(' · ')
 const acumulado = computed(() =>
   store.movimientos.filter((m) => m.puntos > 0).reduce((s, m) => s + m.puntos, 0),
 )
