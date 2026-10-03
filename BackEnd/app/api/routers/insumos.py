@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.insumo import (
     InsumoAlertasOut,
@@ -24,7 +25,7 @@ from app.schemas.insumo import (
     InsumoUpdate,
 )
 from app.schemas.movimiento_inventario import CogsRenglonOut, ResumenCogsOut
-from app.services import insumo_service, inventario_service
+from app.services import alcance_service, insumo_service, inventario_service
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/insumos", tags=["Insumos"])
@@ -48,89 +49,96 @@ _COGS_CSV_CAMPOS = ["insumo_id", "insumo_nombre", "cantidad_salida", "costo_tota
 async def listar_insumos(
     sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[InsumoOut]:
     """Lista insumos activos e inactivos, para la pantalla de catálogo."""
-    return await insumo_service.listar(conn, sucursal_id)
+    return await insumo_service.listar(conn, resolver_sucursal(current_user, sucursal_id))
 
 
 @router.get("/alertas", response_model=InsumoAlertasOut)
 async def listar_alertas(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> InsumoAlertasOut:
     """Insumos de la sucursal por debajo de su punto de reorden, separados en
     críticos (< mínimo) y por-reordenar. Para el badge de alerta del menú."""
-    return await insumo_service.listar_alertas(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await insumo_service.listar_alertas(conn, sucursal)
 
 
 @router.get("/reporte-cogs", response_model=list[CogsRenglonOut])
 async def reporte_cogs(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reportes:inventario")),
+    current_user: TokenData = Depends(require_permission("reportes:inventario")),
 ) -> list[CogsRenglonOut]:
     """Costo de ventas (COGS): costo de lo consumido por insumo en el periodo."""
-    return await inventario_service.listar_cogs(conn, sucursal_id, desde, hasta)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await inventario_service.listar_cogs(conn, sucursal, desde, hasta)
 
 
 @router.get("/reporte-cogs/resumen", response_model=ResumenCogsOut)
 async def resumen_cogs(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reportes:inventario")),
+    current_user: TokenData = Depends(require_permission("reportes:inventario")),
 ) -> ResumenCogsOut:
     """KPIs del periodo: ventas totales, costo de ventas, margen y merma."""
-    return await inventario_service.resumen_cogs(conn, sucursal_id, desde, hasta)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await inventario_service.resumen_cogs(conn, sucursal, desde, hasta)
 
 
 @router.get("/export", summary="Exporta el reporte de stock a CSV")
 async def exportar_stock(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reportes:inventario")),
+    current_user: TokenData = Depends(require_permission("reportes:inventario")),
 ) -> StreamingResponse:
     """Reporte de stock (igual que `listar_insumos`) como descarga CSV."""
-    insumos = await insumo_service.listar(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    insumos = await insumo_service.listar(conn, sucursal)
     filas = (i.model_dump() for i in insumos)
     return csv_streaming_response(_STOCK_CSV_CAMPOS, filas, "reporte_stock.csv")
 
 
 @router.get("/reporte-cogs/export", summary="Exporta el costo de ventas (COGS) a CSV")
 async def exportar_cogs(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reportes:inventario")),
+    current_user: TokenData = Depends(require_permission("reportes:inventario")),
 ) -> StreamingResponse:
-    renglones = await inventario_service.listar_cogs(conn, sucursal_id, desde, hasta)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    renglones = await inventario_service.listar_cogs(conn, sucursal, desde, hasta)
     filas = (r.model_dump() for r in renglones)
     return csv_streaming_response(_COGS_CSV_CAMPOS, filas, "costo_de_ventas.csv")
 
 
 @router.get("/estimaciones", response_model=list[InsumoRecetaInversaOut])
 async def listar_estimaciones(
-    sucursal_id: UUID,
+    sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[InsumoRecetaInversaOut]:
     """Receta inversa por insumo (qué productos A/B lo consumen y en qué cantidad).
     El FrontEnd calcula 'rinde para N unidades' con stock_actual / cantidad."""
-    return await insumo_service.listar_estimaciones(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await insumo_service.listar_estimaciones(conn, sucursal)
 
 
 @router.get("/{insumo_id}", response_model=InsumoOut)
 async def obtener_insumo(
     insumo_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> InsumoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await insumo_service.obtener(conn, insumo_id)
 
 
@@ -140,6 +148,8 @@ async def crear_insumo(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_insumos")),
 ) -> InsumoOut:
+    # C1: el insumo se crea en la sucursal de la sesión; otra → 403.
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await insumo_service.crear(conn, body, current_user)
 
 
@@ -150,6 +160,7 @@ async def actualizar_insumo(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_insumos")),
 ) -> InsumoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await insumo_service.actualizar(conn, insumo_id, body, current_user)
 
 
@@ -157,6 +168,7 @@ async def actualizar_insumo(
 async def eliminar_insumo(
     insumo_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:eliminar_insumo")),
+    current_user: TokenData = Depends(require_permission("inventario:eliminar_insumo")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     await insumo_service.eliminar(conn, insumo_id)

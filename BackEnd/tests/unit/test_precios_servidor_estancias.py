@@ -253,13 +253,14 @@ async def test_pago_extra_de_un_registro_de_otra_sucursal_da_404(
 def test_no_se_cobra_una_estancia_con_los_precios_de_otra_sucursal() -> None:
     from datetime import datetime as dt
 
-    from app.api.routers.estancias import _exigir_sucursal_de_la_sesion
+    # El check-in y el pago extra usan la regla única de C1 (core/scope.py).
+    from app.core.scope import resolver_sucursal_obligatoria
     from app.schemas.auth import TokenData
 
     cajera = TokenData(
         sub=str(uuid4()), email="c@x.dev", role="Cajero", branch_id=SUCURSAL, jti="j", exp=dt.now()
     )
-    _exigir_sucursal_de_la_sesion(cajera, SUCURSAL)
+    assert str(resolver_sucursal_obligatoria(cajera, SUCURSAL)) == str(SUCURSAL)
     with pytest.raises(HTTPException) as exc:
-        _exigir_sucursal_de_la_sesion(cajera, uuid4())
+        resolver_sucursal_obligatoria(cajera, uuid4())
     assert exc.value.status_code == 403

@@ -17,7 +17,7 @@ from app.api.deps import require_permission
 from app.core.database import get_db
 from app.schemas.auth import TokenData
 from app.schemas.receta_producto import RecetaItemOut, RecetaItemUpdate
-from app.services import receta_producto_service
+from app.services import alcance_service, receta_producto_service
 
 router = APIRouter(prefix="/api/productos", tags=["Receta de Productos"])
 
@@ -26,8 +26,9 @@ router = APIRouter(prefix="/api/productos", tags=["Receta de Productos"])
 async def listar_receta(
     producto_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[RecetaItemOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     return await receta_producto_service.listar(conn, producto_id)
 
 
@@ -39,6 +40,8 @@ async def upsert_receta_item(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_productos")),
 ) -> RecetaItemOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await receta_producto_service.upsert(conn, producto_id, insumo_id, body, current_user)
 
 
@@ -49,6 +52,7 @@ async def eliminar_receta_item(
     producto_id: UUID,
     insumo_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:gestionar_productos")),
+    current_user: TokenData = Depends(require_permission("inventario:gestionar_productos")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     await receta_producto_service.eliminar(conn, producto_id, insumo_id)

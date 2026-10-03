@@ -8,7 +8,7 @@ import app.services.disponibilidad as disponibilidad_svc
 import app.services.reservaciones as svc
 from app.api.deps import apertura_operando_id, require_permission
 from app.core.database import get_db
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.schemas.auth import TokenData
 from app.schemas.disponibilidad import DisponibilidadResponse
 from app.schemas.reservaciones import (
@@ -21,8 +21,26 @@ from app.schemas.reservaciones_completa import (
     ReservacionCompletaRequest,
     ReservacionCompletaResponse,
 )
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/reservaciones", tags=["Reservaciones"])
+
+
+async def _asegurar_alta(
+    conn: asyncpg.Connection,
+    current_user: TokenData,
+    body: ReservacionesCrear,
+    extra_ids: list[UUID] | None = None,
+    producto_ids: list[UUID] | None = None,
+) -> None:
+    """C1: la reservación se crea en la sucursal de la sesión (403 si el body
+    trae otra) y su paquete, tipo de evento, extras y productos deben ser de
+    esa sucursal (404 si no)."""
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "paquete", body.paquete_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "tipo_evento", body.tipo_evento_id)
+    await alcance_service.asegurar_recursos(conn, current_user, "extra", extra_ids or [])
+    await alcance_service.asegurar_recursos(conn, current_user, "producto", producto_ids or [])
 
 
 @router.get("", response_model=list[ReservacionesOut])
@@ -37,29 +55,32 @@ async def listar_reservaciones(
 
 @router.get("/disponibilidad", response_model=DisponibilidadResponse)
 async def obtener_disponibilidad(
-    sucursal_id: UUID,
     fecha: date,
+    sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:ver")),
+    current_user: TokenData = Depends(require_permission("reservaciones:ver")),
 ) -> DisponibilidadResponse:
-    return await disponibilidad_svc.obtener_disponibilidad(conn, sucursal_id, fecha)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await disponibilidad_svc.obtener_disponibilidad(conn, sucursal, fecha)
 
 
 @router.get("/evento-cercano/{sucursal_id}", response_model=EventoDelDiaOut | None)
 async def obtener_evento_cercano(
     sucursal_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:ver")),
+    current_user: TokenData = Depends(require_permission("reservaciones:ver")),
 ) -> EventoDelDiaOut | None:
-    return await svc.obtener_evento_cercano(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await svc.obtener_evento_cercano(conn, sucursal)
 
 
 @router.get("/{reservacion_id}", response_model=ReservacionesOut)
 async def obtener_reservacion(
     reservacion_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:ver")),
+    current_user: TokenData = Depends(require_permission("reservaciones:ver")),
 ) -> ReservacionesOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     return await svc.obtener(conn, reservacion_id)
 
 
@@ -69,6 +90,7 @@ async def crear_reservacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:crear")),
 ) -> ReservacionesOut:
+    await _asegurar_alta(conn, current_user, body)
     return await svc.crear(conn, body, current_user.sub)
 
 
@@ -91,6 +113,13 @@ async def crear_reservacion_completa(
 ) -> ReservacionCompletaResponse:
     from app.services import turnos_caja_service
 
+    await _asegurar_alta(
+        conn,
+        current_user,
+        body.reservacion,
+        extra_ids=[e.extra_id for e in body.extras],
+        producto_ids=[p.producto_id for p in body.productos],
+    )
     disponible_antes = await turnos_caja_service.efectivo_disponible_actual(conn, apertura_id)
     resultado = await svc.crear_completa(conn, body, UUID(current_user.sub), apertura_id)
     if body.pagos:
@@ -105,8 +134,9 @@ async def actualizar_reservacion(
     reservacion_id: UUID,
     body: ReservacionesUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:editar")),
+    current_user: TokenData = Depends(require_permission("reservaciones:editar")),
 ) -> ReservacionesOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     return await svc.actualizar(conn, reservacion_id, body)
 
 
@@ -114,6 +144,7 @@ async def actualizar_reservacion(
 async def eliminar_reservacion(
     reservacion_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:eliminar")),
+    current_user: TokenData = Depends(require_permission("reservaciones:eliminar")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     await svc.eliminar(conn, reservacion_id)

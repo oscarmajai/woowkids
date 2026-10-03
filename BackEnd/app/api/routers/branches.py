@@ -119,6 +119,8 @@ async def put_branch(
         raise _ADMINISTRADOR_INVALIDO from None
     except TelefonoInvalidoError:
         raise _TELEFONO_INVALIDO from None
+    except InsufficientPermissionsError:
+        raise _FORBIDDEN from None
 
 
 @router.patch("/{sucursal_id}/deactivate", status_code=status.HTTP_200_OK)
@@ -132,6 +134,8 @@ async def deactivate_branch_endpoint(
         return Response(status_code=status.HTTP_200_OK)
     except BranchNotFoundError:
         raise _NOT_FOUND from None
+    except InsufficientPermissionsError:
+        raise _FORBIDDEN from None
 
 
 @router.patch("/{sucursal_id}/reactivate", status_code=status.HTTP_200_OK)
@@ -145,6 +149,8 @@ async def reactivate_branch_endpoint(
         return Response(status_code=status.HTTP_200_OK)
     except BranchNotFoundError:
         raise _NOT_FOUND from None
+    except InsufficientPermissionsError:
+        raise _FORBIDDEN from None
 
 
 @router.get("/{sucursal_id}/indicadores", response_model=IndicadoresSucursalResponse)

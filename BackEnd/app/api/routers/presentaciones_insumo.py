@@ -17,17 +17,29 @@ from app.api.deps import require_permission
 from app.core.database import get_db
 from app.schemas.auth import TokenData
 from app.schemas.presentacion_insumo import PresentacionCrear, PresentacionOut, PresentacionUpdate
-from app.services import presentacion_insumo_service
+from app.services import alcance_service, presentacion_insumo_service
 
 router = APIRouter(prefix="/api/insumos", tags=["Presentaciones de Insumo"])
+
+
+async def _asegurar_presentacion(
+    conn: asyncpg.Connection, current_user: TokenData, insumo_id: UUID, presentacion_id: UUID
+) -> None:
+    """C1: el insumo de la ruta y la presentación deben ser de la sucursal de
+    la sesión (404 si no)."""
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "presentacion_insumo", presentacion_id
+    )
 
 
 @router.get("/{insumo_id}/presentaciones", response_model=list[PresentacionOut])
 async def listar_presentaciones(
     insumo_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[PresentacionOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await presentacion_insumo_service.listar(conn, insumo_id)
 
 
@@ -42,6 +54,7 @@ async def crear_presentacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_insumos")),
 ) -> PresentacionOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await presentacion_insumo_service.crear(conn, insumo_id, body, current_user)
 
 
@@ -53,6 +66,7 @@ async def actualizar_presentacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_insumos")),
 ) -> PresentacionOut:
+    await _asegurar_presentacion(conn, current_user, insumo_id, presentacion_id)
     return await presentacion_insumo_service.actualizar(conn, presentacion_id, body, current_user)
 
 
@@ -65,6 +79,7 @@ async def eliminar_presentacion(
     insumo_id: UUID,
     presentacion_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:eliminar_insumo")),
+    current_user: TokenData = Depends(require_permission("inventario:eliminar_insumo")),
 ) -> None:
+    await _asegurar_presentacion(conn, current_user, insumo_id, presentacion_id)
     await presentacion_insumo_service.eliminar(conn, presentacion_id)

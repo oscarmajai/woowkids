@@ -5,7 +5,7 @@ from uuid import UUID
 
 import asyncpg
 
-from app.core.roles import ROL_SISTEMA
+from app.core.scope import resolver_sucursal_obligatoria
 from app.exceptions import DatosInvalidos, NoEncontrado, SaldoInsuficienteError
 from app.repositories import lealtad_repository
 from app.schemas.auth import TokenData
@@ -24,14 +24,9 @@ DIAS_POR_VENCER = 30
 
 def resolver_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> UUID:
     """AdministradorSistema ve todas las sucursales, así que debe indicar
-    explícitamente cuál configurar/consultar. El resto usa su sucursal activa."""
-    if current_user.role == ROL_SISTEMA:
-        if sucursal_id is None:
-            raise DatosInvalidos("Debes indicar sucursal_id (AdministradorSistema ve todas).")
-        return sucursal_id
-    if current_user.branch_id is None:
-        raise DatosInvalidos("La sesión no tiene una sucursal activa.")
-    return current_user.branch_id
+    cuál configurar/consultar (sucursal_id o el selector). El resto usa su
+    sucursal activa; C1: si pide otra → 403 (antes se ignoraba en silencio)."""
+    return resolver_sucursal_obligatoria(current_user, sucursal_id)
 
 
 async def obtener_configuracion(

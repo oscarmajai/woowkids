@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 import app.services.pago_service as svc
 from app.api.deps import apertura_operando_id, require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.pagos import (
     DetalleOrdenOut,
@@ -18,7 +19,8 @@ from app.schemas.pagos import (
     PaymentOut,
     PaymentRequest,
 )
-from app.services import turnos_caja_service
+from app.services import alcance_service, turnos_caja_service
+from app.services.alcance_service import TipoRecurso
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/pagos", tags=["Pagos"])
@@ -58,6 +60,10 @@ async def registrar_pagos(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> list[PaymentOut]:
+    # C1: el pago se registra en la sucursal de la sesión (403 si el body
+    # trae otra) y sobre una comanda de esa sucursal (404 si no).
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", body.comanda_id)
     usuario_id = UUID(current_user.sub)
     return await svc.procesar_pagos(conn, body, usuario_id)
 
@@ -81,6 +87,8 @@ async def completar_pago(
 ) -> dict[str, Any]:
     usuario_id = UUID(current_user.sub)
     sucursal_id = _get_active_branch(current_user)
+    # Productos de otra sucursal: los rechaza precios_venta (422 PRODUCTO_INVALIDO,
+    # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
     disponible_antes = await turnos_caja_service.efectivo_disponible_actual(conn, apertura_id)
     comanda = await svc.completar_pago(
         conn, body, usuario_id, sucursal_id, apertura_id, idempotency_key
@@ -127,6 +135,14 @@ async def obtener_detalle(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> DetalleOrdenOut:
+    tipo_recurso: dict[str, TipoRecurso] = {
+        "comanda": "comanda",
+        "estancia": "registro",
+        "reservacion": "reservacion",
+    }
+    await alcance_service.asegurar_recurso(
+        conn, current_user, tipo_recurso[tipo_origen], referencia_id
+    )
     resultado = await svc.obtener_detalle(conn, tipo_origen, referencia_id)
     if resultado is None:
         raise HTTPException(

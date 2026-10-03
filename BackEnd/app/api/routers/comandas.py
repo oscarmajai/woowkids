@@ -34,7 +34,7 @@ from app.core.scope import sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
 from app.schemas.comanda import ComandaCreate, ComandaModifyRequest
-from app.services import comanda_service
+from app.services import alcance_service, comanda_service
 from app.services.permission_service import has_permission
 
 logger = logging.getLogger("mercury.ws")
@@ -71,6 +71,8 @@ async def crear_comanda(
     # el sucursal_id que mande el cliente en el body.
     active_branch_id = get_active_branch(current_user)
     comanda_in = comanda_in.model_copy(update={"sucursal_id": active_branch_id})
+    # Productos de otra sucursal: los rechaza precios_venta (422 PRODUCTO_INVALIDO,
+    # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
 
     try:
         comanda = await comanda_service.crear_comanda_pos(
@@ -109,6 +111,7 @@ async def cambiar_estado(
     ),
 ) -> Any:
     """Actualiza el estado de una comanda con auditoría."""
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     try:
         comanda = await comanda_service.cambiar_estado(
             conn,
@@ -151,6 +154,7 @@ async def modificar_detalles(
     Si se eliminan todos los productos, cancela automáticamente la comanda
     y requiere motivo_cancelacion en el body.
     """
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     usuario_id = str(UUID(current_user.sub))
     try:
         comanda = await comanda_service.modificar_comanda_parcial(
