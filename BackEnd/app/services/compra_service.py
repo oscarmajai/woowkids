@@ -140,32 +140,43 @@ async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpda
 
 async def editar(conn: asyncpg.Connection, compra_id: UUID, body: CompraEditar) -> CompraOut:
     """Reemplaza proveedor, notas y líneas de una compra que sigue en 'P'."""
-    compra = await compra_repository.obtener(conn, compra_id)
-    if not compra:
-        raise NoEncontrado("Compra")
-    if compra["estado"] != "P":
-        raise Conflicto("Solo se puede editar una compra pendiente.")
+    # C5: bajo el bloqueo de la compra, para que una recepción simultánea no
+    # quede registrada sobre líneas que esta edición borra y reinserta.
+    async with conn.transaction():
+        compra = await compra_repository.bloquear(conn, compra_id)
+        if not compra:
+            raise NoEncontrado("Compra")
+        if compra["estado"] != "P":
+            raise Conflicto("Solo se puede editar una compra pendiente.")
 
-    proveedor = await proveedor_repository.obtener(conn, body.proveedor_id)
-    if not proveedor or proveedor["sucursal_id"] != compra["sucursal_id"]:
-        raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
-    for detalle in body.detalles:
-        insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
-        if not insumo:
-            raise NoEncontrado("Insumo")
-        if insumo["sucursal_id"] != compra["sucursal_id"]:
-            raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
-        await _validar_y_calcular_base(
-            conn,
-            insumo,
-            detalle.unidad_medida_id,
-            detalle.presentacion_id,
-            detalle.cantidad,
-            detalle.costo_unitario,
-        )
+        proveedor = await proveedor_repository.obtener(conn, body.proveedor_id)
+        if not proveedor or proveedor["sucursal_id"] != compra["sucursal_id"]:
+            raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
+        for detalle in body.detalles:
+            insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
+            if not insumo:
+                raise NoEncontrado("Insumo")
+            if insumo["sucursal_id"] != compra["sucursal_id"]:
+                raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
+            await _validar_y_calcular_base(
+                conn,
+                insumo,
+                detalle.unidad_medida_id,
+                detalle.presentacion_id,
+                detalle.cantidad,
+                detalle.costo_unitario,
+            )
 
-    await compra_repository.reemplazar_detalles(conn, compra_id, body)
+        await compra_repository.reemplazar_detalles(conn, compra_id, body)
     return await obtener(conn, compra_id)
+
+
+def _conflicto_por_estado(estado: str) -> Conflicto:
+    if estado == "R":
+        return Conflicto("La compra ya fue recibida.")
+    if estado == "C":
+        return Conflicto("La compra está cancelada.")
+    return Conflicto("La compra ya fue recibida o está cancelada.")
 
 
 async def recibir(
@@ -174,18 +185,23 @@ async def recibir(
     creado_por: UUID,
     body: RecibirCompraRequest | None = None,
 ) -> CompraOut:
-    compra = await compra_repository.obtener(conn, compra_id)
-    if not compra:
-        raise NoEncontrado("Compra")
-    if compra["estado"] not in ("P", "PARCIAL"):
-        raise Conflicto("La compra ya fue recibida o está cancelada.")
-
-    detalles = await compra_repository.listar_detalles(conn, compra_id)
     solicitado: dict[str, Decimal] = {}
     if body and body.lineas:
         solicitado = {str(linea.detalle_id): linea.cantidad for linea in body.lineas}
 
     async with conn.transaction():
+        # C5: bloquear la compra y releer estado, detalles y pendientes DENTRO de
+        # la transacción. Antes se leían fuera y sin bloqueo: N recepciones
+        # simultáneas veían el mismo pendiente y sumaban el stock N veces. Ahora
+        # la segunda espera a que la primera confirme y ve la compra ya recibida
+        # (409) o solo lo que quedó pendiente (recepción parcial).
+        compra = await compra_repository.bloquear(conn, compra_id)
+        if not compra:
+            raise NoEncontrado("Compra")
+        if compra["estado"] not in ("P", "PARCIAL"):
+            raise _conflicto_por_estado(compra["estado"])
+
+        detalles = await compra_repository.listar_detalles(conn, compra_id)
         algo_recibido = False
         for detalle in detalles:
             pendiente = detalle["cantidad"] - detalle["cantidad_recibida"]
@@ -237,7 +253,7 @@ async def recibir(
         detalles = await compra_repository.listar_detalles(conn, compra_id)
         completa = all(d["cantidad_recibida"] >= d["cantidad"] for d in detalles)
         actualizada = await compra_repository.marcar_estado(
-            conn, compra_id, "R" if completa else "PARCIAL"
+            conn, compra_id, "R" if completa else "PARCIAL", estados_previos=("P", "PARCIAL")
         )
         if actualizada is None:
             raise Conflicto("La compra ya fue recibida o está cancelada.")
@@ -246,12 +262,16 @@ async def recibir(
 
 
 async def cancelar(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
-    compra = await compra_repository.obtener(conn, compra_id)
-    if not compra:
-        raise NoEncontrado("Compra")
-    if compra["estado"] != "P":
-        raise Conflicto("Solo se puede cancelar una compra pendiente sin recepciones.")
-    cancelada = await compra_repository.marcar_cancelada(conn, compra_id)
-    if cancelada is None:
-        raise Conflicto("La compra ya fue recibida o está cancelada.")
+    # C5: mismo bloqueo que recibir. El UPDATE condicionado de marcar_cancelada ya
+    # impedía cancelar una compra recibida, pero sin el bloqueo una cancelación que
+    # llegaba durante una recepción podía responder con el estado viejo.
+    async with conn.transaction():
+        compra = await compra_repository.bloquear(conn, compra_id)
+        if not compra:
+            raise NoEncontrado("Compra")
+        if compra["estado"] != "P":
+            raise Conflicto("Solo se puede cancelar una compra pendiente sin recepciones.")
+        cancelada = await compra_repository.marcar_cancelada(conn, compra_id)
+        if cancelada is None:
+            raise Conflicto("La compra ya fue recibida o está cancelada.")
     return await _construir_out(conn, cancelada)
