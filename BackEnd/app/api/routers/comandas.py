@@ -58,9 +58,11 @@ async def crear_comanda(
     comanda_in: ComandaCreate,
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:crear_pedido")),
-    apertura_id: str = Depends(apertura_operando_id),
+    _apertura_id: str = Depends(apertura_operando_id),
 ) -> Any:
-    """Crea una comanda nueva con sus detalles."""
+    """Crea una comanda nueva con sus detalles, sin cobrarla. Sigue exigiendo
+    un turno de caja operando, pero no registra movimiento en la caja (N10):
+    lo cobrado entra con su método de pago en POST /pagos/completar."""
     # Obtenemos la sucursal de forma centralizada y segura: nunca confiar en
     # el sucursal_id que mande el cliente en el body.
     active_branch_id = get_active_branch(current_user)
@@ -69,9 +71,7 @@ async def crear_comanda(
     # igual que uno inexistente) al calcular el cobro con el catálogo de la sesión.
 
     try:
-        comanda = await comanda_service.crear_comanda_pos(
-            conn, comanda_in, current_user, apertura_id
-        )
+        comanda = await comanda_service.crear_comanda_pos(conn, comanda_in, current_user)
         return asdict(comanda)
     except HTTPException:
         # Preserva el status code y el {code, message} estructurado de

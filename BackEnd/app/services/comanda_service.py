@@ -138,7 +138,8 @@ async def crear_comanda(
     `apertura_caja_id=None` crea la comanda SIN movimiento de venta en caja: lo
     usan las comandas automáticas de eventos, cuyo ingreso ya se cobró como
     anticipo/liquidación en pagos_reservacion (registrarlo aquí lo contaría dos
-    veces y descuadraría el arqueo).
+    veces y descuadraría el arqueo), y POST /comandas, que crea la comanda sin
+    cobrarla (N10).
 
     metodo_pago_id va en None temporalmente: el módulo de métodos de pago para
     comandas todavía no está integrado (columna nullable a propósito mientras tanto).
@@ -178,19 +179,24 @@ async def crear_comanda_pos(
     conn: asyncpg.Connection,
     comanda_in: ComandaCreate,
     current_user: TokenData,
-    apertura_caja_id: str,
 ) -> Comanda:
     """POST /comandas: como crear_comanda, pero con los precios y el total
     recalculados con el catálogo de la sucursal (C2); 409 si el cliente
     mandó otros. Las comandas automáticas de eventos no pasan por aquí: usan
-    el precio del paquete, no el del catálogo."""
+    el precio del paquete, no el del catálogo.
+
+    N10: la comanda se crea SIN cobrar, así que no registra ningún movimiento
+    de venta en la caja. Antes registraba el total como venta sin método de
+    pago, que el arqueo contaba como efectivo esperado aunque nadie hubiera
+    pagado. Lo cobrado entra a la caja con su método al pagar (POST
+    /pagos/completar, el flujo del POS)."""
     sucursal_id = UUID(str(comanda_in.sucursal_id))
     venta = await precios_venta.calcular_venta(conn, sucursal_id, comanda_in.detalles_comanda)
     precios_venta.verificar_total(comanda_in.total_final, venta.subtotal)
     comanda_in = comanda_in.model_copy(
         update={"detalles_comanda": venta.detalles, "total_final": venta.subtotal}
     )
-    return await crear_comanda(conn, comanda_in, current_user, apertura_caja_id)
+    return await crear_comanda(conn, comanda_in, current_user, None)
 
 
 async def listar_pendientes(conn: asyncpg.Connection, current_user: TokenData) -> list[Comanda]:
