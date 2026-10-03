@@ -32,6 +32,7 @@ from app.repositories.tutores import get_tutor_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
 from app.services import lealtad_service
+from app.services.padres_service import emitir_codigo_acceso
 from app.services.tramos_estancia import tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
 
@@ -388,6 +389,10 @@ async def create_estancia(
                 "pagado": total_pagado,
                 "estado": "A" if total_pagado >= total else "P",
             }
+
+        # A17 — código opaco del QR del comprobante (portal de padres), dentro
+        # de la transacción: si el registro se revierte, el código también.
+        resultado["codigoAccesoPadres"] = await emitir_codigo_acceso(conn, registro_id, usuario_id)
 
     # Se notifica ya fuera de la transacción, para no avisar a los clientes
     # de datos que todavía podrían revertirse por un rollback.
