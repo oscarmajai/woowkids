@@ -41,6 +41,13 @@ from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
 
+# A16: los pasos del cierre que validan PIN/contraseña (revisión, PIN de cajero
+# y de administrador, confirmación) los ejecuta la sesión del cajero que cierra
+# su turno. Antes solo pedían sesión (cocina o inventario los alcanzaban); ahora
+# piden el permiso de contar caja. Quién AUTORIZA (el administrador cuyas
+# credenciales se validan) se revisa aparte en el service.
+_PERMISO_CIERRE = "turnos_caja:conteo"
+
 
 def _sucursal_filtro(current_user: TokenData, sucursal_id: str | None) -> str | None:
     """C1: la sucursal de la sesión para roles con sucursal fija (403 si piden
@@ -182,10 +189,12 @@ async def enviar_conteo(
 )
 async def autenticar_revision_admin(
     payload: RevisionAdminPayload,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> RevisionAdminResponse:
-    return await turnos_caja_service.autenticar_admin_revision(conn, current_user.sub, payload)
+    return await turnos_caja_service.autenticar_admin_revision(
+        conn, current_user.sub, payload, solicitante=current_user
+    )
 
 
 @router.post(
@@ -195,10 +204,12 @@ async def autenticar_revision_admin(
 )
 async def confirmar_cierre(
     payload: ConfirmarCierrePayload,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> ConfirmarCierreResponse:
-    return await turnos_caja_service.confirmar_cierre(conn, current_user.sub, payload)
+    return await turnos_caja_service.confirmar_cierre(
+        conn, current_user.sub, payload, solicitante=current_user
+    )
 
 
 @router.post(
@@ -207,12 +218,14 @@ async def confirmar_cierre(
 )
 async def validar_pin_cajero(
     body: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     turno_id = body.get("turno_id", "")
-    pin = body.get("pin", "")
-    return await turnos_caja_service.validar_pin_cajero(conn, current_user.sub, turno_id, pin)
+    pin = str(body.get("pin", "") or "")
+    return await turnos_caja_service.validar_pin_cajero(
+        conn, current_user.sub, turno_id, pin, solicitante=current_user
+    )
 
 
 @router.post(
@@ -221,13 +234,20 @@ async def validar_pin_cajero(
 )
 async def validar_pin_admin(
     body: dict[str, Any],
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
     turno_id = body.get("turno_id", "")
-    admin_email = body.get("admin_email", "")
-    pin = body.get("pin", "")
-    return await turnos_caja_service.validar_pin_admin(conn, turno_id, admin_email, pin)
+    admin_email = str(body.get("admin_email", "") or "")
+    pin = str(body.get("pin", "") or "")
+    return await turnos_caja_service.validar_pin_admin(
+        conn,
+        turno_id,
+        admin_email,
+        pin,
+        user_id=current_user.sub,
+        solicitante=current_user,
+    )
 
 
 @router.post(
@@ -241,7 +261,9 @@ async def cancelar_conteo(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
     turno_id = body.get("turno_id", "")
-    return await turnos_caja_service.cancelar_conteo(conn, current_user.sub, turno_id)
+    return await turnos_caja_service.cancelar_conteo(
+        conn, current_user.sub, turno_id, solicitante=current_user
+    )
 
 
 @router.post(
