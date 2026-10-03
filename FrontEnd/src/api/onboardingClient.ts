@@ -89,6 +89,9 @@ export interface OnboardingResponse {
   pagado: number
   estado: string
   advertenciaEfectivo?: string | null
+  // Código opaco del QR del portal de padres (A17). Solo llega en esta
+  // respuesta; caduca a las 24 h o al hacer checkout del último niño.
+  codigoAccesoPadres: string
 }
 
 export interface ActivoDto {

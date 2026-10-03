@@ -1,13 +1,16 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user, get_db
 from app.core.object_storage import PREFIJOS, get_object
 from app.schemas.auth import TokenData
-from app.services.documentos_service import obtener_fotos_llegada_por_registro
+from app.services.documentos_service import (
+    obtener_fotos_llegada_por_registro,
+    obtener_identificacion,
+)
 
 router = APIRouter(prefix="/api/uploads", tags=["Archivos Protegidos"])
 
@@ -26,22 +29,20 @@ async def descargar_imagen_producto(nombre_archivo: str) -> StreamingResponse:
 async def descargar_imagenes_llegada(
     registro_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Obtiene un ZIP con las fotos de llegada asociadas a un registro de estancia."""
-    return await obtener_fotos_llegada_por_registro(conn, str(registro_id))
+    """ZIP con las fotos de llegada de un registro. Autorizado por recurso (C6):
+    staff de la sucursal del registro con permiso de estancias, o el padre
+    dueño del registro; cualquier otro caso es 404."""
+    return await obtener_fotos_llegada_por_registro(conn, current_user, registro_id)
 
 
-@router.get("/{carpeta}/{nombre_archivo}")
-async def descargar_archivo_protegido(
-    carpeta: str,
+@router.get("/identificaciones/{nombre_archivo}")
+async def descargar_identificacion(
     nombre_archivo: str,
-    _: TokenData = Depends(get_current_user),
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
 ) -> StreamingResponse:
-    if carpeta not in PREFIJOS:
-        raise HTTPException(status_code=400, detail="Directorio no permitido.")
-
-    key = f"{PREFIJOS[carpeta]}/{nombre_archivo}"
-    body, content_type = await get_object(key)
-
-    return StreamingResponse(body, media_type=content_type)
+    """INE del tutor de un registro. Autorizada por recurso (C6), igual que las
+    fotos de llegada; cualquier caso no autorizado es 404."""
+    return await obtener_identificacion(conn, current_user, nombre_archivo)
