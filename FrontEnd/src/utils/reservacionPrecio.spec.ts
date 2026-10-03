@@ -33,6 +33,7 @@ const RESERVACION = {
   descuento: '0',
   precio_total: '6700',
   anticipo: '2010',
+  monto_pagado: '2010',
   saldo_pendiente: '4690',
   estado: 'confirmada',
   comanda_enviada: false,
@@ -74,9 +75,15 @@ describe('recalcularReservacion', () => {
   it('avisa cuando el total nuevo quedaría por debajo de lo ya pagado', () => {
     // Con un anticipo de 2010, bajar a 1 invitado deja el total en 5250...
     expect(recalcularReservacion(RESERVACION, 50, { invitados: 1 }).anticipoExcede).toBe(false)
-    // ...pero con un evento casi liquidado sí se rompe la restricción de la BD.
-    const casiLiquidada = { ...RESERVACION, anticipo: '6600' } as Reservaciones
+    // ...pero con un evento casi liquidado el servidor rechaza la edición.
+    const casiLiquidada = { ...RESERVACION, monto_pagado: '6600' } as Reservaciones
     expect(recalcularReservacion(casiLiquidada, 50, { invitados: 1 }).anticipoExcede).toBe(true)
+  })
+
+  it('compara contra todo lo pagado, no solo contra el anticipo (C3)', () => {
+    // Anticipo de 2010 + abonos: ya se pagaron 6600 aunque `anticipo` no cambie.
+    const conAbonos = { ...RESERVACION, anticipo: '2010', monto_pagado: '6600' } as Reservaciones
+    expect(recalcularReservacion(conAbonos, 50, { invitados: 1 }).anticipoExcede).toBe(true)
   })
 
   it('reevalúa las pulseras con la tarifa vigente del paquete', () => {

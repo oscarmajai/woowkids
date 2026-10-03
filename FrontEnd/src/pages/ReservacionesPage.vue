@@ -332,7 +332,7 @@
           <q-icon name="error_outline" size="16px" />
           <span>
             El nuevo total quedaría por debajo de los
-            {{ fmt(Number(seleccionada?.anticipo ?? 0)) }} ya pagados. Reduce menos el evento o
+            {{ fmt(Number(seleccionada?.monto_pagado ?? 0)) }} ya pagados. Reduce menos el evento o
             devuelve la diferencia antes de bajarlo.
           </span>
         </div>
@@ -446,7 +446,8 @@ const desgloseHoras = computed(() => {
 
   const n = (v: string) => parseFloat(v) || 0
   const totalDespues = Number(nuevo.precio_total)
-  const pagado = n(r.anticipo)
+  // Todo lo cobrado (anticipo + abonos - cambio), no solo el anticipo (C3).
+  const pagado = n(r.monto_pagado)
   const ajuste = nuevo.horas_reservadas - r.horas_reservadas
 
   return {

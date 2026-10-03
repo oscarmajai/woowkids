@@ -68,12 +68,13 @@ export interface CambioReservacion {
 }
 
 /**
- * Calcula cómo queda una reservación al cambiarle invitados y/u horas.
+ * Calcula cómo queda una reservación al cambiarle invitados y/u horas. Replica
+ * el cálculo del servidor (`app/services/reservacion_precio.py`), que es el que
+ * manda: si no coincide, el PATCH responde 409 con el precio real.
  *
  * Devuelve también `anticipoExcede`: si el total nuevo queda por debajo de lo
- * ya pagado, la BD rechaza la actualización (`chk_reservaciones_anticipo`:
- * anticipo <= precio_total). Quien llame debe impedir el guardado en ese caso
- * en vez de dejar que falle contra la base.
+ * ya pagado (`monto_pagado`, todos los pagos menos el cambio), el servidor
+ * rechaza la edición. Quien llame debe impedir el guardado en ese caso.
  */
 export function recalcularReservacion(
   reservacion: Reservaciones,
@@ -98,7 +99,7 @@ export function recalcularReservacion(
     horas_reservadas: horas,
     precio_personas_extra: String(pulseras),
     precio_total: String(total),
-    anticipoExcede: total < num(reservacion.anticipo),
+    anticipoExcede: total < num(reservacion.monto_pagado),
     totalAnterior: num(reservacion.precio_total),
   }
 }

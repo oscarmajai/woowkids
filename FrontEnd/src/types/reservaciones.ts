@@ -25,7 +25,11 @@ export interface Reservaciones extends AuditFields {
   precio_extras: string
   descuento: string
   precio_total: string
+  /** Lo cobrado al levantar la reservación (histórico). */
   anticipo: string
+  /** Neto cobrado: todos los pagos menos el cambio devuelto (migración 075). */
+  monto_pagado: string
+  /** precio_total - monto_pagado, calculado por la BD. */
   saldo_pendiente: string
   estado: EstadoReservacion
   comanda_enviada: boolean
