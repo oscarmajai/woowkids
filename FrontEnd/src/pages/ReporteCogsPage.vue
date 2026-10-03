@@ -88,12 +88,14 @@ import {
 import type { CogsRenglon, ResumenCogs } from '@/types/movimientoInventario'
 import { resolveErrorMessage, mensajeDeError } from '@/utils/errorHandler'
 import type { ApiError } from '@/types/auth'
+import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
 
-const hoy = new Date().toISOString().slice(0, 10)
-const primeroDeMes = hoy.slice(0, 8) + '01'
+// Fecha local (no UTC: después de las 18:00 en México ya sería mañana, M4).
+const hoy = fechaEnZona()
+const primeroDeMes = primerDiaDelMesEnZona()
 const desde = ref(primeroDeMes)
 const hasta = ref(hoy)
 const loading = ref(false)
