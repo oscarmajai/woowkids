@@ -4,6 +4,7 @@ import { AxiosError } from 'axios'
 import type { ApiError } from '@/types/auth'
 import { apiClient, rawApiClient, refreshAccessToken, configurarRefresh } from '@/api/axiosClient'
 import { tokenMemory } from '@/utils/tokenMemory'
+import { resolveErrorMessage } from '@/utils/errorHandler'
 
 function makeResponse(config: InternalAxiosRequestConfig, status: number, data: unknown) {
   return { data, status, statusText: '', headers: {}, config } as AxiosResponse
@@ -137,6 +138,28 @@ describe('axiosClient interceptor', () => {
 
     expect(err.message).toBe('dato inválido')
     expect(err.details).toBeUndefined()
+  })
+
+  it('B8: un 422 de validación muestra los mensajes en español del backend', async () => {
+    apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) =>
+      fail(config, 422, {
+        detail: [
+          {
+            type: 'greater_than',
+            loc: ['body', 'cantidad'],
+            msg: 'cantidad: debe ser mayor que 0',
+            input: '-5',
+            ctx: { gt: '0' },
+          },
+          { type: 'missing', loc: ['body', 'tipo'], msg: 'tipo: es obligatorio' },
+        ],
+      })) as AxiosAdapter
+
+    const err = (await apiClient.post('/x').catch((e: ApiError) => e)) as ApiError
+
+    expect(err.statusCode).toBe(422)
+    expect(err.message).toBe('cantidad: debe ser mayor que 0, tipo: es obligatorio')
+    expect(resolveErrorMessage(err)).toBe(err.message)
   })
 
   it('con refresher registrado, guarda el usuario y permisos nuevos', async () => {

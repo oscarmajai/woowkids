@@ -10,7 +10,7 @@ nuevos y los borra al terminar.
         -e POSTGRES_DB=woowkids -p 0:5432 postgres:16-alpine
     psql ... < sql/schema_maestro.sql
     TEST_DATABASE_URL=postgresql://dev:dev@localhost:<puerto>/woowkids \\
-        pytest tests/integration/test_reservaciones_saldo_pg.py
+        pytest tests/db/test_reservaciones_saldo_pg.py
 """
 
 import asyncio

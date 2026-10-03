@@ -484,6 +484,8 @@
               type="number"
               min="0"
               step="0.001"
+              :rules="[reglaCantidadAjuste]"
+              hide-bottom-space
             />
           </div>
         </template>
@@ -502,6 +504,8 @@
               type="number"
               min="0"
               step="0.001"
+              :rules="[reglaStockContado]"
+              hide-bottom-space
             />
           </div>
           <q-banner v-if="insumoAjuste" dense rounded class="bg-blue-1 text-blue-9">
@@ -546,7 +550,7 @@
           color="primary"
           label="Registrar ajuste"
           :loading="guardandoAjuste"
-          :disable="!formAjuste.cantidad"
+          :disable="!cantidadAjusteValida"
           @click="guardarAjuste"
         />
         <q-btn
@@ -556,7 +560,7 @@
           color="primary"
           label="Aplicar conteo"
           :loading="guardandoAjuste"
-          :disable="diferencia.tipo === 'igual'"
+          :disable="!conteoValido"
           @click="guardarConteo"
         />
       </template>
@@ -585,6 +589,12 @@ import { usePresentacionesInsumoStore } from '@/stores/presentacionesInsumo'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { calcularRindePorInsumo } from '@/utils/estimacionRinde'
 import { obtenerInsumo } from '@/services/insumoService'
+import {
+  esCantidadAjusteValida,
+  esStockContadoValido,
+  reglaCantidadAjuste,
+  reglaStockContado,
+} from '@/utils/ajusteStock'
 import type { ApiError } from '@/types/auth'
 import type { Insumo } from '@/types/insumo'
 import type { TipoMovimientoManual } from '@/types/movimientoInventario'
@@ -868,6 +878,12 @@ const diferencia = computed(() =>
     : diferenciaConteo(0, 0),
 )
 
+const cantidadAjusteValida = computed(() => esCantidadAjusteValida(formAjuste.value.cantidad))
+
+const conteoValido = computed(
+  () => esStockContadoValido(formConteo.value.stock_contado) && diferencia.value.tipo !== 'igual',
+)
+
 const abrirKardex = (row: Insumo) => {
   router.push({ name: 'insumos-kardex', params: { id: row.id } })
 }
@@ -916,7 +932,7 @@ const aplicarStockLocal = (insumoId: string, nuevoStock: string) => {
 }
 
 const guardarAjuste = async () => {
-  if (!insumoAjuste.value || !formAjuste.value.cantidad) return
+  if (!insumoAjuste.value || !cantidadAjusteValida.value) return
   guardandoAjuste.value = true
   try {
     const movimiento = await movimientosStore.registrar(insumoAjuste.value.id, {
@@ -939,7 +955,7 @@ const guardarAjuste = async () => {
 }
 
 const guardarConteo = async () => {
-  if (!insumoAjuste.value || diferencia.value.tipo === 'igual') return
+  if (!insumoAjuste.value || !conteoValido.value) return
   guardandoAjuste.value = true
   try {
     // El ajuste se calcula contra el stock real al confirmar: si cambió desde

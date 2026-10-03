@@ -157,7 +157,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
 async def obtener(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
     row = await compra_repository.obtener(conn, compra_id)
     if not row:
-        raise NoEncontrado("Compra")
+        raise NoEncontrado("Compra", genero="f")
     return await _construir_out(conn, row)
 
 
@@ -185,7 +185,7 @@ async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpda
             )
         row = await compra_repository.actualizar(conn, compra_id, updates)
     if not row:
-        raise NoEncontrado("Compra")
+        raise NoEncontrado("Compra", genero="f")
     return await _construir_out(conn, row)
 
 
@@ -196,7 +196,7 @@ async def editar(conn: asyncpg.Connection, compra_id: UUID, body: CompraEditar) 
     async with conn.transaction():
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] != "P":
             raise Conflicto("Solo se puede editar una compra pendiente.")
 
@@ -308,7 +308,7 @@ async def recibir(
         # (409) o solo lo que quedó pendiente (recepción parcial).
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] not in ("P", "PARCIAL"):
             raise _conflicto_por_estado(compra["estado"])
 
@@ -380,7 +380,7 @@ async def cancelar(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
     async with conn.transaction():
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
-            raise NoEncontrado("Compra")
+            raise NoEncontrado("Compra", genero="f")
         if compra["estado"] != "P":
             raise Conflicto("Solo se puede cancelar una compra pendiente sin recepciones.")
         cancelada = await compra_repository.marcar_cancelada(conn, compra_id)

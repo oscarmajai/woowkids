@@ -62,7 +62,7 @@ async def obtener_evento_cercano(
 async def obtener(conn: asyncpg.Connection, reservacion_id: UUID) -> ReservacionesOut:
     row = await reservaciones_repository.obtener(conn, reservacion_id)
     if not row or not row["activo"]:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
     return ReservacionesOut.model_validate(row)
 
 
@@ -236,7 +236,7 @@ async def actualizar(
         # Bloqueo: un cobro simultáneo no debe validar contra un total viejo.
         actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
         if not actual or not actual["activo"]:
-            raise NoEncontrado("Reservación")
+            raise NoEncontrado("Reservación", genero="f")
         reservacion_estados.asegurar_editable(actual["estado"])
 
         if updates.get("estado") == actual["estado"]:
@@ -262,7 +262,7 @@ async def actualizar(
         for extra_id, cantidad in cantidades_extras.items():
             await reservacion_extras_repository.actualizar(conn, extra_id, {"cantidad": cantidad})
     if not row:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
     return ReservacionesOut.model_validate(row)
 
 
@@ -279,7 +279,7 @@ async def cerrar(
     async with conn.transaction():
         actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
         if not actual or not actual["activo"]:
-            raise NoEncontrado("Reservación")
+            raise NoEncontrado("Reservación", genero="f")
         await _validar_cambio_estado(conn, actual, reservacion_estados.COMPLETADA)
         row = await reservaciones_repository.actualizar(
             conn,
@@ -293,7 +293,7 @@ async def cerrar(
             },
         )
     if not row:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
     return ReservacionesOut.model_validate(row)
 
 

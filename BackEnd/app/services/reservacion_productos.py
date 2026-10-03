@@ -26,7 +26,7 @@ async def listar_por_reservacion(
 ) -> list[ReservacionProductosOut]:
     reservacion = await reservaciones_repository.obtener(conn, reservacion_id)
     if not reservacion:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
 
     scope = sucursal_scope(current_user)
     if scope is not None and str(reservacion["sucursal_id"]) != scope:

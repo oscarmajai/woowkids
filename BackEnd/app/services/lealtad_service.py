@@ -36,7 +36,7 @@ async def obtener_configuracion(
     scope = resolver_sucursal(current_user, sucursal_id)
     row = await lealtad_repository.obtener_configuracion(conn, scope)
     if not row:
-        raise NoEncontrado("Configuración de lealtad")
+        raise NoEncontrado("Configuración de lealtad", genero="f")
     return ConfiguracionLealtadOut.model_validate(row)
 
 
@@ -50,7 +50,7 @@ async def obtener_configuracion_canje(
     scope = resolver_sucursal(current_user, sucursal_id)
     row = await lealtad_repository.obtener_configuracion(conn, scope)
     if not row:
-        raise NoEncontrado("Configuración de lealtad")
+        raise NoEncontrado("Configuración de lealtad", genero="f")
     return ConfiguracionCanjeOut.model_validate(row)
 
 
