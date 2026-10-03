@@ -183,19 +183,33 @@ async def get_catalogo_venta_by_sucursal(
     # así que el catálogo de venta expone su propia estimación — el mínimo de
     # stock_actual / cantidad sobre los insumos de la receta, redondeado hacia
     # abajo. NULL si el producto no tiene receta (producto_insumos vacío).
+    # Un combo no tiene receta propia: su estimación suma, por insumo, lo que
+    # consumen sus integrantes en una unidad de combo (un insumo compartido
+    # por dos integrantes cuenta dos veces), igual que el descuento al vender.
+    # M14: los servicios ('S') también se venden en caja; no llevan receta.
     sql_catalogo = """
         SELECT
             p.id, p.nombre, p.precio_unitario, p.descripcion, p.tipo, p.imagen, p.es_combo,
-            (
+            CASE WHEN p.es_combo THEN (
+                SELECT MIN(FLOOR(i.stock_actual / c.consumo))
+                FROM (
+                    SELECT pi.insumo_id, SUM(pc.cantidad * pi.cantidad) AS consumo
+                    FROM public.producto_combo pc
+                    JOIN public.producto_insumos pi ON pi.producto_id = pc.producto_id
+                    WHERE pc.combo_id = p.id AND pc.activo = TRUE AND pi.cantidad > 0
+                    GROUP BY pi.insumo_id
+                ) c
+                JOIN public.insumos i ON i.id = c.insumo_id
+            ) ELSE (
                 SELECT MIN(FLOOR(i.stock_actual / pi.cantidad))
                 FROM public.producto_insumos pi
                 JOIN public.insumos i ON i.id = pi.insumo_id
                 WHERE pi.producto_id = p.id AND pi.cantidad > 0
-            ) AS disponible_estimado
+            ) END AS disponible_estimado
         FROM productos p
         WHERE p.sucursal_id = $1
           AND p.activo = TRUE
-          AND (p.tipo IN ('A', 'B') OR p.es_combo = TRUE)
+          AND (p.tipo IN ('A', 'B', 'S') OR p.es_combo = TRUE)
         ORDER BY p.es_combo ASC, p.nombre
     """
     rows = await conn.fetch(sql_catalogo, sucursal_id)

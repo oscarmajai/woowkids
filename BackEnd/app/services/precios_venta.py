@@ -28,9 +28,11 @@ CENTAVO = Decimal("0.01")
 # venir de una petición manipulada o de un error de captura.
 CANTIDAD_MAXIMA_POR_RENGLON = 999
 
-# Tipos que el POS vende sueltos (alimentos y bebidas); los combos se aceptan
-# por su bandera es_combo. Igual que producto_repository.get_catalogo_venta_by_sucursal.
-TIPOS_VENDIBLES_POS = frozenset({"A", "B"})
+# Tipos que el POS vende sueltos (alimentos, bebidas y servicios, M14); los
+# combos se aceptan por su bandera es_combo. Igual que
+# producto_repository.get_catalogo_venta_by_sucursal. Las estancias ('E') se
+# cobran en su propio flujo.
+TIPOS_VENDIBLES_POS = frozenset({"A", "B", "S"})
 
 
 @dataclass(frozen=True)
