@@ -440,3 +440,145 @@ async def test_un_solo_broadcast_por_cambio_de_estado(
     assert sucursal == str(esc.sucursal)
     assert mensaje["type"] == "comanda_actualizada"
     assert mensaje["comanda"]["estado_actual"] == "E"
+
+
+# ── A4: cancelar una comanda cobrada ─────────────────────────────────────────
+
+
+async def test_cancelar_pagada_sin_pin_403_y_no_cancela(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    r = await _cancelar(esc.cajero, cid)
+    assert r.status_code == 403, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "AUTORIZACION_ADMIN_REQUERIDA"
+    assert detail["turno_id"] == str(esc.apertura)
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+    assert await _devoluciones(esc, cid) == []
+
+
+async def test_cancelar_pagada_en_efectivo_resta_del_arqueo(esc: Esc) -> None:
+    # Paga $100 por $70 y recibe $30 de cambio: al cajón entraron $70.
+    cid = await _cobrada(
+        esc,
+        pagos=[{"metodo_pago_id": str(esc.efectivo), "monto": "100.00", "notas_pago": ""}],
+        cambio="30.00",
+    )
+    assert await _efectivo_esperado(esc) == (Decimal("1070.00"), Decimal("1070.00"))
+    assert await _stock(esc) == Decimal("9")
+
+    token = await _token_admin(esc)
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=token)
+    assert r.status_code == 200, r.text
+
+    assert tuple(await _comanda(esc, cid)) == ("C", False)
+    assert await _stock(esc) == Decimal("10")
+    devs = await _devoluciones(esc, cid)
+    assert [(d["es_efectivo"], d["monto"]) for d in devs] == [(True, Decimal("70.00"))]
+    assert devs[0]["apertura_caja_id"] == esc.apertura
+    assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))
+
+    # El token es de un solo uso.
+    otra = await _cobrada(esc)
+    r = await _cancelar(esc.cajero, otra, token_pin_admin=token)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "PIN_TOKEN_REQUERIDO"
+    assert tuple(await _comanda(esc, otra)) == ("P", True)
+
+
+async def test_devolucion_no_puede_exceder_el_efectivo_del_cajon(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    r = await esc.cajero.post(
+        "/api/turnos-caja/retiro",
+        json={
+            "apertura_caja_id": str(esc.apertura),
+            "tipo_destinatario": "Empleado",
+            "monto": "1050.00",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "EFECTIVO_INSUFICIENTE"
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+    assert await _devoluciones(esc, cid) == []
+
+
+async def test_cancelar_pagada_con_tarjeta_no_mueve_el_efectivo(esc: Esc) -> None:
+    cid = await _cobrada(
+        esc,
+        pagos=[
+            {"metodo_pago_id": str(esc.tarjeta), "monto": "70.00", "notas_pago": "Folio: 98765"}
+        ],
+    )
+    antes = await _efectivo_esperado(esc)
+
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+
+    devs = await _devoluciones(esc, cid)
+    assert [(d["es_efectivo"], d["monto"], d["metodo_pago_id"]) for d in devs] == [
+        (False, Decimal("70.00"), esc.tarjeta)
+    ]
+    assert await _efectivo_esperado(esc) == antes
+
+
+async def test_admin_de_otra_sucursal_no_autoriza(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    token = await _token_admin(esc, email=esc.admin_otra_email)
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=token)
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "ADMIN_NO_AUTORIZADO"
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+    assert await _devoluciones(esc, cid) == []
+
+
+async def test_cancelar_pagada_sin_turno_abierto_409(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    r = await _cancelar(esc.cocina, cid, token_pin_admin="cualquiera")
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "TURNO_NO_ABIERTO"
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+
+
+async def test_venta_de_turno_cerrado_409(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    async with esc.pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE apertura_caja SET estado = 'CERRADA' WHERE id = $1", esc.apertura
+        )
+        nueva = await conn.fetchval(
+            "INSERT INTO apertura_caja (caja_id, cajero_id, turno_id, fondo_inicial, estado) "
+            "SELECT caja_id, cajero_id, turno_id, 500, 'ABIERTA' FROM apertura_caja "
+            "WHERE id = $1 RETURNING id",
+            esc.apertura,
+        )
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=await _token_admin(esc, turno=nueva))
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "VENTA_DE_TURNO_CERRADO"
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+
+
+async def test_quitar_todos_los_productos_de_una_pagada_409(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    async with esc.pool.acquire() as conn:
+        ids = [
+            str(r["id"])
+            for r in await conn.fetch(
+                "SELECT id FROM detalles_comanda WHERE comanda_id = $1", UUID(cid)
+            )
+        ]
+    r = await esc.cajero.patch(
+        f"/api/comandas/{cid}/detalles",
+        json={"detalles_ids_a_eliminar": ids, "motivo_cancelacion": "Otro"},
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "COMANDA_PAGADA_USAR_CANCELAR"
+    assert tuple(await _comanda(esc, cid)) == ("P", True)
+
+
+async def test_cancelar_sin_pagos_no_pide_pin(esc: Esc) -> None:
+    cid = await _sin_cobro(esc)
+    r = await _cancelar(esc.cocina, cid)
+    assert r.status_code == 200, r.text
+    assert await _devoluciones(esc, cid) == []

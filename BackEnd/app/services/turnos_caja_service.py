@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.core.utils import get_mexico_now
 from app.exceptions import PinTokenRequeridoError
-from app.repositories import pin_token_repository
+from app.repositories import devolucion_repository, pin_token_repository
 from app.repositories.caja_repository import (
     actualizar_admin_autorizacion,
     actualizar_conteo_apertura,
@@ -51,6 +51,7 @@ from app.repositories.caja_repository import (
     resetear_conteo_apertura,
     resumen_historial_cierres,
     sumar_cambio_apertura,
+    sumar_devoluciones_efectivo_apertura,
     sumar_ingresos_por_apertura,
     sumar_retiros_por_apertura,
     sumar_total_ventas_apertura,
@@ -67,6 +68,7 @@ from app.schemas.caja import (
     ConteoPayload,
     DesgloseEfectivoDetalle,
     DetalleArqueoResponse,
+    DevolucionDetalle,
     FilaBalance,
     FiltrosHistorial,
     HistorialArqueosResponse,
@@ -413,26 +415,30 @@ async def _calcular_balance(
     - `balance` (por método): el renglón "efectivo" compara el dinero físico —
       fondo inicial + ventas en efectivo (o sin método aún, ver
       sumar_ventas_efectivo_apertura) + ingresos de efectivo - retiros -
-      cambio dado — contra lo que el cajero contó físicamente
+      cambio dado - devoluciones en efectivo (A4) — contra lo que el cajero contó físicamente
       (desglose_efectivo.total en conteo_json). Cada otro método compara lo
       que el sistema registró contra lo que el cajero declaró para ese
       método específico.
     - Totales generales (esperado/declarado/diferencia): todos los métodos de
       pago cuentan como dinero real del sistema (cupones, lealtad, vouchers
       incluidos) — es la suma de todos los movimientos del turno + fondo
-      inicial + ingresos de efectivo - retiros - cambio dado, comparada
+      inicial + ingresos de efectivo - retiros - cambio dado - devoluciones
+      en efectivo, comparada
       contra la suma de todo lo que el cajero declaró, independientemente
       del método."""
     monto_inicial = Decimal(str(apertura["fondo_inicial"]))
     total_retiros = await sumar_retiros_por_apertura(conn, turno_id)
     total_cambio = await sumar_cambio_apertura(conn, turno_id)
     total_ingresos = await sumar_ingresos_por_apertura(conn, turno_id)
+    # A4: efectivo devuelto a clientes por comandas canceladas en este turno.
+    total_devoluciones = await sumar_devoluciones_efectivo_apertura(conn, turno_id)
     total_esperado_efectivo = (
         monto_inicial
         + await sumar_ventas_efectivo_apertura(conn, turno_id)
         + total_ingresos
         - total_retiros
         - total_cambio
+        - total_devoluciones
     )
 
     conteo = json.loads(apertura["conteo_json"]) if apertura["conteo_json"] else {}
@@ -502,6 +508,7 @@ async def _calcular_balance(
         + total_ingresos
         - total_retiros
         - total_cambio
+        - total_devoluciones
     )
     # "efectivo" ya está contado en declarado_efectivo (viene de desglose_efectivo,
     # no de metodos_pago) -- excluirlo aquí igual que ya se hace arriba al construir
@@ -603,7 +610,7 @@ async def _emitir_token_pin(
 
 async def _validar_y_consumir_token_pin(
     conn: asyncpg.Connection, token: str, turno_id: str, rol: str
-) -> None:
+) -> dict[str, Any]:
     fila = await pin_token_repository.obtener_token(conn, token, turno_id, rol)
     if not fila:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} no es válido para este turno.")
@@ -612,6 +619,16 @@ async def _validar_y_consumir_token_pin(
     if fila["expira"] < get_mexico_now():
         raise PinTokenRequeridoError(f"El token de PIN de {rol} expiró, vuelve a validar el PIN.")
     await pin_token_repository.marcar_usado(conn, token)
+    return fila
+
+
+async def consumir_token_pin_admin(conn: asyncpg.Connection, token: str, turno_id: str) -> str:
+    """A4: consume el token de un solo uso que emite /validar-pin-admin para
+    `turno_id` (el mismo mecanismo que autoriza el cierre) y devuelve el id del
+    administrador que validó su PIN. El llamador debe estar en una transacción
+    para que el token no quede consumido si la operación autorizada falla."""
+    fila = await _validar_y_consumir_token_pin(conn, token, turno_id, "admin")
+    return str(fila["usuario_id"])
 
 
 async def validar_pin_cajero(
@@ -1100,6 +1117,20 @@ async def obtener_detalle(
         for i in ingresos_raw
     ]
 
+    devoluciones = [
+        DevolucionDetalle(
+            id=str(d["id"]),
+            comanda_id=str(d["comanda_id"]),
+            ticket_numero=d["ticket_numero"],
+            metodo_pago_nombre=d["metodo_pago_nombre"],
+            es_efectivo=d["es_efectivo"],
+            monto=Decimal(str(d["monto"])),
+            autorizado_por_nombre=d["autorizado_por_nombre"],
+            creado=d["creado"],
+        )
+        for d in await devolucion_repository.listar_por_apertura(conn, apertura_caja_id)
+    ]
+
     return DetalleArqueoResponse(
         id=str(cierre["id"]),
         cajero_nombre=cierre["cajero_nombre"] or "—",
@@ -1121,4 +1152,5 @@ async def obtener_detalle(
         retiros=retiros,
         cambios=cambios,
         ingresos=ingresos,
+        devoluciones=devoluciones,
     )

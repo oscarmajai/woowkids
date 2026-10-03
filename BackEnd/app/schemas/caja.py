@@ -153,6 +153,20 @@ class IngresoDetalle(BaseModel):
     creado: datetime
 
 
+class DevolucionDetalle(BaseModel):
+    """A4: devolución al cliente por cancelar una comanda cobrada. Las de
+    efectivo (es_efectivo) restan del efectivo esperado del turno."""
+
+    id: str
+    comanda_id: str
+    ticket_numero: str | None = None
+    metodo_pago_nombre: str | None = None
+    es_efectivo: bool
+    monto: Decimal
+    autorizado_por_nombre: str | None = None
+    creado: datetime
+
+
 class IngresoEfectivoCreate(BaseModel):
     apertura_caja_id: str
     monto: Decimal = Field(..., gt=0)
@@ -292,6 +306,7 @@ class DetalleArqueoResponse(ArqueoResumen):
     retiros: list[RetiroParcialResponse] = []
     cambios: list[CambioResponse] = []
     ingresos: list[IngresoDetalle] = []
+    devoluciones: list[DevolucionDetalle] = []
     observaciones: str | None = ""
 
 

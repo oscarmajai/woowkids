@@ -105,7 +105,10 @@ async def cambiar_estado(
     ),
 ) -> Any:
     """Avanza el estado de una comanda (P → E → L → T) o la cancela (C) desde
-    P/E/L, con auditoría. Transición inválida o comanda ya cancelada: 409."""
+    P/E/L, con auditoría. Transición inválida o comanda ya cancelada: 409.
+    Cancelar una comanda cobrada exige `token_pin_admin` (403
+    AUTORIZACION_ADMIN_REQUERIDA, con el turno_id para /turnos-caja/validar-pin-admin)
+    y registra la devolución en el turno abierto de quien cancela."""
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     try:
         comanda = await comanda_service.cambiar_estado(
@@ -114,6 +117,7 @@ async def cambiar_estado(
             data.estado_actual.value,
             current_user,
             motivo_cancelacion=data.motivo_cancelacion,
+            token_pin_admin=data.token_pin_admin,
         )
     except ValueError as exc:
         raise HTTPException(

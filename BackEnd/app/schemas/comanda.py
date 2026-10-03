@@ -51,6 +51,9 @@ class ComandaCreate(BaseModel):
 class CambioEstadoRequest(BaseModel):
     estado_actual: EstadoComanda
     motivo_cancelacion: str | None = None
+    # A4: token de un solo uso de POST /turnos-caja/validar-pin-admin. Solo se
+    # exige para cancelar una comanda con pagos.
+    token_pin_admin: str | None = None
 
 
 # Esquema para cancelación parcial (eliminar productos de una comanda Pendiente)
