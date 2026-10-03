@@ -85,3 +85,40 @@ describe('registration store: pagos en completeRegistration', () => {
     expect(store.codigoAccesoPadres).toBe('')
   })
 })
+
+describe('registration store: referencia de pago (N8)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(postOnboarding).mockReset()
+  })
+
+  it('envía la referencia de cada pago al backend', async () => {
+    vi.mocked(postOnboarding).mockResolvedValue({
+      registroId: 'r1',
+      total: 100,
+      pagado: 100,
+      estado: 'A',
+      codigoAccesoPadres: 'c',
+    })
+    const store = prepararRegistroListo()
+
+    await store.proceedToRFID([{ metodoPagoId: 'm-tarjeta', monto: 100, referencia: 'A-123' }])
+    await store.completeRegistration()
+
+    const payload = vi.mocked(postOnboarding).mock.calls[0][0]
+    expect(payload.pagos).toEqual([{ metodoPagoId: 'm-tarjeta', monto: 100, referencia: 'A-123' }])
+  })
+
+  it('muestra el mensaje del backend cuando falta la referencia (422)', async () => {
+    vi.mocked(postOnboarding).mockRejectedValue({
+      statusCode: 422,
+      message: 'El pago con «Tarjeta» requiere la referencia o el folio de autorización.',
+    })
+    const store = prepararRegistroListo()
+
+    await store.proceedToRFID([{ metodoPagoId: 'm-tarjeta', monto: 100 }])
+    await store.completeRegistration()
+
+    expect(store.submitError).toContain('requiere la referencia')
+  })
+})

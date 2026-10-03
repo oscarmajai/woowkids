@@ -66,6 +66,9 @@ export interface OnboardingDetalle {
 export interface OnboardingPago {
   metodoPagoId: string
   monto: number
+  // N8: folio del voucher o referencia de la transferencia. El backend la exige
+  // (422 REFERENCIA_REQUERIDA) si el método de pago tiene `requiere_referencia`.
+  referencia?: string
 }
 
 export interface OnboardingPayload {

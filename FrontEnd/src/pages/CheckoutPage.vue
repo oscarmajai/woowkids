@@ -131,7 +131,12 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import FotosRegistroDialog from '@/components/control-acceso/FotosRegistroDialog.vue'
 import { useRouter } from 'vue-router'
 import { useAccessControlStore } from '@/stores/accessControl'
-import { checkout, cotizarCheckout, type CotizacionCheckoutResponse } from '@/api/onboardingClient'
+import {
+  checkout,
+  cotizarCheckout,
+  type CotizacionCheckoutResponse,
+  type OnboardingPago,
+} from '@/api/onboardingClient'
 import { Notify } from 'quasar'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import { metodosPagoApi } from '@/api/metodosPagoApi'
@@ -140,7 +145,7 @@ import type { AppliedPayment } from '@/types/payments'
 import type { ApiError } from '@/types/auth'
 import { resolverMetodoPagoId } from '@/utils/metodosPago'
 import { mensajeDeError } from '@/utils/errorHandler'
-import { descontarCambio } from '@/utils/pagos'
+import { descontarCambio, referenciaDePago } from '@/utils/pagos'
 
 const store = useAccessControlStore()
 const router = useRouter()
@@ -263,7 +268,7 @@ async function confirmarSalida() {
   }
 }
 
-async function ejecutarCheckout(pagos: { metodoPagoId: string; monto: number }[]) {
+async function ejecutarCheckout(pagos: OnboardingPago[]) {
   if (!child.value) return
 
   const result = await checkout(child.value.detalleId, pagos)
@@ -292,6 +297,7 @@ async function onPagoExtraExitoso(pagos: AppliedPayment[]) {
     const pagosMapeados = aplicados.map((p) => ({
       metodoPagoId: mapearMetodoPago(p.method),
       monto: p.amount,
+      referencia: referenciaDePago(p),
     }))
 
     await ejecutarCheckout(pagosMapeados)

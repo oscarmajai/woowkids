@@ -98,6 +98,7 @@ import { CATEGORIAS_METODO_PAGO, type MetodosPago } from '@/types/metodos_pago'
 import type { AppliedPayment } from '@/types/payments'
 import type { OnboardingPago } from '@/api/onboardingClient'
 import { mensajeDeError } from '@/utils/errorHandler'
+import { referenciaDePago } from '@/utils/pagos'
 
 const store = useRegistrationStore()
 const $q = useQuasar()
@@ -164,6 +165,7 @@ const onPagoExitoso = (
     const pagosMapeados: OnboardingPago[] = pagos.map((p) => ({
       metodoPagoId: mapearMetodoPago(p.method),
       monto: p.amount,
+      referencia: referenciaDePago(p),
     }))
     store.proceedToRFID(pagosMapeados, cambio, puntosARedimir, descuentoPuntos)
   } catch (err) {

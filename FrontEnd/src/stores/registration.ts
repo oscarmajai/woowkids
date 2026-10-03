@@ -557,6 +557,9 @@ export const useRegistrationStore = defineStore('registration', () => {
         } else {
           submitError.value = message || 'No se pudo completar el registro. Intenta de nuevo.'
         }
+      } else if (err?.statusCode === 422 && err?.message) {
+        // N8: p. ej. un pago con tarjeta o transferencia sin referencia.
+        submitError.value = err.message
       } else {
         submitError.value = 'No se pudo completar el registro. Intenta de nuevo.'
       }
