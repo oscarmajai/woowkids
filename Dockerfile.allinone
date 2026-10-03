@@ -1,15 +1,19 @@
 # Imagen TODO EN UNO de Woow Kids: frontend + API + PostgreSQL + MinIO en un solo
 # contenedor, con todos los datos en el volumen /data.
 #
-# No recompila nada: parte de las imágenes publicadas por los releases de
-# mercurio-frontend y mercurio-backend. Este archivo es idéntico en ambos repos;
-# cualquiera de los dos publica ghcr.io/sistemasiq/woowkids.
+# No recompila nada: parte de las imágenes woowkids-frontend y woowkids-backend
+# (las publica el release del monorepo, o construye las locales con
+# `docker compose build`).
 #
-#   docker run -d -p 8080:80 -v woowkids_data:/data ghcr.io/sistemasiq/woowkids:latest
+#   docker run -d -p 8080:80 -v woowkids_data:/data ghcr.io/oscarmajai/woowkids:latest
+#
+# Local:  docker compose build && docker build -f Dockerfile.allinone \
+#           --build-arg FRONTEND_IMAGE=ghcr.io/oscarmajai/woowkids-frontend:local \
+#           --build-arg BACKEND_IMAGE=ghcr.io/oscarmajai/woowkids-backend:local -t woowkids .
 #
 # Para producción a escala se recomiendan las imágenes separadas (docker-compose.yml).
-ARG FRONTEND_IMAGE=ghcr.io/sistemasiq/woowkids-frontend:latest
-ARG BACKEND_IMAGE=ghcr.io/sistemasiq/woowkids-backend:latest
+ARG FRONTEND_IMAGE=ghcr.io/oscarmajai/woowkids-frontend:latest
+ARG BACKEND_IMAGE=ghcr.io/oscarmajai/woowkids-backend:latest
 # MinIO: dl.min.io ya no distribuye binarios (410), se toma de la imagen oficial.
 # RELEASE.2025-09-07T16-13-09Z, fijada por digest (Docker Hub solo publica latest).
 ARG MINIO_IMAGE=minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
