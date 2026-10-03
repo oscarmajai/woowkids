@@ -187,6 +187,17 @@ class MetodoPagoDetalle(BaseModel):
     ultimos4: str | None = None
 
 
+class SucursalTicketOut(BaseModel):
+    """M12: datos de la sucursal de la venta para el encabezado del ticket."""
+
+    nombre: str
+    direccion: str | None = None
+    ciudad: str | None = None
+    estado: str | None = None
+    codigo_postal: str | None = None
+    telefono: str | None = None
+
+
 class DetalleOrdenOut(BaseModel):
     tipo_origen: str = "comanda"
     referencia_id: str
@@ -207,6 +218,10 @@ class DetalleOrdenOut(BaseModel):
     puntos_ganados: int | None = None
     # B9 B.2: mesa del pedido, opcional (solo aplica a comandas).
     mesa: str | None = None
+    # M12: cliente, cambio entregado (0 si no hubo) y sucursal de la venta.
+    nombre_cliente: str | None = None
+    cambio: float = 0.0
+    sucursal: SucursalTicketOut | None = None
 
 
 # ---------------------------------------------------------------------------
