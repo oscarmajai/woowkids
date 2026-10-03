@@ -1,9 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 
 from app.schemas.limites_inventario import (
     DECIMALES_CANTIDAD,
@@ -11,6 +10,7 @@ from app.schemas.limites_inventario import (
     MAX_CANTIDAD,
     MAX_COSTO_UNITARIO,
 )
+from app.schemas.textos import Nombre150
 
 # M3: los niveles de stock que captura el usuario, acotados a numeric(12,3).
 # Solo en los schemas de entrada: InsumoOut hereda de InsumoBase y no debe
@@ -19,7 +19,7 @@ _DEC = DECIMALES_CANTIDAD
 
 
 class InsumoBase(BaseModel):
-    nombre: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
+    nombre: Nombre150
     descripcion: str | None = None
     unidad_base_id: UUID
     unidad_compra_id: UUID
@@ -55,7 +55,7 @@ class InsumoUpdate(BaseModel):
     solo para rechazarlo con un mensaje claro (422 COSTO_NO_EDITABLE en
     `insumo_service.actualizar`) en lugar de ignorarlo."""
 
-    nombre: str | None = Field(None, max_length=150)
+    nombre: Nombre150 | None = None
     descripcion: str | None = None
     stock_minimo: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
     punto_reorden: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)

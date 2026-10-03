@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.textos import Nombre
+
 TipoProducto = Literal["A", "B", "E", "S", "C"]  # Alimento | Bebida | Estancia | Servicio | Combo
 
 
@@ -53,7 +55,7 @@ class ProductoCrear(ProductoBase):
 
 
 class ProductoUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: Nombre | None = None
     precio_unitario: Decimal | None = None
     tipo: TipoProducto | None = None
     descripcion: str | None = None
