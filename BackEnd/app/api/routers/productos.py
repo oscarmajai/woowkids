@@ -15,12 +15,11 @@ from pydantic import ValidationError
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
-from app.core.roles import ROL_SISTEMA
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.producto import ProductoCrear, ProductoOut, ProductoUpdate
 from app.schemas.registros import ProductoEstanciaResponse
-from app.services import producto_service
+from app.services import alcance_service, producto_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
@@ -56,24 +55,20 @@ async def listar_productos_admin(
 
     El sucursal_id que manda el cliente solo se respeta para
     AdministradorSistema (que puede filtrar por cualquier sucursal); para
-    el resto de roles el alcance siempre viene del JWT, sin importar lo que
-    mande el query param.
+    el resto de roles el alcance siempre viene del JWT (C1: 403 si piden
+    otra sucursal).
     """
-    scope = sucursal_scope(current_user)
-    if current_user.role == ROL_SISTEMA:
-        filtro = sucursal_id
-    else:
-        filtro = UUID(scope) if scope is not None else None
-    return await producto_service.listar_todos(conn, filtro)
+    return await producto_service.listar_todos(conn, resolver_sucursal(current_user, sucursal_id))
 
 
 @router.get("/{producto_id}/combo-hijos")
 async def obtener_combo_hijos(
     producto_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(get_current_user),
 ) -> Any:
     """Retorna los hijos de un combo para su expansión en el carrito."""
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     return await producto_service.obtener_hijos_combo(conn, producto_id)
 
 
@@ -81,8 +76,9 @@ async def obtener_combo_hijos(
 async def obtener_producto(
     producto_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> ProductoOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     return await producto_service.obtener(conn, producto_id)
 
 
@@ -97,6 +93,13 @@ async def crear_producto(
         body = ProductoCrear.model_validate_json(payload)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
+
+    # C1: el producto se crea en la sucursal de la sesión (403 si el payload
+    # trae otra) y los productos de un combo deben ser de esa sucursal (404).
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
+    await alcance_service.asegurar_recursos(
+        conn, current_user, "producto", [c.producto_id for c in body.productos_combo or []]
+    )
 
     usuario_id = UUID(current_user.sub) if current_user.sub else None
     return await producto_service.crear(conn, body, usuario_id=usuario_id, imagen=imagen)
@@ -115,6 +118,11 @@ async def actualizar_producto(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
+    await alcance_service.asegurar_recursos(
+        conn, current_user, "producto", [c.producto_id for c in body.productos_combo or []]
+    )
+
     usuario_id = UUID(current_user.sub) if current_user.sub else None
     return await producto_service.actualizar(
         conn, producto_id, body, usuario_id=usuario_id, imagen=imagen, current_user=current_user
@@ -127,5 +135,6 @@ async def eliminar_producto(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:eliminar_producto")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     usuario_id = UUID(current_user.sub) if current_user.sub else None
     await producto_service.eliminar(conn, producto_id, usuario_id=usuario_id)
