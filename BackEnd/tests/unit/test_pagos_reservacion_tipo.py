@@ -7,8 +7,14 @@ from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from app.repositories import pagos_reservacion_repository, reservaciones_repository
+from app.repositories import (
+    metodos_pago_repository,
+    pagos_reservacion_repository,
+    reservaciones_repository,
+)
+from app.schemas.pagos_reservacion import PagosReservacionCreate
 from app.services import pagos_reservacion
+from fastapi import HTTPException
 
 RESERVACION_ID = uuid4()
 
@@ -95,3 +101,40 @@ async def test_sin_reservacion_respeta_lo_solicitado(monkeypatch):
     )
 
     assert tipo == "anticipo"
+
+
+@pytest.mark.asyncio
+async def test_crear_rechaza_metodo_de_pago_inexistente(monkeypatch):
+    """Antes llegaba al INSERT y la llave foránea respondía 500."""
+
+    monkeypatch.setattr(
+        reservaciones_repository, "obtener", AsyncMock(return_value=_reservacion("1000.00"))
+    )
+    monkeypatch.setattr(metodos_pago_repository, "existe", AsyncMock(return_value=False))
+    insertar = AsyncMock()
+    monkeypatch.setattr(pagos_reservacion_repository, "crear", insertar)
+
+    body = PagosReservacionCreate(
+        reservacion_id=RESERVACION_ID, metodo_pago_id=uuid4(), monto=Decimal("100.00")
+    )
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.crear(AsyncMock(), body, uuid4(), str(uuid4()))
+
+    assert exc.value.status_code == 422
+    insertar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_crear_rechaza_reservacion_inexistente(monkeypatch):
+    monkeypatch.setattr(reservaciones_repository, "obtener", AsyncMock(return_value=None))
+    insertar = AsyncMock()
+    monkeypatch.setattr(pagos_reservacion_repository, "crear", insertar)
+
+    body = PagosReservacionCreate(
+        reservacion_id=RESERVACION_ID, metodo_pago_id=uuid4(), monto=Decimal("100.00")
+    )
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.crear(AsyncMock(), body, uuid4(), str(uuid4()))
+
+    assert exc.value.status_code == 404
+    insertar.assert_not_awaited()
