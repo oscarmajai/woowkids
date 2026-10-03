@@ -12,6 +12,7 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { saludoPorHora } from '@/utils/saludo'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
@@ -53,7 +54,7 @@ const relojTimer = setInterval(() => {
 const saludo = computed(() => {
   const h = ahora.value.getHours()
   const nombre = (auth.currentUser?.name ?? '').split(' ')[0]
-  const parte = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'
+  const parte = saludoPorHora(h)
   return nombre ? `${parte}, ${nombre}` : parte
 })
 const subtitulo = computed(() => {
