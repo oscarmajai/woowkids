@@ -9,7 +9,7 @@
     primary-label="Autorizar"
     :loading="turno.credencialesAdmin.cargando"
     :primary-disabled="!turno.credencialesAdmin.email || !turno.credencialesAdmin.password"
-    @cancel="turno.cancelarConteo()"
+    @cancel="turno.mostrarDialogAdmin = false"
     @confirm="intentarAutenticar"
   >
     <div class="admin-form">
