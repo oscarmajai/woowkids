@@ -26,4 +26,4 @@ async def agregar(
 async def eliminar(conn: asyncpg.Connection, paquete_id: UUID, tipo_evento_id: UUID) -> None:
     eliminado = await paquete_tipos_evento_repository.eliminar(conn, paquete_id, tipo_evento_id)
     if not eliminado:
-        raise NoEncontrado("Relación paquete-tipo de evento")
+        raise NoEncontrado("Relación paquete-tipo de evento", genero="f")

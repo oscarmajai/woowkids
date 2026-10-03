@@ -38,7 +38,7 @@ async def listar_por_reservacion(
 ) -> list[PagosReservacionOut]:
     reservacion = await reservaciones_repository.obtener(conn, reservacion_id)
     if not reservacion:
-        raise NoEncontrado("Reservación")
+        raise NoEncontrado("Reservación", genero="f")
 
     scope = sucursal_scope(current_user)
     if scope is not None and str(reservacion["sucursal_id"]) != scope:
@@ -100,7 +100,7 @@ async def crear(
             conn, body.reservacion_id
         )
         if bloqueada is None:
-            raise NoEncontrado("Reservación")
+            raise NoEncontrado("Reservación", genero="f")
         await _validar_metodo_pago(conn, body.metodo_pago_id)
         tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
         row = await pagos_reservacion_repository.crear(

@@ -12,6 +12,7 @@ restringe. La regla de listados y altas está en ``app/core/scope.py``.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -43,6 +44,11 @@ NOMBRE_RECURSO: dict[str, str] = {
     "detalle_registro": "Registro",
 }
 
+# Recursos de género femenino: "Reservación no encontrada" (N15).
+RECURSOS_FEMENINOS: frozenset[str] = frozenset(
+    {"presentacion_insumo", "compra", "pulsera", "caja", "reservacion", "comanda"}
+)
+
 
 def _a_uuid(recurso_id: UUID | str) -> UUID | None:
     if isinstance(recurso_id, UUID):
@@ -63,11 +69,12 @@ async def asegurar_recurso(
     if es_sistema(current_user):
         return
     nombre = NOMBRE_RECURSO[tipo]
+    genero: Literal["m", "f"] = "f" if tipo in RECURSOS_FEMENINOS else "m"
     rid = _a_uuid(recurso_id)
     if rid is None:
-        raise NoEncontrado(nombre)
+        raise NoEncontrado(nombre, genero)
     sucursal = await alcance_repository.sucursal_de(conn, tipo, rid)
-    asegurar_misma_sucursal(current_user, sucursal, nombre)
+    asegurar_misma_sucursal(current_user, sucursal, nombre, genero)
 
 
 async def asegurar_recursos(

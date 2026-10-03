@@ -44,17 +44,17 @@ async def actualizar(
 ) -> PresentacionOut:
     actual = await presentacion_insumo_repository.obtener(conn, presentacion_id)
     if not actual:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     updates = body.model_dump(exclude_unset=True)
     updates["modificado_por"] = UUID(current_user.sub)
     row = await presentacion_insumo_repository.actualizar(conn, presentacion_id, updates)
     if not row:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     return PresentacionOut.model_validate(row)
 
 
 async def eliminar(conn: asyncpg.Connection, presentacion_id: UUID) -> None:
     actual = await presentacion_insumo_repository.obtener(conn, presentacion_id)
     if not actual:
-        raise NoEncontrado("Presentación")
+        raise NoEncontrado("Presentación", genero="f")
     await presentacion_insumo_repository.eliminar(conn, presentacion_id)

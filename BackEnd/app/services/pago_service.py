@@ -318,7 +318,7 @@ async def _a_hora_local(conn: asyncpg.Connection, sucursal_id: UUID, momento: da
         return momento
     local = await sucursales.a_hora_local(conn, sucursal_id, momento)
     if local is None:
-        raise NoEncontrado("Sucursal")
+        raise NoEncontrado("Sucursal", genero="f")
     return local
 
 
@@ -336,7 +336,7 @@ async def _periodo(
     siguiente."""
     ahora = await sucursales.ahora_en_sucursal(conn, sucursal_id)
     if ahora is None:
-        raise NoEncontrado("Sucursal")
+        raise NoEncontrado("Sucursal", genero="f")
     desde = _calcular_desde(filtro, ahora)
     hasta = None
     if fecha_inicio:

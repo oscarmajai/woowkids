@@ -27,7 +27,7 @@ async def buscar_por_rfid(
 ) -> PulseraEstadoOut:
     row = await pulseras_repository.buscar_por_rfid(conn, sucursal_id, pulsera_rfid.strip())
     if not row:
-        raise NoEncontrado("Pulsera")
+        raise NoEncontrado("Pulsera", genero="f")
     estado: Literal["disponible", "usada", "inactiva"]
     if row["usada"]:
         estado = "usada"
@@ -57,7 +57,7 @@ async def listar_todas(conn: asyncpg.Connection, sucursal_id: UUID) -> list[Puls
 async def obtener(conn: asyncpg.Connection, pulsera_id: UUID) -> PulseraOut:
     row = await pulseras_repository.obtener(conn, pulsera_id)
     if not row:
-        raise NoEncontrado("Pulsera")
+        raise NoEncontrado("Pulsera", genero="f")
     return PulseraOut.model_validate(row)
 
 
@@ -87,7 +87,7 @@ async def actualizar(conn: asyncpg.Connection, pulsera_id: UUID, body: PulseraUp
             "El RFID excede la longitud máxima permitida (10 caracteres)."
         ) from exc
     if not row:
-        raise NoEncontrado("Pulsera")
+        raise NoEncontrado("Pulsera", genero="f")
     return PulseraOut.model_validate(row)
 
 
