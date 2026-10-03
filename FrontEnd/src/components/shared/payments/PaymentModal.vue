@@ -113,9 +113,9 @@
         <q-btn
           unelevated
           color="primary"
-          label="Confirmar pago"
+          :label="esAbonoParcial ? 'Registrar abono' : 'Confirmar pago'"
           class="pay__confirm"
-          :disable="saldoPendiente > TOLERANCIA_MONTO"
+          :disable="!puedeConfirmar"
           @click="finalizarPago"
         />
       </footer>
@@ -241,9 +241,20 @@ const props = withDefaults(
        * Por defecto true.
        */
       permitirLealtad?: boolean
+      /**
+       * Si es true se puede confirmar un abono menor al total (monto > 0); lo
+       * no cubierto queda como saldo. Para abonos a reservaciones (A7). Por
+       * defecto false: el cobro debe cubrir el total.
+       */
+      permitirPagoParcial?: boolean
     }
   >(),
-  { permitirLealtad: true, titulo: undefined, subtitulo: undefined },
+  {
+    permitirLealtad: true,
+    permitirPagoParcial: false,
+    titulo: undefined,
+    subtitulo: undefined,
+  },
 )
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
@@ -467,6 +478,18 @@ const cambioADevolver = computed(() => {
   return excedente > TOLERANCIA_MONTO ? excedente : 0
 })
 
+// Cobro total por defecto; con `permitirPagoParcial` basta con aplicar algo
+// (los métodos sin cambio ya no pueden rebasar lo que falta).
+const esAbonoParcial = computed(
+  () =>
+    props.permitirPagoParcial && totalPagado.value > TOLERANCIA_MONTO && saldoPendiente.value > 0,
+)
+const puedeConfirmar = computed(() =>
+  props.permitirPagoParcial
+    ? totalPagado.value > TOLERANCIA_MONTO
+    : saldoPendiente.value <= TOLERANCIA_MONTO,
+)
+
 const iniciarAbono = (monto: number) => {
   monto = redondear2(monto)
   if (monto <= TOLERANCIA_MONTO || !metodoSeleccionado.value) return
@@ -489,7 +512,10 @@ const iniciarAbono = (monto: number) => {
   if (esTarjeta(metodoSeleccionado.value)) {
     tarjetaMontoTemporal.value = monto
     mostrarModalTarjeta.value = true
-  } else if (!esEfectivo(metodoSeleccionado.value) && requiereReferencia(metodoSeleccionado.value)) {
+  } else if (
+    !esEfectivo(metodoSeleccionado.value) &&
+    requiereReferencia(metodoSeleccionado.value)
+  ) {
     referenciaMontoTemporal.value = monto
     mostrarModalReferencia.value = true
   } else {
