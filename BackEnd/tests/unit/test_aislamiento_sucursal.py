@@ -163,6 +163,34 @@ _DETALLE_COMPRA = [
 ]
 
 
+def _producto(sucursal_id: str) -> dict[str, Any]:
+    return {"sucursal_id": sucursal_id, "nombre": "Pizza", "precio_unitario": 95, "tipo": "A"}
+
+
+def _onboarding(sucursal_id: str) -> dict[str, Any]:
+    return {
+        "sucursalId": sucursal_id,
+        "tutor": {"nombreCompleto": "Tutor", "telefono": "3312345678"},
+        "parentesco": "Madre",
+        "detalles": [],
+    }
+
+
+_FOTOS = [
+    ("fotoIne", ("ine.jpg", b"x", "image/jpeg")),
+    ("fotosLlegada", ("llegada.jpg", b"x", "image/jpeg")),
+]
+
+
+def _pago_comanda(sucursal_id: str) -> dict[str, Any]:
+    return {
+        "pagos": [{"metodo_pago_id": RID2, "monto": 10}],
+        "total_esperado": 10,
+        "comanda_id": RID,
+        "sucursal_id": sucursal_id,
+    }
+
+
 def _reservacion(sucursal_id: str) -> dict[str, Any]:
     return {
         "sucursal_id": sucursal_id,
@@ -237,6 +265,36 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ),
     ("PATCH", f"/api/horarios/{RID}", {"json": {"nombre": "x"}}),
     ("DELETE", f"/api/horarios/{RID}", {}),
+    # Productos, estancias, pagos, lealtad y sucursales
+    ("GET", f"/api/productos/admin?sucursal_id={A}", {}),
+    ("POST", "/api/productos", {"form": _producto(A)}),
+    ("GET", f"/api/estancias/activos/{A}", {}),
+    ("GET", f"/api/estancias/productos/{A}", {}),
+    ("POST", "/api/estancias", {"form": _onboarding(A), "files": _FOTOS}),
+    (
+        "POST",
+        f"/api/estancias/{RID}/pagos?sucursal_id={A}",
+        {"json": {"pagos": [{"metodoPagoId": RID2, "monto": 10}]}},
+    ),
+    ("POST", "/api/pagos", {"json": _pago_comanda(A)}),
+    ("GET", f"/api/lealtad/configuracion?sucursal_id={A}", {}),
+    (
+        "PUT",
+        f"/api/lealtad/configuracion?sucursal_id={A}",
+        {"json": {"dias_caducidad": 30}},
+    ),
+    ("GET", f"/api/lealtad/saldo?celular=3312345678&sucursal_id={A}", {}),
+    ("GET", f"/api/lealtad/movimientos?celular=3312345678&sucursal_id={A}", {}),
+    ("GET", f"/api/lealtad/reporte?sucursal_id={A}", {}),
+    ("GET", f"/api/lealtad/reporte/export?sucursal_id={A}", {}),
+    ("GET", f"/api/lealtad/clientes?q=ana&sucursal_id={A}", {}),
+    (
+        "POST",
+        f"/api/lealtad/ajustes?sucursal_id={A}",
+        {"json": {"celular": "3312345678", "puntos": 10, "motivo": "x"}},
+    ),
+    ("GET", f"/api/sucursales/{A}", {}),
+    ("GET", f"/api/sucursales/{A}/indicadores?desde=2026-10-01&hasta=2026-10-03", {}),
 ]
 
 CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
@@ -348,6 +406,39 @@ CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
     ("DELETE", f"/api/tipos-evento/{RID}", {}),
     # Cajas
     ("GET", f"/api/turnos-caja/{RID}/retiros", {}),
+    # Productos y receta
+    ("GET", f"/api/productos/{RID}", {}),
+    ("GET", f"/api/productos/{RID}/combo-hijos", {}),
+    ("PATCH", f"/api/productos/{RID}", {"form": {"nombre": "x"}}),
+    ("DELETE", f"/api/productos/{RID}", {}),
+    (
+        "POST",
+        "/api/productos",
+        {"form": {**_producto(B), "productos_combo": [{"producto_id": RID2, "cantidad": 1}]}},
+    ),
+    ("GET", f"/api/productos/{RID}/receta", {}),
+    ("PUT", f"/api/productos/{RID}/receta/{RID2}", {"json": {"cantidad": 1}}),
+    ("DELETE", f"/api/productos/{RID}/receta/{RID2}", {}),
+    # Estancias
+    ("GET", f"/api/estancias/{RID}/checkout/cotizacion", {}),
+    ("POST", f"/api/estancias/{RID}/checkout", {"json": {"pagos": []}}),
+    (
+        "POST",
+        f"/api/estancias/{RID}/pagos?sucursal_id={B}",
+        {"json": {"pagos": [{"metodoPagoId": RID2, "monto": 10}]}},
+    ),
+    (
+        "POST",
+        "/api/estancias",
+        {"form": {**_onboarding(B), "reservacionId": RID}, "files": _FOTOS},
+    ),
+    # Comandas y pagos
+    ("PATCH", f"/api/comandas/{RID}/estado", {"json": {"estado_actual": "E"}}),
+    ("PATCH", f"/api/comandas/{RID}/detalles", {"json": {"detalles_ids_a_eliminar": [RID2]}}),
+    ("POST", "/api/pagos", {"json": _pago_comanda(B)}),
+    ("GET", f"/api/pagos/detalles/comanda/{RID}", {}),
+    ("GET", f"/api/pagos/detalles/estancia/{RID}", {}),
+    ("GET", f"/api/pagos/detalles/reservacion/{RID}", {}),
 ]
 
 
