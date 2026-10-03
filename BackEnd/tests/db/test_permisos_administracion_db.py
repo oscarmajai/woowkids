@@ -447,3 +447,33 @@ async def test_activacion_de_metodo_de_pago_por_sucursal(entorno: Any) -> None:
     resp = await client.patch(url, json={"activo": True}, headers=_h("admin_a"))
     assert resp.status_code == 200, resp.text
     assert await _activo_en(conn, metodo, SUC_A) is True
+
+
+# ── B3: tiene_pin en login y refresh ────────────────────────────────────────
+
+
+async def test_login_y_refresh_informan_si_el_usuario_tiene_pin(entorno: Any) -> None:
+    from app.core.security import hash_password
+
+    client, conn = entorno
+    uid, email, _rol, _suc = USUARIOS["cajero_a"]
+    await conn.execute(
+        "UPDATE public.usuarios SET pin_hash = $1 WHERE id = $2", hash_password("4321"), UUID(uid)
+    )
+
+    login = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
+    assert login.status_code == 200, login.text
+    assert login.json()["user"]["tiene_pin"] is True
+
+    refresh = await client.post(
+        "/api/auth/refresh", json={"refreshToken": login.json()["refresh_token"]}
+    )
+    assert refresh.status_code == 200, refresh.text
+    assert refresh.json()["user"]["tiene_pin"] is True
+
+    _uid, email_sin_pin, _r, _s = USUARIOS["atencion_a"]
+    sin_pin = await client.post(
+        "/api/auth/login", json={"email": email_sin_pin, "password": PASSWORD}
+    )
+    assert sin_pin.status_code == 200, sin_pin.text
+    assert sin_pin.json()["user"]["tiene_pin"] is False
