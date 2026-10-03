@@ -19,7 +19,7 @@ from app.repositories import comanda_repository, producto_repository
 from app.repositories.caja_repository import registrar_movimiento_caja
 from app.schemas.auth import TokenData
 from app.schemas.comanda import ComandaCreate
-from app.services import inventario_service, lealtad_service
+from app.services import inventario_service, lealtad_service, precios_venta
 
 
 def _producto_id_de_detalle(item: Any) -> str:
@@ -164,6 +164,25 @@ async def crear_comanda(
         comanda.sucursal_id, {"type": "comanda_creada", "comanda": asdict(comanda)}
     )
     return comanda
+
+
+async def crear_comanda_pos(
+    conn: asyncpg.Connection,
+    comanda_in: ComandaCreate,
+    current_user: TokenData,
+    apertura_caja_id: str,
+) -> Comanda:
+    """POST /comandas: como crear_comanda, pero con los precios y el total
+    recalculados con el catálogo de la sucursal (C2); 409 si el cliente
+    mandó otros. Las comandas automáticas de eventos no pasan por aquí: usan
+    el precio del paquete, no el del catálogo."""
+    sucursal_id = UUID(str(comanda_in.sucursal_id))
+    venta = await precios_venta.calcular_venta(conn, sucursal_id, comanda_in.detalles_comanda)
+    precios_venta.verificar_total(comanda_in.total_final, venta.subtotal)
+    comanda_in = comanda_in.model_copy(
+        update={"detalles_comanda": venta.detalles, "total_final": venta.subtotal}
+    )
+    return await crear_comanda(conn, comanda_in, current_user, apertura_caja_id)
 
 
 async def listar_pendientes(conn: asyncpg.Connection, current_user: TokenData) -> list[Comanda]:

@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 
 import asyncpg
 
-from app.exceptions import DatosInvalidos, IdempotenciaConflictoError
+from app.exceptions import (
+    Conflicto,
+    DatosInvalidos,
+    IdempotenciaConflictoError,
+)
 from app.models.comanda import Comanda
 from app.repositories import (
     comanda_repository,
@@ -25,7 +29,7 @@ from app.schemas.pagos import (
     PaymentOut,
     PaymentRequest,
 )
-from app.services import inventario_service, lealtad_service
+from app.services import inventario_service, lealtad_service, precios_venta
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -100,25 +104,48 @@ async def completar_pago(
                 )
                 return comanda_original
 
+    # C2: el precio, el importe y el total salen del catálogo de la sucursal de
+    # la sesión, no del request. Si el cliente mandó otra cosa, 409 sin cobrar.
+    venta = await precios_venta.calcular_venta(conn, sucursal_id, body.detalles_comanda)
+    descuento_esperado = Decimal("0")
+    if body.puntos_a_redimir > 0:
+        descuento_esperado = await lealtad_service.calcular_descuento(
+            conn, sucursal_id, body.puntos_a_redimir
+        )
+    total_final = precios_venta.a_centavos(venta.subtotal - descuento_esperado)
+    if total_final <= 0:
+        raise DatosInvalidos(
+            f"El descuento por puntos ({precios_venta.formatear_pesos(descuento_esperado)}) "
+            f"no puede cubrir todo el pedido ({precios_venta.formatear_pesos(venta.subtotal)})."
+        )
+    precios_venta.verificar_total(body.total_final, total_final)
+
     total_pagos: Decimal = sum((p.monto for p in body.pagos), Decimal(0))
-    if total_pagos < body.total_final:
+    if total_pagos < total_final:
         raise DatosInvalidos(
             f"El total de los pagos ({total_pagos}) es menor "
-            f"al total de la comanda ({body.total_final})."
+            f"al total de la comanda ({total_final})."
         )
 
     ids_efectivo = await metodos_pago_repository.obtener_ids_por_tipo(conn, "E")
     cambio = body.cambio.quantize(Decimal("0.01"))
-    if cambio > total_pagos - body.total_final:
+    if cambio > total_pagos - total_final:
         raise DatosInvalidos(
             f"El cambio declarado ({cambio}) es mayor al excedente pagado "
-            f"({total_pagos - body.total_final})."
+            f"({total_pagos - total_final})."
         )
     validar_cambio(
         [(p.metodo_pago_id, p.monto) for p in body.pagos],
         cambio,
         ids_efectivo,
     )
+    # Lo que entra a caja menos el cambio tiene que ser exactamente el total:
+    # un excedente sin cambio declarado descuadra el arqueo.
+    if total_pagos - cambio != total_final:
+        raise DatosInvalidos(
+            f"Los pagos ({total_pagos}) menos el cambio ({cambio}) deben sumar "
+            f"exactamente el total de la comanda ({total_final})."
+        )
 
     async with conn.transaction():
         # Folio de ticket secuencial por sucursal (QA #21): el backend asigna
@@ -134,9 +161,9 @@ async def completar_pago(
 
         comanda_in = ComandaCreate(
             ticket_numero=ticket_numero,
-            total_final=body.total_final,
+            total_final=total_final,
             estado_actual=EstadoComanda.PENDIENTE,
-            detalles_comanda=body.detalles_comanda,
+            detalles_comanda=venta.detalles,
             notas_generales=body.notas_generales,
             sucursal_id=sucursal_id,
             nombre_cliente=body.nombre_cliente,
@@ -152,7 +179,7 @@ async def completar_pago(
         await inventario_service.descontar_por_venta(
             conn,
             str(sucursal_id),
-            body.detalles_comanda,
+            venta.detalles,
             comanda.id,
             usuario_id,
         )
@@ -200,19 +227,18 @@ async def completar_pago(
                 UUID(comanda.id),
                 usuario_id,
             )
-            subtotal_bruto: Decimal = sum((d.subtotal for d in body.detalles_comanda), Decimal(0))
-            esperado = subtotal_bruto - descuento
-            if body.total_final != esperado:
-                raise DatosInvalidos(
-                    f"El total final ({body.total_final}) no coincide con el subtotal "
-                    f"menos el descuento por puntos canjeados ({esperado})."
+            # La configuración pudo cambiar entre la validación y el canje.
+            if descuento != descuento_esperado:
+                raise Conflicto(
+                    "El valor del punto de lealtad cambió mientras se cobraba. "
+                    "Vuelve a cobrar el pedido."
                 )
         if body.celular_cliente:
             await lealtad_service.otorgar_puntos(
                 conn,
                 sucursal_id,
                 body.celular_cliente,
-                body.total_final,
+                total_final,
                 usuario_id,
                 comanda_id=UUID(comanda.id),
             )
