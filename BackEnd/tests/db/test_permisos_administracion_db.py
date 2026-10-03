@@ -1,6 +1,7 @@
 """Q5 — permisos, alcance por sucursal y administración, contra PostgreSQL real.
 
 - M19: horarios por sucursal (globales = sucursal_id NULL).
+- M20: desactivar por PATCH exige el mismo permiso que DELETE.
 
 Cada test corre en una transacción que se revierte al final (mismo patrón
 que ``test_aislamiento_sucursal_db.py``).
@@ -8,6 +9,7 @@ que ``test_aislamiento_sucursal_db.py``).
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -60,10 +62,14 @@ IDS = {
     "horario_b": _u(103),
     "caja_a": _u(104),
     "caja_b": _u(105),
+    "producto_a": _u(106),
+    "insumo_a": _u(107),
+    "proveedor_a": _u(108),
 }
 
 
 async def sembrar(conn: asyncpg.Connection) -> None:
+    unidad = await conn.fetchval("SELECT id FROM public.unidades_medida ORDER BY codigo LIMIT 1")
     await conn.execute(
         f"""
         INSERT INTO public.sucursales (id, nombre, clave) VALUES
@@ -81,6 +87,12 @@ async def sembrar(conn: asyncpg.Connection) -> None:
         INSERT INTO public.cajas (id, sucursal_id, codigo, nombre, numero) VALUES
           ('{IDS["caja_a"]}', '{SUC_A}', 'Q5-A', 'Q5 Caja A', 51),
           ('{IDS["caja_b"]}', '{SUC_B}', 'Q5-B', 'Q5 Caja B', 52);
+        INSERT INTO public.productos (id, sucursal_id, nombre, precio_unitario, tipo)
+          VALUES ('{IDS["producto_a"]}', '{SUC_A}', 'Q5 Pizza A', 95, 'A');
+        INSERT INTO public.insumos (id, sucursal_id, nombre, unidad_base_id, unidad_compra_id)
+          VALUES ('{IDS["insumo_a"]}', '{SUC_A}', 'Q5 Leche A', '{unidad}', '{unidad}');
+        INSERT INTO public.proveedores (id, sucursal_id, nombre)
+          VALUES ('{IDS["proveedor_a"]}', '{SUC_A}', 'Q5 Proveedor A');
         """
     )
     for uid, email, rol, suc in USUARIOS.values():
@@ -286,3 +298,61 @@ async def test_no_se_abre_caja_con_un_horario_de_otra_sucursal(entorno: Any) -> 
     assert await conn.fetchval(
         "SELECT count(*) FROM public.apertura_caja WHERE caja_id = $1", UUID(IDS["caja_a"])
     )
+
+
+# ── M20: desactivar por PATCH = eliminar ───────────────────────────────────
+
+_TABLAS = {"productos", "insumos", "proveedores"}
+
+
+async def _activo(conn: asyncpg.Connection, tabla: str, rid: str) -> bool:
+    assert tabla in _TABLAS
+    sql = f"SELECT activo FROM public.{tabla} WHERE id = $1"
+    return bool(await conn.fetchval(sql, UUID(rid)))
+
+
+async def test_admin_sin_permiso_de_eliminar_no_desactiva_productos_por_patch(
+    entorno: Any,
+) -> None:
+    """El rol Administrador tiene gestionar_productos pero no eliminar_producto:
+    DELETE daba 403 y PATCH activo=false lo desactivaba igual."""
+    client, conn = entorno
+    url = f"/api/productos/{IDS['producto_a']}"
+    borrar = await client.delete(url, headers=_h("admin_a"))
+    assert borrar.status_code == 403, borrar.text
+    desactivar = await client.patch(
+        url, data={"payload": json.dumps({"activo": False})}, headers=_h("admin_a")
+    )
+    assert desactivar.status_code == 403, desactivar.text
+    assert await _activo(conn, "productos", IDS["producto_a"])
+    # Editar sigue permitido con gestionar_productos.
+    editar = await client.patch(
+        url, data={"payload": json.dumps({"nombre": "Q5 Pizza grande"})}, headers=_h("admin_a")
+    )
+    assert editar.status_code == 200, editar.text
+
+
+async def test_sin_permiso_de_eliminar_no_se_desactivan_insumos_ni_proveedores(
+    entorno: Any,
+) -> None:
+    """Rol con gestionar_insumos/gestionar_proveedores y sin eliminar_*."""
+    client, conn = entorno
+    for tabla, rid in (("insumos", IDS["insumo_a"]), ("proveedores", IDS["proveedor_a"])):
+        url = f"/api/{tabla}/{rid}"
+        assert (await client.delete(url, headers=_h("inventario_a"))).status_code == 403
+        resp = await client.patch(url, json={"activo": False}, headers=_h("inventario_a"))
+        assert resp.status_code == 403, (tabla, resp.text)
+        assert await _activo(conn, tabla, rid), tabla
+        resp = await client.patch(url, json={"nombre": f"Q5 {tabla}"}, headers=_h("inventario_a"))
+        assert resp.status_code == 200, (tabla, resp.text)
+
+
+async def test_con_permiso_de_eliminar_si_se_desactiva_por_patch(entorno: Any) -> None:
+    client, conn = entorno
+    url = f"/api/insumos/{IDS['insumo_a']}"
+    resp = await client.patch(url, json={"activo": False}, headers=_h("admin_a"))
+    assert resp.status_code == 200, resp.text
+    assert not await _activo(conn, "insumos", IDS["insumo_a"])
+    # Reactivar no es eliminar: basta con gestionar.
+    resp = await client.patch(url, json={"activo": True}, headers=_h("inventario_a"))
+    assert resp.status_code == 200, resp.text

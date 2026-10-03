@@ -13,7 +13,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import exigir_permiso, get_current_user, require_permission
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
@@ -118,6 +118,10 @@ async def actualizar_producto(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
+    # M20: desactivar (activo=false) equivale a eliminar: exige el mismo
+    # permiso que DELETE. Antes bastaba con el de gestionar.
+    if body.activo is False:
+        exigir_permiso(current_user, "inventario:eliminar_producto")
     await alcance_service.asegurar_recurso(conn, current_user, "producto", producto_id)
     await alcance_service.asegurar_recursos(
         conn, current_user, "producto", [c.producto_id for c in body.productos_combo or []]
