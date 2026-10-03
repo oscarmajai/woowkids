@@ -87,6 +87,7 @@ def entorno(monkeypatch: pytest.MonkeyPatch, limite: LimiteEnMemoria) -> dict[st
         "get_caja_por_id": AsyncMock(return_value={"id": CAJA_ID}),
         "get_apertura_activa_por_usuario": AsyncMock(return_value=None),
         "get_apertura_activa_por_caja": AsyncMock(return_value=None),
+        "turno_disponible_en_sucursal": AsyncMock(return_value=True),
         "crear_apertura_caja": AsyncMock(
             return_value={
                 "id": uuid4(),
@@ -327,3 +328,21 @@ async def test_abrir_turno_caja_ocupada_por_otro_cajero_responde_409(
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["code"] == "CAJA_OCUPADA"
+
+
+async def test_abrir_turno_con_horario_de_otra_sucursal_da_422(
+    entorno: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M19: el horario debe ser global o de la sucursal; antes se aceptaba el
+    de cualquier sucursal (y uno inexistente daba 500 por la FK)."""
+    disponible = AsyncMock(return_value=False)
+    monkeypatch.setattr(f"{SVC}.turno_disponible_en_sucursal", disponible)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _abrir(_payload())
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["code"] == "TURNO_INVALIDO"
+    assert disponible.await_args is not None
+    assert disponible.await_args.args[1:] == (TURNO_ID, SUCURSAL_ID)
+    entorno["crear_apertura_caja"].assert_not_called()

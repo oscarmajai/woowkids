@@ -110,7 +110,7 @@
               @click="abrirEditar(props.row)"
             />
             <q-btn
-              v-if="props.row.activo"
+              v-if="props.row.activo && puedeEliminar"
               flat
               round
               dense
@@ -120,7 +120,7 @@
               @click="confirmarEliminar(props.row)"
             />
             <q-btn
-              v-else
+              v-else-if="!props.row.activo"
               flat
               round
               dense
@@ -620,6 +620,9 @@ interface TramoEstancia {
 
 const $q = useQuasar()
 const authStore = useAuthStore()
+// M20: desactivar un producto (botón Eliminar) exige el mismo permiso en DELETE
+// y en PATCH activo=false; sin él el botón siempre respondía 403.
+const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_producto'))
 const store = useProductosStore()
 const insumosStore = useInsumosStore()
 const recetaStore = useRecetaProductoStore()

@@ -48,6 +48,10 @@ class AdministradorInvalidoError(Exception):
     pass
 
 
+class RangoFechasInvalidoError(Exception):
+    """B1: `desde` posterior a `hasta` (antes respondía 200 con ceros)."""
+
+
 class TelefonoInvalidoError(Exception):
     pass
 
@@ -239,6 +243,8 @@ async def _sucursal_e_indicadores(
     current_user: TokenData,
 ) -> tuple[SucursalRecord, IndicadoresSucursalResponse]:
     _asegurar_sucursal_propia(current_user, branch_id)
+    if desde > hasta:
+        raise RangoFechasInvalidoError
     record = await get_sucursal_by_id(conn, branch_id)
     if record is None:
         raise BranchNotFoundError

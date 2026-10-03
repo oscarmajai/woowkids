@@ -13,6 +13,12 @@
       </template>
     </PageHeader>
 
+    <div v-if="vistaTodas && auth.hasPermission('cajas:crear')" class="list-page__note">
+      <q-icon name="info" size="19px" />
+      Estás viendo las cajas de todas las sucursales. Para crear una caja, elige la sucursal en el
+      selector.
+    </div>
+
     <DataTableCard
       v-model:search="busqueda"
       v-model:filter="filtroEstado"
@@ -43,6 +49,9 @@
           <q-td :props="props">
             <span class="code-chip">#{{ numeroCaja(props.row.numero) }}</span>
           </q-td>
+        </template>
+        <template #body-cell-sucursal="props">
+          <q-td :props="props" class="cell-muted">{{ props.row.sucursalNombre || '—' }}</q-td>
         </template>
         <template #body-cell-impresora="props">
           <q-td :props="props" class="cell-muted">{{ props.row.impresora || '—' }}</q-td>
@@ -261,7 +270,10 @@ import type { FilterChip } from '@/types/ui'
 const $q = useQuasar()
 const auth = useAuthStore()
 
-const puedeCrear = computed(() => auth.hasPermission('cajas:crear'))
+// N14: el AdministradorSistema sin sucursal elegida ve y edita las cajas de
+// todas las sucursales; para crear una necesita elegir la sucursal.
+const vistaTodas = computed(() => auth.isSistema && !auth.currentBranchId)
+const puedeCrear = computed(() => auth.hasPermission('cajas:crear') && !vistaTodas.value)
 const puedeEditar = computed(() => auth.hasPermission('cajas:editar'))
 const puedeEliminar = computed(() => auth.hasPermission('cajas:eliminar'))
 
@@ -294,14 +306,25 @@ const filasFiltradas = computed(() => {
   return result
 })
 
-const columns: QTableColumn[] = [
+const columns = computed<QTableColumn[]>(() => [
   { name: 'nombre', label: 'Nombre', field: 'nombre', align: 'left', sortable: true },
+  ...(vistaTodas.value
+    ? [
+        {
+          name: 'sucursal',
+          label: 'Sucursal',
+          field: 'sucursalNombre',
+          align: 'left',
+          sortable: true,
+        } as QTableColumn,
+      ]
+    : []),
   { name: 'numero', label: 'Número', field: 'numero', align: 'left', sortable: true },
   { name: 'impresora', label: 'Impresora', field: 'impresora', align: 'left' },
   { name: 'turnoActual', label: 'Turno actual', field: 'turnoActual', align: 'left' },
   { name: 'activo', label: 'Estado', field: 'activo', align: 'left' },
   { name: 'actions', label: '', field: 'id', align: 'right' },
-]
+])
 
 const cargar = async () => {
   cargando.value = true

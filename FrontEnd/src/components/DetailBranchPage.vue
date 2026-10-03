@@ -20,7 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
 import { perteneceASucursal } from '@/utils/usuarios'
 import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
-import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
+import { fechaEnZona, primerDiaDelMesEnZona, rangoFechasInvertido } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
 import type { Branch, IndicadoresSucursal } from '@/types/branch'
@@ -57,9 +57,17 @@ const indicadores = ref<IndicadoresSucursal | null>(null)
 const indicadoresCargando = ref(false)
 const indicadoresError = ref('')
 const exportando = ref(false)
+// B1: con el rango invertido el backend responde 422; no se pide ni se exporta.
+const rangoInvertido = computed(() => rangoFechasInvertido(periodoDesde.value, periodoHasta.value))
+const MENSAJE_RANGO_INVERTIDO = 'La fecha «Desde» no puede ser posterior a «Hasta».'
 
 async function cargarIndicadores() {
   if (!id.value) return
+  if (rangoInvertido.value) {
+    indicadores.value = null
+    indicadoresError.value = MENSAJE_RANGO_INVERTIDO
+    return
+  }
   indicadoresCargando.value = true
   indicadoresError.value = ''
   try {
@@ -76,7 +84,7 @@ async function cargarIndicadores() {
 }
 
 async function exportarIndicadores() {
-  if (!id.value) return
+  if (!id.value || rangoInvertido.value) return
   exportando.value = true
   try {
     await branchService.exportarIndicadores(
@@ -255,6 +263,7 @@ const horariosColumns: QTableColumn[] = [
   { name: 'nombre', label: 'Horario', field: 'nombre', align: 'left', sortable: true },
   { name: 'rango', label: 'Horario', field: 'horaInicio', align: 'left' },
   { name: 'dias', label: 'Días', field: 'dias', align: 'left' },
+  { name: 'alcance', label: 'Alcance', field: 'sucursalId', align: 'left' },
   { name: 'activo', label: 'Estado', field: 'activo', align: 'left' },
 ]
 </script>
@@ -351,6 +360,8 @@ const horariosColumns: QTableColumn[] = [
                   outlined
                   type="date"
                   label="Hasta"
+                  :error="rangoInvertido"
+                  hide-bottom-space
                   @update:model-value="cargarIndicadores"
                 />
                 <q-btn
@@ -358,6 +369,7 @@ const horariosColumns: QTableColumn[] = [
                   icon="download"
                   label="Exportar"
                   :loading="exportando"
+                  :disable="rangoInvertido"
                   @click="exportarIndicadores"
                 />
               </div>
@@ -523,6 +535,15 @@ const horariosColumns: QTableColumn[] = [
               </template>
               <template #body-cell-dias="props">
                 <q-td :props="props">{{ diasLabel(props.row.dias) }}</q-td>
+              </template>
+              <template #body-cell-alcance="props">
+                <q-td :props="props">
+                  <!-- M19: /horarios devuelve los de la sucursal y los globales -->
+                  <StatusBadge
+                    :tone="props.row.sucursalId ? 'info' : 'pink'"
+                    :label="props.row.sucursalId ? 'Esta sucursal' : 'Todas las sucursales'"
+                  />
+                </q-td>
               </template>
               <template #body-cell-activo="props">
                 <q-td :props="props">

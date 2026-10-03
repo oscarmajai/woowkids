@@ -257,14 +257,21 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/api/turnos-caja/historial/resumen?sucursal_id={A}", {}),
     ("GET", f"/api/turnos-caja/historial/export?sucursal_id={A}", {}),
     ("GET", f"/api/cajas?sucursal_id={A}", {}),
-    # Horarios: catálogo global, solo AdministradorSistema lo modifica.
+    # Horarios (M19): por sucursal; editar por id está en test_horarios_sucursal.py.
+    ("GET", f"/api/horarios?sucursal_id={A}", {}),
+    ("GET", f"/api/turnos-caja/turnos?sucursal_id={A}", {}),
     (
         "POST",
         "/api/horarios",
-        {"json": {"nombre": "Matutino", "hora_inicio": "08:00", "hora_fin": "14:00"}},
+        {
+            "json": {
+                "nombre": "Matutino",
+                "hora_inicio": "08:00",
+                "hora_fin": "14:00",
+                "sucursal_id": A,
+            }
+        },
     ),
-    ("PATCH", f"/api/horarios/{RID}", {"json": {"nombre": "x"}}),
-    ("DELETE", f"/api/horarios/{RID}", {}),
     # Productos, estancias, pagos, lealtad y sucursales
     ("GET", f"/api/productos/admin?sucursal_id={A}", {}),
     ("POST", "/api/productos", {"form": _producto(A)}),

@@ -13,7 +13,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import require_permission
+from app.api.deps import exigir_permiso, require_permission
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
@@ -160,6 +160,10 @@ async def actualizar_insumo(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_insumos")),
 ) -> InsumoOut:
+    # M20: desactivar (activo=false) equivale a eliminar: exige el mismo
+    # permiso que DELETE. Antes bastaba con el de gestionar.
+    if body.activo is False:
+        exigir_permiso(current_user, "inventario:eliminar_insumo")
     await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     return await insumo_service.actualizar(conn, insumo_id, body, current_user)
 

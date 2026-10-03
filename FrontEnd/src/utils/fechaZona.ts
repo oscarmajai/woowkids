@@ -31,3 +31,11 @@ export function fechaEnZona(zona?: string, momento: Date = new Date()): string {
 export function primerDiaDelMesEnZona(zona?: string, momento: Date = new Date()): string {
   return `${fechaEnZona(zona, momento).slice(0, 8)}01`
 }
+
+/**
+ * B1: true si `desde` es posterior a `hasta` (fechas AAAA-MM-DD). Con alguna
+ * vacía no se considera invertido.
+ */
+export function rangoFechasInvertido(desde?: string | null, hasta?: string | null): boolean {
+  return !!desde && !!hasta && desde > hasta
+}

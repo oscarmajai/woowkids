@@ -198,6 +198,31 @@ def require_permission(
     return dependency
 
 
+def require_any_permission(
+    *codes: str,
+) -> Callable[..., Coroutine[Any, Any, TokenData]]:
+    """Restringe el acceso a usuarios cuyo rol tenga AL MENOS UNO de los permisos."""
+    from app.services.permission_service import has_permission
+
+    async def dependency(
+        current_user: TokenData = Depends(get_current_user),
+    ) -> TokenData:
+        if not any(has_permission(current_user.role, code) for code in codes):
+            raise _FORBIDDEN
+        return current_user
+
+    return dependency
+
+
+def exigir_permiso(current_user: TokenData, code: str) -> None:
+    """403 si el rol no tiene el permiso. Para cuando el permiso depende del
+    contenido de la petición (p. ej. desactivar por PATCH, M20)."""
+    from app.services.permission_service import has_permission
+
+    if not has_permission(current_user.role, code):
+        raise _FORBIDDEN
+
+
 async def requiere_turno_abierto(
     current_user: TokenData = Depends(get_current_user),
     conn: asyncpg.Connection = Depends(get_db),

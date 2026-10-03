@@ -21,6 +21,7 @@ from app.services.branch_service import (
     BranchNotFoundError,
     InsufficientPermissionsError,
     NombreAlreadyExistsError,
+    RangoFechasInvalidoError,
     TelefonoInvalidoError,
     create_branch,
     deactivate_branch,
@@ -63,6 +64,13 @@ _ADMINISTRADOR_INVALIDO = HTTPException(
     detail={
         "code": "ADMINISTRADOR_INVALIDO",
         "message": "El usuario indicado no existe, está inactivo o no tiene rol Administrador.",
+    },
+)
+_RANGO_INVALIDO = HTTPException(
+    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    detail={
+        "code": "RANGO_FECHAS_INVALIDO",
+        "message": "La fecha inicial no puede ser posterior a la fecha final.",
     },
 )
 _TELEFONO_INVALIDO = HTTPException(
@@ -177,6 +185,8 @@ async def get_indicadores_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+    except RangoFechasInvalidoError:
+        raise _RANGO_INVALIDO from None
 
 
 @router.get(
@@ -197,4 +207,6 @@ async def exportar_indicadores_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+    except RangoFechasInvalidoError:
+        raise _RANGO_INVALIDO from None
     return csv_streaming_response(_INDICADORES_CSV_CAMPOS, iter([fila]), nombre)

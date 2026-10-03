@@ -8,7 +8,11 @@ from uuid import uuid4
 import pytest
 from app.schemas.auth import TokenData
 from app.services import branch_service
-from app.services.branch_service import BranchNotFoundError, InsufficientPermissionsError
+from app.services.branch_service import (
+    BranchNotFoundError,
+    InsufficientPermissionsError,
+    RangoFechasInvalidoError,
+)
 
 
 def _token(role: str, branch_id=None) -> TokenData:
@@ -85,3 +89,43 @@ async def test_sucursal_inexistente_lanza_not_found():
         await branch_service.get_indicadores(
             conn, branch_id, date(2026, 1, 1), date(2026, 1, 31), current_user
         )
+
+
+@pytest.mark.asyncio
+async def test_rango_invertido_lanza_error_sin_consultar():
+    """B1: desde > hasta respondía 200 con ceros (y el CSV, ceros)."""
+    consulta = AsyncMock()
+    with (
+        patch("app.services.branch_service.get_indicadores_sucursal", consulta),
+        pytest.raises(RangoFechasInvalidoError),
+    ):
+        await branch_service.get_indicadores(
+            object(), uuid4(), date(2026, 10, 31), date(2026, 10, 1), _token("AdministradorSistema")
+        )
+    consulta.assert_not_called()
+
+
+def test_endpoints_de_indicadores_responden_422_con_rango_invertido():
+    from app.api.deps import get_current_user
+    from app.core.database import get_db
+    from app.main import app
+    from app.services import permission_service
+    from fastapi.testclient import TestClient
+
+    sistema = _token("AdministradorSistema")
+    app.dependency_overrides[get_current_user] = lambda: sistema
+    app.dependency_overrides[get_db] = lambda: object()
+    anterior = permission_service._cache.get("AdministradorSistema")
+    permission_service._cache["AdministradorSistema"] = frozenset({"sucursales:ver"})
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        for ruta in ("indicadores", "indicadores/export"):
+            resp = client.get(f"/api/sucursales/{uuid4()}/{ruta}?desde=2026-10-31&hasta=2026-10-01")
+            assert resp.status_code == 422, (ruta, resp.text)
+            assert resp.json()["detail"]["code"] == "RANGO_FECHAS_INVALIDO"
+    finally:
+        app.dependency_overrides.clear()
+        if anterior is None:
+            permission_service._cache.pop("AdministradorSistema", None)
+        else:
+            permission_service._cache["AdministradorSistema"] = anterior

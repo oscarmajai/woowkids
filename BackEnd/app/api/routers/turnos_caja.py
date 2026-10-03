@@ -78,10 +78,15 @@ _ARQUEOS_CSV_CAMPOS = [
     summary="Lista los turnos horarios configurados",
 )
 async def listar_turnos(
+    sucursal_id: str | None = Query(None),
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[TurnoResponse]:
-    return await turnos_caja_service.obtener_turnos(conn)
+    # M19: los horarios de la sucursal de la sesión más los globales (antes
+    # se veían los de todas las sucursales).
+    return await turnos_caja_service.obtener_turnos(
+        conn, _sucursal_filtro(current_user, sucursal_id)
+    )
 
 
 @router.get(

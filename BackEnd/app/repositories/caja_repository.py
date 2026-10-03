@@ -124,16 +124,45 @@ async def listar_cajas_por_sucursal(
     return [dict(r) for r in rows]
 
 
-async def listar_turnos(conn: asyncpg.Connection) -> list[dict[str, Any]]:
+async def listar_turnos(
+    conn: asyncpg.Connection, sucursal_id: str | None = None
+) -> list[dict[str, Any]]:
+    """M19: con sucursal, los horarios activos de esa sucursal más los globales
+    (sucursal_id NULL); sin sucursal (AdministradorSistema sin selector), todos."""
     rows = await conn.fetch(
         """
         SELECT id, nombre, hora_inicio, hora_fin
         FROM public.turnos
         WHERE activo = TRUE
+          AND ($1::uuid IS NULL OR sucursal_id IS NULL OR sucursal_id = $1::uuid)
         ORDER BY hora_inicio ASC
-        """
+        """,
+        uuid.UUID(sucursal_id) if sucursal_id else None,
     )
     return [dict(r) for r in rows]
+
+
+async def turno_disponible_en_sucursal(
+    conn: asyncpg.Connection, turno_id: str, sucursal_id: str
+) -> bool:
+    """M19: el horario existe, está activo y es global o de esa sucursal."""
+    try:
+        tid = uuid.UUID(str(turno_id))
+    except ValueError:
+        return False
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM public.turnos
+                WHERE id = $1 AND activo = TRUE
+                  AND (sucursal_id IS NULL OR sucursal_id = $2::uuid)
+            )
+            """,
+            tid,
+            uuid.UUID(str(sucursal_id)),
+        )
+    )
 
 
 async def get_primer_turno(conn: asyncpg.Connection) -> dict[str, Any] | None:
@@ -156,6 +185,8 @@ def _row_to_caja_admin_dict(row: asyncpg.Record) -> dict[str, Any]:
     }
     if "sucursal_id" in row.keys():
         d["sucursal_id"] = str(row["sucursal_id"])
+    if "sucursal_nombre" in row.keys():
+        d["sucursal_nombre"] = row["sucursal_nombre"]
     turno_actual = None
     if row.get("apertura_id") is not None:
         turno_actual = {
@@ -167,21 +198,27 @@ def _row_to_caja_admin_dict(row: asyncpg.Record) -> dict[str, Any]:
     return d
 
 
-async def listar_cajas_admin(conn: asyncpg.Connection, sucursal_id: str) -> list[dict[str, Any]]:
+async def listar_cajas_admin(
+    conn: asyncpg.Connection, sucursal_id: str | None
+) -> list[dict[str, Any]]:
+    """Cajas de la sucursal; con None (AdministradorSistema en "Todas las
+    sucursales", N14), las de todas."""
     rows = await conn.fetch(
         """
         SELECT
-            c.id, c.nombre, c.numero, c.activo, c.impresora,
+            c.id, c.sucursal_id, s.nombre AS sucursal_nombre,
+            c.nombre, c.numero, c.activo, c.impresora,
             a.id AS apertura_id, a.creado AS apertura_fecha,
             COALESCE(u.nombre_completo, u.email) AS apertura_cajero
         FROM public.cajas c
+        JOIN public.sucursales s ON s.id = c.sucursal_id
         LEFT JOIN public.apertura_caja a
                ON a.caja_id = c.id AND a.estado IN ('ABIERTA', 'EN_CORTE')
         LEFT JOIN public.usuarios u ON u.id = a.cajero_id
-        WHERE c.sucursal_id = $1
-        ORDER BY c.numero ASC, c.nombre ASC
+        WHERE $1::uuid IS NULL OR c.sucursal_id = $1::uuid
+        ORDER BY s.nombre ASC, c.numero ASC, c.nombre ASC
         """,
-        uuid.UUID(sucursal_id),
+        uuid.UUID(sucursal_id) if sucursal_id else None,
     )
     return [_row_to_caja_admin_dict(r) for r in rows]
 

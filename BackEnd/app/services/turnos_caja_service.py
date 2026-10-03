@@ -57,6 +57,7 @@ from app.repositories.caja_repository import (
     sumar_retiros_por_apertura,
     sumar_total_ventas_apertura,
     sumar_ventas_efectivo_apertura,
+    turno_disponible_en_sucursal,
 )
 from app.repositories.user_repository import get_usuario_by_id
 from app.schemas.auth import TokenData
@@ -218,8 +219,11 @@ async def obtener_cajas(
     ]
 
 
-async def obtener_turnos(conn: asyncpg.Connection) -> list[TurnoResponse]:
-    rows = await listar_turnos(conn)
+async def obtener_turnos(
+    conn: asyncpg.Connection, sucursal_id: str | None = None
+) -> list[TurnoResponse]:
+    """M19: los horarios de la sucursal más los globales (todos si None)."""
+    rows = await listar_turnos(conn, sucursal_id)
     return [
         TurnoResponse(
             id=str(r["id"]),
@@ -319,6 +323,16 @@ async def abrir_turno(
             detail={"code": "TURNO_REQUERIDO", "message": "Debes seleccionar un turno de trabajo."},
         )
     turno_id = payload.turno_id
+    # M19: el horario debe ser global o de la sucursal de la caja (antes se
+    # aceptaba el de cualquier sucursal, y uno inexistente reventaba con 500).
+    if not await turno_disponible_en_sucursal(conn, turno_id, sucursal):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "TURNO_INVALIDO",
+                "message": "El turno de trabajo seleccionado no existe o no es de esta sucursal.",
+            },
+        )
 
     # RN-APE-001: un turno activo por cajero.
     activa = await get_apertura_activa_por_usuario(conn, user_id)
