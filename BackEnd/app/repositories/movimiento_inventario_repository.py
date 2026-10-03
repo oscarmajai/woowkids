@@ -22,6 +22,23 @@ _SELECT = """
     JOIN public.insumos i ON i.id = mi.insumo_id
 """
 
+# Zona horaria de la sucursal $1 / de la sucursal del insumo $1.
+_ZONA_SUCURSAL = "(SELECT s.zona_horaria FROM public.sucursales s WHERE s.id = $1)"
+_ZONA_INSUMO = (
+    "(SELECT s.zona_horaria FROM public.insumos ins "
+    "JOIN public.sucursales s ON s.id = ins.sucursal_id WHERE ins.id = $1)"
+)
+
+
+def _desde_local(columna: str, idx: int, zona: str) -> str:
+    """`columna` desde el inicio del día $idx en la zona de la sucursal (M4)."""
+    return f"{columna} >= (${idx}::date::timestamp AT TIME ZONE {zona})"
+
+
+def _hasta_local(columna: str, idx: int, zona: str) -> str:
+    """`columna` hasta el fin del día $idx (inclusivo) en la zona de la sucursal (M4)."""
+    return f"{columna} < ((${idx}::date + 1)::timestamp AT TIME ZONE {zona})"
+
 
 async def registrar(
     conn: asyncpg.Connection,
@@ -91,15 +108,16 @@ async def listar_por_insumo(
     hasta: date | None = None,
 ) -> list[dict[str, Any]]:
     """Historial de movimientos de un insumo (kardex), opcionalmente acotado
-    a un rango de fechas. `hasta` es inclusivo del día completo."""
+    a un rango de fechas. `hasta` es inclusivo del día completo; los días son
+    los de la zona horaria de la sucursal del insumo."""
     conditions = ["mi.insumo_id = $1"]
     params: list[Any] = [insumo_id]
     if desde is not None:
         params.append(desde)
-        conditions.append(f"mi.creado >= ${len(params)}")
+        conditions.append(_desde_local("mi.creado", len(params), _ZONA_INSUMO))
     if hasta is not None:
         params.append(hasta)
-        conditions.append(f"mi.creado < ${len(params)}::date + interval '1 day'")
+        conditions.append(_hasta_local("mi.creado", len(params), _ZONA_INSUMO))
 
     where_clause = " AND ".join(conditions)
     rows = await conn.fetch(_SELECT + f" WHERE {where_clause} ORDER BY mi.creado DESC", *params)
@@ -113,15 +131,15 @@ async def reporte_cogs(
     hasta: date | None = None,
 ) -> list[dict[str, Any]]:
     """Costo de lo consumido (salidas de venta + mermas) por insumo en el
-    periodo. `hasta` inclusivo del día completo."""
+    periodo. `hasta` inclusivo del día completo, en la zona de la sucursal."""
     conditions = ["mi.sucursal_id = $1", "mi.tipo IN ('S', 'M')"]
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
-        conditions.append(f"mi.creado >= ${len(params)}")
+        conditions.append(_desde_local("mi.creado", len(params), _ZONA_SUCURSAL))
     if hasta is not None:
         params.append(hasta)
-        conditions.append(f"mi.creado < ${len(params)}::date + interval '1 day'")
+        conditions.append(_hasta_local("mi.creado", len(params), _ZONA_SUCURSAL))
 
     where_clause = " AND ".join(conditions)
     rows = await conn.fetch(
@@ -149,29 +167,46 @@ async def resumen_costo_ventas(
     """KPIs del reporte de costo de ventas (B7 pendiente #3): ventas totales
     de comandas en el periodo, costo de lo vendido (motivo venta_comanda),
     margen (ventas - costo) y merma (motivo merma, por separado del costo
-    de venta)."""
+    de venta).
+
+    Las comandas canceladas (`estado_actual = 'C'` o `activo = FALSE`) no
+    cuentan como venta, y al costo de lo vendido se le resta lo que su
+    cancelación devolvió al inventario (A3). Los días son los de la zona
+    horaria de la sucursal (M4)."""
     conditions_mov = ["mi.sucursal_id = $1"]
-    conditions_com = ["c.sucursal_id = $1", "c.estado_actual <> 'C'"]
+    conditions_com = ["c.sucursal_id = $1", "c.estado_actual <> 'C'", "c.activo"]
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
         idx = len(params)
-        conditions_mov.append(f"mi.creado >= ${idx}")
-        conditions_com.append(f"c.fecha_hora >= ${idx}")
+        conditions_mov.append(_desde_local("mi.creado", idx, _ZONA_SUCURSAL))
+        conditions_com.append(_desde_local("c.fecha_hora", idx, _ZONA_SUCURSAL))
     if hasta is not None:
         params.append(hasta)
         idx = len(params)
-        conditions_mov.append(f"mi.creado < ${idx}::date + interval '1 day'")
-        conditions_com.append(f"c.fecha_hora < ${idx}::date + interval '1 day'")
+        conditions_mov.append(_hasta_local("mi.creado", idx, _ZONA_SUCURSAL))
+        conditions_com.append(_hasta_local("c.fecha_hora", idx, _ZONA_SUCURSAL))
 
     where_mov = " AND ".join(conditions_mov)
     where_com = " AND ".join(conditions_com)
 
+    # La devolución por cancelación se descuenta en el periodo de la venta
+    # original, igual que la venta deja de contarse en ese periodo.
     costo_venta_row = await conn.fetchrow(
         f"""
-        SELECT COALESCE(SUM(mi.costo_total), 0) AS costo_ventas
-        FROM public.movimientos_inventario mi
-        WHERE {where_mov} AND mi.motivo = 'venta_comanda'
+        WITH vendidos AS (
+            SELECT mi.referencia_id, mi.costo_total
+            FROM public.movimientos_inventario mi
+            WHERE {where_mov} AND mi.motivo = 'venta_comanda'
+        )
+        SELECT COALESCE((SELECT SUM(costo_total) FROM vendidos), 0)
+             - COALESCE((
+                   SELECT SUM(d.costo_total)
+                   FROM public.movimientos_inventario d
+                   WHERE d.sucursal_id = $1
+                     AND d.motivo = 'cancelacion_comanda'
+                     AND d.referencia_id IN (SELECT referencia_id FROM vendidos)
+               ), 0) AS costo_ventas
         """,
         *params,
     )

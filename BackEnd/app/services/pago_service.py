@@ -12,6 +12,7 @@ from app.exceptions import (
     Conflicto,
     DatosInvalidos,
     IdempotenciaConflictoError,
+    NoEncontrado,
     PedidoInvalidoError,
 )
 from app.models.comanda import Comanda
@@ -20,6 +21,7 @@ from app.repositories import (
     folio_repository,
     metodos_pago_repository,
     pago_repository,
+    sucursales,
 )
 from app.repositories.caja_repository import registrar_cambio_caja, registrar_movimiento_caja
 from app.schemas.comanda import ComandaCreate, EstadoComanda
@@ -289,14 +291,60 @@ async def completar_pago(
     return comanda
 
 
-def _calcular_desde(filtro: str) -> datetime:
-    ahora = datetime.now()
+def _calcular_desde(filtro: str, ahora: datetime) -> datetime:
+    """Inicio del periodo hoy/semana/mes a partir de `ahora`, la hora local
+    de la sucursal sin zona (M4: antes era la hora del servidor, en UTC)."""
     if filtro == "hoy":
         return ahora.replace(hour=0, minute=0, second=0, microsecond=0)
     if filtro == "semana":
         inicio_semana = ahora - timedelta(days=ahora.weekday())
         return inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
     return ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _parsear_fecha(valor: str, campo: str) -> datetime:
+    try:
+        return datetime.fromisoformat(valor)
+    except ValueError:
+        raise DatosInvalidos(
+            f"La fecha «{valor}» de {campo} no es válida; usa el formato AAAA-MM-DD."
+        ) from None
+
+
+async def _a_hora_local(conn: asyncpg.Connection, sucursal_id: UUID, momento: datetime) -> datetime:
+    """Las fechas sin zona ya son hora local de la sucursal; las que traen zona
+    se convierten a la hora local de la sucursal."""
+    if momento.tzinfo is None:
+        return momento
+    local = await sucursales.a_hora_local(conn, sucursal_id, momento)
+    if local is None:
+        raise NoEncontrado("Sucursal")
+    return local
+
+
+async def _periodo(
+    conn: asyncpg.Connection,
+    sucursal_id: UUID,
+    filtro: str,
+    fecha_inicio: str | None,
+    fecha_fin: str | None,
+) -> tuple[datetime, datetime | None]:
+    """Límites [desde, hasta) del periodo en hora local de la sucursal, sin
+    zona; el repository los convierte con la `zona_horaria` de la sucursal.
+
+    `fecha_fin` es un día completo: el periodo termina al empezar el día
+    siguiente."""
+    ahora = await sucursales.ahora_en_sucursal(conn, sucursal_id)
+    if ahora is None:
+        raise NoEncontrado("Sucursal")
+    desde = _calcular_desde(filtro, ahora)
+    hasta = None
+    if fecha_inicio:
+        desde = await _a_hora_local(conn, sucursal_id, _parsear_fecha(fecha_inicio, "fecha_inicio"))
+    if fecha_fin:
+        fin = await _a_hora_local(conn, sucursal_id, _parsear_fecha(fecha_fin, "fecha_fin"))
+        hasta = datetime.combine(fin.date() + timedelta(days=1), datetime.min.time())
+    return desde, hasta
 
 
 async def obtener_historial(
@@ -309,12 +357,7 @@ async def obtener_historial(
     caja_id: UUID | None = None,
     metodo_pago_id: UUID | None = None,
 ) -> list[HistorialOut]:
-    desde = _calcular_desde(filtro)
-    hasta = None
-    if fecha_inicio:
-        desde = datetime.fromisoformat(fecha_inicio)
-    if fecha_fin:
-        hasta = datetime.fromisoformat(fecha_fin).replace(hour=23, minute=59, second=59)
+    desde, hasta = await _periodo(conn, sucursal_id, filtro, fecha_inicio, fecha_fin)
     rows = await pago_repository.historial(
         conn, sucursal_id, desde, estado, hasta, caja_id, metodo_pago_id
     )
@@ -339,12 +382,7 @@ async def obtener_estadisticas(
     fecha_inicio: str | None = None,
     fecha_fin: str | None = None,
 ) -> EstadisticasOut:
-    desde = _calcular_desde(filtro)
-    hasta = None
-    if fecha_inicio:
-        desde = datetime.fromisoformat(fecha_inicio)
-    if fecha_fin:
-        hasta = datetime.fromisoformat(fecha_fin).replace(hour=23, minute=59, second=59)
+    desde, hasta = await _periodo(conn, sucursal_id, filtro, fecha_inicio, fecha_fin)
     data = await pago_repository.estadisticas(conn, sucursal_id, desde, hasta)
     total_ventas = float(data["total_ventas"])
     total_ordenes = int(data["total_ordenes"])
