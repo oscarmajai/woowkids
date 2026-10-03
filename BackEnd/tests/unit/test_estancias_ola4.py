@@ -292,3 +292,100 @@ async def test_n8_pago_extra_con_tarjeta_sin_referencia_da_422(
         )
     assert exc.value.status_code == 422
     pago_create.assert_not_awaited()
+
+
+# --- N5 ------------------------------------------------------------------------
+
+
+def _registro(**cambios: Any) -> dict[str, Any]:
+    return {
+        "id": uuid4(),
+        "sucursal_id": SUCURSAL,
+        "estado": "A",
+        "total": Decimal("240.00"),
+        "creado": datetime(2026, 10, 3, 18, 0, tzinfo=UTC),
+        "tutor": "Ana Gómez",
+        "telefono": "3312345678",
+        "sucursal": "Zapopan",
+        "cajero": "Diego",
+    } | cambios
+
+
+NINO_DENTRO = {
+    "nombre": "Leo",
+    "edad": 5,
+    "notas": "Alérgico al cacahuate",
+    "pulsera": "WK-0000001",
+    "horas": 2,
+    "salida_esperada": datetime(2026, 10, 3, 20, 0, tzinfo=UTC),
+}
+
+
+@pytest.fixture
+def reimpresion(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
+    mocks = {
+        "registro": AsyncMock(return_value=_registro()),
+        "ninos": AsyncMock(return_value=[NINO_DENTRO]),
+        "emitir": AsyncMock(return_value="codigo-nuevo"),
+    }
+    monkeypatch.setattr(estancias, "get_registro_para_comprobante", mocks["registro"])
+    monkeypatch.setattr(estancias, "get_ninos_en_estancia_de_registro", mocks["ninos"])
+    monkeypatch.setattr(estancias, "emitir_codigo_acceso", mocks["emitir"])
+    return mocks
+
+
+async def test_n5_reimprimir_emite_un_codigo_nuevo_con_las_notas(
+    reimpresion: dict[str, AsyncMock],
+) -> None:
+    registro_id = uuid4()
+    usuario = uuid4()
+    datos = await estancias.reimprimir_comprobante(_conn(), registro_id, SUCURSAL, usuario)
+
+    reimpresion["emitir"].assert_awaited_once()
+    assert reimpresion["emitir"].await_args.args[1:] == (registro_id, usuario)
+    assert datos["codigoAccesoPadres"] == "codigo-nuevo"
+    assert datos["ninos"][0]["notas"] == "Alérgico al cacahuate"
+    assert datos["ninos"][0]["pulsera"] == "WK-0000001"
+    assert datos["total"] == 240.0
+
+
+async def test_n5_registro_de_otra_sucursal_da_404(reimpresion: dict[str, AsyncMock]) -> None:
+    reimpresion["registro"].return_value = _registro(sucursal_id=uuid4())
+    with pytest.raises(HTTPException) as exc:
+        await estancias.reimprimir_comprobante(_conn(), uuid4(), SUCURSAL, uuid4())
+    assert exc.value.status_code == 404
+    reimpresion["emitir"].assert_not_awaited()
+
+
+@pytest.mark.parametrize("estado", ["C", "P"])
+async def test_n5_registro_cerrado_no_se_reimprime(
+    reimpresion: dict[str, AsyncMock], estado: str
+) -> None:
+    reimpresion["registro"].return_value = _registro(estado=estado)
+    with pytest.raises(HTTPException) as exc:
+        await estancias.reimprimir_comprobante(_conn(), uuid4(), SUCURSAL, uuid4())
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "REGISTRO_NO_ACTIVO"
+    reimpresion["emitir"].assert_not_awaited()
+
+
+async def test_n5_sin_ninos_dentro_no_se_reimprime(reimpresion: dict[str, AsyncMock]) -> None:
+    reimpresion["ninos"].return_value = []
+    with pytest.raises(HTTPException) as exc:
+        await estancias.reimprimir_comprobante(_conn(), uuid4(), SUCURSAL, uuid4())
+    assert exc.value.status_code == 409
+    reimpresion["emitir"].assert_not_awaited()
+
+
+def test_n5_la_ruta_exige_el_permiso_de_checkin() -> None:
+    from app.main import app
+
+    rutas = [
+        r
+        for r in app.routes
+        if getattr(r, "path", "") == "/api/estancias/registros/{registro_id}/comprobante"
+    ]
+    assert len(rutas) == 1
+    dependencias = [d.call for d in rutas[0].dependant.dependencies]  # type: ignore[attr-defined]
+    nombres = {getattr(d, "__qualname__", "") for d in dependencias}
+    assert any("require_permission" in n for n in nombres)

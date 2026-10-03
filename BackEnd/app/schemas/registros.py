@@ -44,6 +44,31 @@ class OnboardingResponse(BaseModel):
     codigoAccesoPadres: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
 
 
+class NinoComprobanteResponse(BaseModel):
+    nombre: str
+    edad: int
+    # M26: notas / alergias del niño, para que salgan en el comprobante.
+    notas: str | None = None
+    pulsera: str
+    horas: int
+    salidaEsperada: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+
+
+class ComprobanteEstanciaResponse(BaseModel):
+    """N5 — datos para reimprimir el comprobante de un registro activo, con un
+    código nuevo del portal de padres (el anterior queda revocado)."""
+
+    registroId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    codigoAccesoPadres: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    sucursal: str
+    cajero: str | None = None
+    tutor: str
+    telefono: str
+    entrada: str
+    total: float
+    ninos: list[NinoComprobanteResponse]
+
+
 class CheckoutRequest(BaseModel):
     pagos: list[PagoIn] = []
 

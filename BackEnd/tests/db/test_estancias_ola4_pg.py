@@ -21,6 +21,8 @@ from app.core.security import hash_codigo_acceso_padres
 from app.repositories import codigos_acceso_padres
 from app.repositories.pagos_comanda import pago_create
 from app.repositories.producto_repository import get_producto_estancia_by_branch_id
+from app.services import estancias, padres_service
+from fastapi import HTTPException
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not TEST_DATABASE_URL, reason="TEST_DATABASE_URL no definida")
@@ -155,3 +157,41 @@ async def test_n8_la_referencia_del_pago_se_guarda_y_sale_en_el_detalle(
     assert guardada == "VOUCHER-77"
     pagos = await conn_test.fetch(pago_repository._SELECT_DETALLE_PAGOS_ESTANCIA, registro_id)
     assert [p["notas_pago"] for p in pagos] == ["VOUCHER-77"]
+
+
+async def test_n5_reimprimir_revoca_el_qr_anterior(conn_test: asyncpg.Connection) -> None:
+    sucursal_id = await _sucursal(conn_test)
+    registro_id, _ = await _registro_con_nino(conn_test, sucursal_id, "Asma, trae inhalador")
+    codigo_original = await padres_service.emitir_codigo_acceso(conn_test, registro_id, None)
+    assert await _vigente(conn_test, codigo_original)
+
+    datos = await estancias.reimprimir_comprobante(conn_test, registro_id, sucursal_id, None)
+
+    assert datos["codigoAccesoPadres"] != codigo_original
+    assert await _vigente(conn_test, datos["codigoAccesoPadres"])
+    assert not await _vigente(conn_test, codigo_original)
+    assert datos["tutor"] == "Ana Gómez"
+    assert [n["notas"] for n in datos["ninos"]] == ["Asma, trae inhalador"]
+    assert datos["total"] == 240.0
+
+
+async def test_n5_no_reimprime_si_todos_salieron_o_es_de_otra_sucursal(
+    conn_test: asyncpg.Connection,
+) -> None:
+    sucursal_id = await _sucursal(conn_test)
+    registro_id, detalle_id = await _registro_con_nino(conn_test, sucursal_id, None)
+
+    with pytest.raises(HTTPException) as exc:
+        await estancias.reimprimir_comprobante(
+            conn_test, registro_id, await _sucursal(conn_test), None
+        )
+    assert exc.value.status_code == 404
+
+    await conn_test.execute("UPDATE detalles_registro SET salida = now() WHERE id = $1", detalle_id)
+    with pytest.raises(HTTPException) as exc:
+        await estancias.reimprimir_comprobante(conn_test, registro_id, sucursal_id, None)
+    assert exc.value.status_code == 409
+    total_codigos = await conn_test.fetchval(
+        "SELECT count(*) FROM codigos_acceso_padres WHERE registro_id = $1", registro_id
+    )
+    assert total_codigos == 0

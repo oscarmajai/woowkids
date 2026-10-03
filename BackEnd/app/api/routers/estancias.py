@@ -26,6 +26,7 @@ from app.schemas.pagos import PagoEstanciaExtraRequest
 from app.schemas.registros import (
     CheckoutRequest,
     CheckoutResponse,
+    ComprobanteEstanciaResponse,
     CotizacionCheckoutResponse,
     DetalleActivoResponse,
     OnboardingRequest,
@@ -38,6 +39,7 @@ from app.services.estancias import (
     create_estancia,
     get_activos_estancia_by_sucursal_id,
     get_productos_estancia_by_id_sucursal,
+    reimprimir_comprobante,
 )
 from app.services.pagos_estancia import pago_create_service
 from app.services.permission_service import has_permission
@@ -131,6 +133,32 @@ async def pago_estancia_extra(
     await alcance_service.asegurar_recurso(conn, current_user, "registro", registro_id)
     usuario_id = UUID(current_user.sub)
     return await pago_create_service(conn, body, sucursal, registro_id, usuario_id, apertura_id)
+
+
+@router.post(
+    "/registros/{registro_id}/comprobante",
+    response_model=ComprobanteEstanciaResponse,
+    summary="Reimprimir comprobante de entrada",
+    description=(
+        "N5 — re-emite el código del QR del portal de padres de un registro "
+        "con niños en estancia (el código anterior deja de valer) y devuelve "
+        "los datos para imprimir el comprobante de nuevo. 404 si el registro "
+        "no es de la sucursal; 409 REGISTRO_NO_ACTIVO si ya no hay niños dentro."
+    ),
+)
+async def reimprimir_comprobante_registro(
+    registro_id: UUID,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("estancias:checkin")),
+) -> dict[str, Any]:
+    await alcance_service.asegurar_recurso(conn, current_user, "registro", registro_id)
+    scope = sucursal_scope(current_user)
+    return await reimprimir_comprobante(
+        conn,
+        registro_id,
+        UUID(scope) if scope is not None else None,
+        UUID(current_user.sub),
+    )
 
 
 # Endpoint para cotizar el checkout (solo lectura, no registra nada)

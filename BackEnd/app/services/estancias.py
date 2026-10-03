@@ -24,6 +24,8 @@ from app.repositories.pulseras import esta_disponible_para_asignar
 from app.repositories.registros import (
     EstadoRegistro,
     change_registro_estado,
+    get_ninos_en_estancia_de_registro,
+    get_registro_para_comprobante,
     registro_create,
     registro_update_total,
 )
@@ -498,3 +500,53 @@ async def get_productos_estancia_by_id_sucursal(
     conn: asyncpg.Connection, sucursal_id: UUID
 ) -> list[dict[str, Any]]:
     return await get_productos_estancia_by_sucursal_id(conn, sucursal_id)
+
+
+async def reimprimir_comprobante(
+    conn: asyncpg.Connection, registro_id: UUID, sucursal_id: UUID | None, usuario_id: UUID
+) -> dict[str, Any]:
+    """N5 — re-emite el código del portal de padres de un registro activo y
+    devuelve los datos del comprobante para imprimirlo de nuevo.
+    `emitir_codigo_acceso` revoca el código anterior: el QR del comprobante
+    viejo deja de valer. `sucursal_id` es la sucursal de la sesión (None para
+    el AdministradorSistema, que ve todas); un registro de otra sucursal
+    responde 404, igual que si no existiera."""
+    async with conn.transaction():
+        registro = await get_registro_para_comprobante(conn, registro_id)
+        if registro is None or (sucursal_id is not None and registro["sucursal_id"] != sucursal_id):
+            raise HTTPException(404, "Registro no encontrado")
+        ninos = await get_ninos_en_estancia_de_registro(conn, registro_id)
+        if registro["estado"] != EstadoRegistro.ACTIVO.value or not ninos:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "REGISTRO_NO_ACTIVO",
+                    "message": (
+                        "El registro ya no tiene niños en estancia; no se puede "
+                        "reimprimir su comprobante."
+                    ),
+                },
+            )
+        codigo = await emitir_codigo_acceso(conn, registro_id, usuario_id)
+
+    return {
+        "registroId": registro_id,
+        "codigoAccesoPadres": codigo,
+        "sucursal": registro["sucursal"],
+        "cajero": registro["cajero"],
+        "tutor": registro["tutor"],
+        "telefono": registro["telefono"],
+        "entrada": registro["creado"].isoformat(),
+        "total": float(registro["total"]),
+        "ninos": [
+            {
+                "nombre": n["nombre"],
+                "edad": n["edad"],
+                "notas": n["notas"],
+                "pulsera": n["pulsera"],
+                "horas": n["horas"],
+                "salidaEsperada": n["salida_esperada"].isoformat(),
+            }
+            for n in ninos
+        ],
+    }
