@@ -46,3 +46,11 @@ export function allowOnlyLettersKeydown(e: KeyboardEvent) {
     e.preventDefault()
   }
 }
+
+/**
+ * Regla de la clave de sucursal: obligatoria solo al crear. Hay sucursales
+ * anteriores sin clave y editarlas no debe obligar a inventarles una.
+ */
+export function reglaClaveSucursal(esEdicion: boolean): (v: string | null) => true | string {
+  return (v) => esEdicion || !!v?.trim() || 'La clave es requerida'
+}

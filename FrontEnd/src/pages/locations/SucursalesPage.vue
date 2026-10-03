@@ -78,8 +78,10 @@
               aria-label="Editar"
               @click="abrirEditar(props.row.id)"
             />
+            <!-- Mismos permisos que el backend: desactivar exige sucursales:eliminar
+                 y reactivar sucursales:editar. -->
             <q-btn
-              v-if="props.row.statusClave === 'activa'"
+              v-if="props.row.statusClave === 'activa' && auth.hasPermission('sucursales:eliminar')"
               flat
               round
               dense
@@ -89,7 +91,9 @@
               @click="eliminarSucursal(props.row)"
             />
             <q-btn
-              v-else
+              v-else-if="
+                props.row.statusClave !== 'activa' && auth.hasPermission('sucursales:editar')
+              "
               flat
               round
               dense

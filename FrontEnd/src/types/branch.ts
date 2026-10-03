@@ -13,6 +13,8 @@ export interface Branch {
   clave: string | null
   administradorId: string | null
   administradorName: string | null
+  /** Correo del administrador (el de la sucursal es `correo`). */
+  administradorEmail: string | null
   isActive: boolean
   creado: string | null
   creadoPor: string | null

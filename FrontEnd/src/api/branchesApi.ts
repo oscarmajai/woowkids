@@ -21,6 +21,7 @@ interface BackendBranchResponse {
   clave: string | null
   administrador_id: string | null
   administrador_name: string | null
+  administrador_email?: string | null
   is_active: boolean
   creado: string | null
   creado_por: string | null
@@ -46,6 +47,7 @@ function mapBranch(raw: BackendBranchResponse): Branch {
     clave: raw.clave,
     administradorId: raw.administrador_id,
     administradorName: raw.administrador_name,
+    administradorEmail: raw.administrador_email ?? null,
     isActive: raw.is_active,
     creado: raw.creado,
     creadoPor: raw.creado_por,

@@ -12,6 +12,11 @@ export interface UserListItem {
   lastAccess: string | null
   /** C1: true si el usuario ya tiene PIN de caja configurado. */
   tienePin: boolean
+  /**
+   * Todas las sucursales del usuario. Un Administrador no tiene `branchId`
+   * (se asigna desde la sucursal y puede tener varias): solo aparece aquí.
+   */
+  branchIds: string[]
 }
 
 export interface CreateUserPayload {
