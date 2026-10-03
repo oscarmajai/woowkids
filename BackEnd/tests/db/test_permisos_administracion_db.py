@@ -317,25 +317,21 @@ async def _activo(conn: asyncpg.Connection, tabla: str, rid: str) -> bool:
     return bool(await conn.fetchval(sql, UUID(rid)))
 
 
-async def test_admin_sin_permiso_de_eliminar_no_desactiva_productos_por_patch(
-    entorno: Any,
-) -> None:
-    """El rol Administrador tiene gestionar_productos pero no eliminar_producto:
-    DELETE daba 403 y PATCH activo=false lo desactivaba igual."""
+async def test_admin_desactiva_productos_con_eliminar_producto(entorno: Any) -> None:
+    """Desde la 101 el Administrador tiene inventario:eliminar_producto
+    (decisión del usuario: todos los permisos salvo los del sistema), así que
+    M20 no le quita la forma de desactivar productos."""
     client, conn = entorno
     url = f"/api/productos/{IDS['producto_a']}"
-    borrar = await client.delete(url, headers=_h("admin_a"))
-    assert borrar.status_code == 403, borrar.text
-    desactivar = await client.patch(
-        url, data={"payload": json.dumps({"activo": False})}, headers=_h("admin_a")
-    )
-    assert desactivar.status_code == 403, desactivar.text
-    assert await _activo(conn, "productos", IDS["producto_a"])
-    # Editar sigue permitido con gestionar_productos.
     editar = await client.patch(
         url, data={"payload": json.dumps({"nombre": "Q5 Pizza grande"})}, headers=_h("admin_a")
     )
     assert editar.status_code == 200, editar.text
+    desactivar = await client.patch(
+        url, data={"payload": json.dumps({"activo": False})}, headers=_h("admin_a")
+    )
+    assert desactivar.status_code == 200, desactivar.text
+    assert not await _activo(conn, "productos", IDS["producto_a"])
 
 
 async def test_sin_permiso_de_eliminar_no_se_desactivan_insumos_ni_proveedores(
