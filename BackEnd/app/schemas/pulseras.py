@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +15,20 @@ class PulseraResponse(BaseModel):
     pulseraRfid: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PulseraEstadoOut(BaseModel):
+    """Estado de una pulsera buscada por RFID en el check-in (B14).
+
+    `estado` resume si se puede asignar: `disponible`, `usada` (ya tiene un
+    niño asignado; las pulseras son de un solo uso) o `inactiva`.
+    """
+
+    id: UUID
+    pulseraRfid: str  # noqa: N815 — camelCase, igual que PulseraResponse
+    activo: bool
+    usada: bool
+    estado: Literal["disponible", "usada", "inactiva"]
 
 
 class InventarioPulserasOut(BaseModel):
