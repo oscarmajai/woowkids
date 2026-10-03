@@ -40,6 +40,7 @@ from app.schemas.caja import (
 )
 from app.services import alcance_service, turnos_caja_service
 from app.services.pdf_service import generar_pdf_arqueo
+from app.services.permission_service import has_permission
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
@@ -161,13 +162,18 @@ async def obtener_activo(
     else:
         sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
     try:
-        return await turnos_caja_service.obtener_turno_activo(
+        activo = await turnos_caja_service.obtener_turno_activo(
             conn, current_user.sub, sucursal_efectiva
         )
     except turnos_caja_service.TurnoNoEncontradoError:
         if opcional:
             return None
         raise
+    # B9: el conteo del cierre es a ciegas. El efectivo esperado y el desglose
+    # por método (M7) solo los ve quien puede revisar el arqueo.
+    if not has_permission(current_user.role, "turnos_caja:revision_admin"):
+        activo = activo.model_copy(update={"efectivo_esperado": None, "ventas_por_metodo": None})
+    return activo
 
 
 @router.get(

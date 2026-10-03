@@ -45,6 +45,7 @@ const turno = reactive({
   totalRetiros: 12000,
   totalIngresos: 0,
   efectivoDisponible: 1500,
+  efectivoEsperado: 1500 as number | null,
   cajaEnNegativo: false,
   observacionesApertura: '',
   ventasPorMetodo: [] as VentaPorMetodo[],
@@ -69,6 +70,7 @@ function montar() {
 beforeEach(() => {
   permisos.clear()
   turno.efectivoDisponible = 1500
+  turno.efectivoEsperado = 1500
   turno.cajaEnNegativo = false
   turno.observacionesApertura = ''
   turno.ventasPorMetodo = []
@@ -121,6 +123,20 @@ describe('CierreCajaPage — hub del turno', () => {
     expect(alerta.text()).toContain('La caja está en negativo')
     expect(alerta.text()).toContain('-$1,685.00')
     expect(alerta.text()).toContain('Avisa al administrador')
+  })
+
+  it('B9: sin el esperado del backend (cajero) el conteo sigue a ciegas', () => {
+    // El backend omite efectivo_esperado y ventas_por_metodo a quien no
+    // revisa arqueos; el store cae a un cálculo local que el hub no muestra.
+    turno.efectivoEsperado = null
+    turno.efectivoDisponible = -1685
+    turno.cajaEnNegativo = true
+
+    const wrapper = montar()
+
+    expect(wrapper.find('[data-test="hub-efectivo-esperado"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="alerta-caja-negativa"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="hub-venta-metodo"]')).toHaveLength(0)
   })
 
   it('B13: muestra las notas de apertura', () => {

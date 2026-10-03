@@ -26,7 +26,7 @@
             </p>
           </div>
           <div
-            v-if="turno.cajaEnNegativo"
+            v-if="veEsperado && turno.cajaEnNegativo"
             class="cierre-hub__alerta"
             role="alert"
             data-test="alerta-caja-negativa"
@@ -100,6 +100,7 @@
               <dd>{{ formatMXN(turno.totalIngresos) }}</dd>
             </div>
             <div
+              v-if="veEsperado"
               class="cierre-hub__esperado"
               :class="{ 'cierre-hub__esperado--negativo': turno.cajaEnNegativo }"
               data-test="hub-efectivo-esperado"
@@ -307,6 +308,10 @@ const puedeRetirar = computed(() => authStore.hasPermission('retiros_parciales:c
 const accionesHub = computed(
   () => 1 + (puedeIngresarEfectivo.value ? 1 : 0) + (puedeRetirar.value ? 1 : 0),
 )
+
+// B9: el conteo del cierre es a ciegas. El backend solo manda el efectivo
+// esperado y el desglose por método (M7) a quien puede revisar el arqueo.
+const veEsperado = computed(() => turno.efectivoEsperado !== null)
 
 // M7: lo cobrado por método (sin renglones en cero, salvo el efectivo).
 const ventasPorMetodo = computed(() =>

@@ -143,9 +143,11 @@ class TurnoActivoResponse(BaseModel):
     total_cambio: Decimal = Decimal("0")
     # M7: efectivo que debería haber en el cajón ahora mismo (la misma
     # fórmula que el esperado del arqueo y que el disponible para retiros) y
-    # lo cobrado por método. Negativo = la caja está en negativo.
-    efectivo_esperado: Decimal = Decimal("0")
-    ventas_por_metodo: list[VentaPorMetodo] = []
+    # lo cobrado por método. Negativo = la caja está en negativo. El conteo
+    # del cierre es a ciegas (B9): el router los deja en None para quien no
+    # tiene turnos_caja:revision_admin.
+    efectivo_esperado: Decimal | None = Decimal("0")
+    ventas_por_metodo: list[VentaPorMetodo] | None = []
     movimientos: list[MovimientoResumen] = []
     # B23: conteo ya enviado (estados ESPERANDO_REVISION y BALANCE_REVELADO).
     conteo_guardado: ConteoGuardado | None = None
