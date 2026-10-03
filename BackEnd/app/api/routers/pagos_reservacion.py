@@ -15,7 +15,7 @@ from app.schemas.pagos_reservacion import (
     PagosReservacionOut,
     PagosReservacionUpdate,
 )
-from app.services import turnos_caja_service
+from app.services import alcance_service, turnos_caja_service
 
 router = APIRouter(prefix="/api/pagos-reservacion", tags=["Pagos de Reservación"])
 
@@ -34,6 +34,7 @@ async def listar_pagos_reservacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
 ) -> list[PagosReservacionOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     return await svc.listar_por_reservacion(conn, reservacion_id, current_user)
 
 
@@ -41,8 +42,9 @@ async def listar_pagos_reservacion(
 async def obtener_pago(
     pago_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
 ) -> PagosReservacionOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "pago_reservacion", pago_id)
     return await svc.obtener(conn, pago_id)
 
 
@@ -53,6 +55,7 @@ async def crear_pago(
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
     apertura_id: str = Depends(apertura_operando_id),
 ) -> PagosReservacionOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
     return await svc.crear(conn, body, UUID(current_user.sub), apertura_id)
 
 
@@ -73,6 +76,7 @@ async def completar_pago(
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
     apertura_id: str = Depends(apertura_operando_id),
 ) -> PagosReservacionCompletarResponse:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
     disponible_antes = await turnos_caja_service.efectivo_disponible_actual(conn, apertura_id)
     resultado = await svc.completar(conn, body, UUID(current_user.sub), apertura_id)
     resultado.advertencia_efectivo = turnos_caja_service.advertencia_efectivo_insuficiente(
@@ -86,8 +90,9 @@ async def actualizar_pago(
     pago_id: UUID,
     body: PagosReservacionUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
 ) -> PagosReservacionOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "pago_reservacion", pago_id)
     return await svc.actualizar(conn, pago_id, body)
 
 
@@ -95,6 +100,7 @@ async def actualizar_pago(
 async def eliminar_pago(
     pago_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_pagos")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "pago_reservacion", pago_id)
     await svc.eliminar(conn, pago_id)

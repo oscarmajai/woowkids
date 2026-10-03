@@ -156,10 +156,28 @@ def _codigos_permiso(dep: Any) -> list[str]:
 
 
 A = str(SUC_A)
+B = str(SUC_B)
 
 _DETALLE_COMPRA = [
     {"insumo_id": RID2, "unidad_medida_id": RID2, "cantidad": 1, "costo_unitario": 1}
 ]
+
+
+def _reservacion(sucursal_id: str) -> dict[str, Any]:
+    return {
+        "sucursal_id": sucursal_id,
+        "tipo_evento_id": RID2,
+        "paquete_id": RID2,
+        "nombre_cliente": "Cliente",
+        "telefono_cliente": "3312345678",
+        "fecha_evento": "2026-10-10",
+        "hora_inicio": "16:00:00",
+        "hora_fin": "19:00:00",
+        "numero_personas": 10,
+        "precio_base": 1000,
+        "precio_total": 1000,
+    }
+
 
 # (método, ruta, kwargs de la petición)
 CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
@@ -191,6 +209,11 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
         "/api/compras",
         {"json": {"sucursal_id": A, "proveedor_id": RID2, "detalles": _DETALLE_COMPRA}},
     ),
+    # Reservaciones
+    ("GET", f"/api/reservaciones/disponibilidad?sucursal_id={A}&fecha=2026-10-10", {}),
+    ("GET", f"/api/reservaciones/evento-cercano/{A}", {}),
+    ("POST", "/api/reservaciones", {"json": _reservacion(A)}),
+    ("POST", "/api/reservaciones/completa", {"json": {"reservacion": _reservacion(A)}}),
 ]
 
 CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
@@ -226,6 +249,52 @@ CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
     ),
     ("POST", f"/api/compras/{RID}/recibir", {}),
     ("POST", f"/api/compras/{RID}/cancelar", {}),
+    # Reservaciones (datos personales del cliente)
+    ("GET", f"/api/reservaciones/{RID}", {}),
+    ("PATCH", f"/api/reservaciones/{RID}", {"json": {"estado": "cancelada"}}),
+    ("DELETE", f"/api/reservaciones/{RID}", {}),
+    # Alta en mi sucursal pero con paquete/tipo de evento de otra.
+    ("POST", "/api/reservaciones", {"json": _reservacion(B)}),
+    ("POST", "/api/reservaciones/completa", {"json": {"reservacion": _reservacion(B)}}),
+    ("GET", f"/api/reservacion-extras/reservacion/{RID}", {}),
+    ("GET", f"/api/reservacion-extras/{RID}", {}),
+    (
+        "POST",
+        "/api/reservacion-extras",
+        {"json": {"reservacion_id": RID, "extra_id": RID2, "cantidad": 1, "precio_unitario": 1}},
+    ),
+    ("PATCH", f"/api/reservacion-extras/{RID}", {"json": {"cantidad": 2}}),
+    ("DELETE", f"/api/reservacion-extras/{RID}", {}),
+    ("GET", f"/api/reservacion-productos/reservacion/{RID}", {}),
+    ("GET", f"/api/reservacion-productos/{RID}", {}),
+    (
+        "POST",
+        "/api/reservacion-productos",
+        {
+            "json": {
+                "reservacion_id": RID,
+                "producto_id": RID2,
+                "cantidad": 1,
+                "precio_unitario": 1,
+            }
+        },
+    ),
+    ("PATCH", f"/api/reservacion-productos/{RID}", {"json": {"cantidad": 2}}),
+    ("DELETE", f"/api/reservacion-productos/{RID}", {}),
+    ("GET", f"/api/pagos-reservacion/reservacion/{RID}", {}),
+    ("GET", f"/api/pagos-reservacion/{RID}", {}),
+    (
+        "POST",
+        "/api/pagos-reservacion",
+        {"json": {"reservacion_id": RID, "metodo_pago_id": RID2, "monto": 100}},
+    ),
+    (
+        "POST",
+        "/api/pagos-reservacion/completar",
+        {"json": {"reservacion_id": RID, "pagos": [{"metodo_pago_id": RID2, "monto": 100}]}},
+    ),
+    ("PATCH", f"/api/pagos-reservacion/{RID}", {"json": {"notas": "x"}}),
+    ("DELETE", f"/api/pagos-reservacion/{RID}", {}),
 ]
 
 

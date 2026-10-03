@@ -12,6 +12,7 @@ from app.schemas.reservacion_extras import (
     ReservacionExtrasOut,
     ReservacionExtrasUpdate,
 )
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/reservacion-extras", tags=["Reservación Extras"])
 
@@ -22,6 +23,7 @@ async def listar_por_reservacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> list[ReservacionExtrasOut]:
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
     return await svc.listar_por_reservacion(conn, reservacion_id, current_user)
 
 
@@ -29,8 +31,11 @@ async def listar_por_reservacion(
 async def obtener_reservacion_extra(
     reservacion_extra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> ReservacionExtrasOut:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_extra", reservacion_extra_id
+    )
     return await svc.obtener(conn, reservacion_extra_id)
 
 
@@ -38,8 +43,11 @@ async def obtener_reservacion_extra(
 async def crear_reservacion_extra(
     body: ReservacionExtrasCreate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> ReservacionExtrasOut:
+    # C1: la reservación y el extra deben ser de la sucursal de la sesión.
+    await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
+    await alcance_service.asegurar_recurso(conn, current_user, "extra", body.extra_id)
     return await svc.crear(conn, body)
 
 
@@ -48,8 +56,11 @@ async def actualizar_reservacion_extra(
     reservacion_extra_id: UUID,
     body: ReservacionExtrasUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> ReservacionExtrasOut:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_extra", reservacion_extra_id
+    )
     return await svc.actualizar(conn, reservacion_extra_id, body)
 
 
@@ -57,6 +68,9 @@ async def actualizar_reservacion_extra(
 async def eliminar_reservacion_extra(
     reservacion_extra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
+    current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> None:
+    await alcance_service.asegurar_recurso(
+        conn, current_user, "reservacion_extra", reservacion_extra_id
+    )
     await svc.eliminar(conn, reservacion_extra_id)
