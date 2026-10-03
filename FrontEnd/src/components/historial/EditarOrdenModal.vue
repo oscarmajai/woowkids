@@ -100,7 +100,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { obtenerDetalleOrden } from '@/services/historialService'
 import { mensajeDeError } from '@/utils/errorHandler'
-import { comandasApi } from '@/api/comandasApi'
+import { useCancelarComanda } from '@/composables/useCancelarComanda'
+import { modificarDetallesComanda } from '@/services/comandaService'
 import MotivoCancelacionDialog from './MotivoCancelacionDialog.vue'
 import type { DetalleOrden, DetalleProducto } from '@/api/historialApi'
 
@@ -123,6 +124,7 @@ const emit = defineEmits<{
 }>()
 
 const $q = useQuasar()
+const { cancelarComanda } = useCancelarComanda()
 const isLoading = ref(true)
 const guardando = ref(false)
 const orden = ref<DetalleOrden | null>(null)
@@ -305,11 +307,15 @@ async function ejecutarEliminacion(motivoCancelacion?: string) {
   try {
     const esCancelacionTotal = idsAEliminar.value.length === orden.value.detalles.length
 
-    await comandasApi.modificarDetalles(
-      props.comandaId,
-      idsAEliminar.value,
-      esCancelacionTotal ? motivoCancelacion : undefined,
-    )
+    if (esCancelacionTotal) {
+      // Quitar todo es cancelar la orden: va por el mismo flujo que "Cancelar
+      // orden" (revierte inventario y, si está pagada, pide el PIN de un
+      // administrador y registra la devolución en caja).
+      const cancelada = await cancelarComanda(props.comandaId, motivoCancelacion ?? '')
+      if (!cancelada) return
+    } else {
+      await modificarDetallesComanda(props.comandaId, idsAEliminar.value)
+    }
 
     $q.notify({
       type: 'positive',

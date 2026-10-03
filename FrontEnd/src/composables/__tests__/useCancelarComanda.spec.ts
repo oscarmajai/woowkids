@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { useCancelarComanda } from '../useCancelarComanda'
+import { cancelarComanda } from '@/services/comandaService'
+import { turnoParaAutorizacion } from '@/utils/autorizacionAdmin'
+import type { ApiError } from '@/types/auth'
+
+vi.mock('@/services/comandaService', () => ({ cancelarComanda: vi.fn() }))
+vi.mock('@/components/historial/AutorizacionAdminDialog.vue', () => ({ default: {} }))
+
+// Resultado que "elige" el usuario en el diálogo del PIN: un token o desistir.
+let respuestaDialogo: { token: string } | 'cancelar' = 'cancelar'
+const dialog = vi.fn(() => {
+  const encadenado = {
+    onOk(fn: (token: string) => void) {
+      if (respuestaDialogo !== 'cancelar') fn(respuestaDialogo.token)
+      return encadenado
+    },
+    onCancel(fn: () => void) {
+      if (respuestaDialogo === 'cancelar') fn()
+      return encadenado
+    },
+  }
+  return encadenado
+})
+vi.mock('quasar', () => ({ useQuasar: () => ({ dialog }) }))
+
+const mockCancelar = vi.mocked(cancelarComanda)
+
+const requiereAutorizacion: ApiError = {
+  statusCode: 403,
+  code: 'AUTORIZACION_ADMIN_REQUERIDA',
+  message: 'La orden ya está pagada: cancelarla requiere la autorización con PIN.',
+  details: { code: 'AUTORIZACION_ADMIN_REQUERIDA', turno_id: 'turno-1' },
+}
+
+describe('turnoParaAutorizacion', () => {
+  it('extrae el turno del 403 de autorización', () => {
+    expect(turnoParaAutorizacion(requiereAutorizacion)).toBe('turno-1')
+  })
+
+  it('ignora cualquier otro error', () => {
+    expect(turnoParaAutorizacion({ ...requiereAutorizacion, code: 'TURNO_NO_ABIERTO' })).toBe(null)
+    expect(turnoParaAutorizacion({ ...requiereAutorizacion, details: undefined })).toBe(null)
+    expect(turnoParaAutorizacion(new Error('x'))).toBe(null)
+    expect(turnoParaAutorizacion(null)).toBe(null)
+  })
+})
+
+describe('useCancelarComanda', () => {
+  beforeEach(() => {
+    mockCancelar.mockReset()
+    dialog.mockClear()
+    respuestaDialogo = 'cancelar'
+  })
+
+  it('cancela sin pedir PIN cuando la orden no está pagada', async () => {
+    mockCancelar.mockResolvedValueOnce()
+    const { cancelarComanda: cancelar } = useCancelarComanda()
+
+    await expect(cancelar('c1', 'Otro')).resolves.toBe(true)
+    expect(mockCancelar).toHaveBeenCalledWith('c1', 'Otro')
+    expect(dialog).not.toHaveBeenCalled()
+  })
+
+  it('pide el PIN del administrador y reintenta con el token', async () => {
+    mockCancelar.mockRejectedValueOnce(requiereAutorizacion).mockResolvedValueOnce()
+    respuestaDialogo = { token: 'tok-123' }
+    const { cancelarComanda: cancelar } = useCancelarComanda()
+
+    await expect(cancelar('c1', 'Otro')).resolves.toBe(true)
+    expect(dialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        componentProps: { turnoId: 'turno-1', mensaje: requiereAutorizacion.message },
+      }),
+    )
+    expect(mockCancelar).toHaveBeenLastCalledWith('c1', 'Otro', 'tok-123')
+  })
+
+  it('no cancela si el usuario cierra el diálogo del PIN', async () => {
+    mockCancelar.mockRejectedValueOnce(requiereAutorizacion)
+    const { cancelarComanda: cancelar } = useCancelarComanda()
+
+    await expect(cancelar('c1', 'Otro')).resolves.toBe(false)
+    expect(mockCancelar).toHaveBeenCalledTimes(1)
+  })
+
+  it('relanza los demás errores del servidor para mostrarlos', async () => {
+    const turnoCerrado: ApiError = {
+      statusCode: 409,
+      code: 'VENTA_DE_TURNO_CERRADO',
+      message: 'La orden se cobró en un turno de caja que ya se cerró.',
+    }
+    mockCancelar.mockRejectedValueOnce(turnoCerrado)
+    const { cancelarComanda: cancelar } = useCancelarComanda()
+
+    await expect(cancelar('c1', 'Otro')).rejects.toBe(turnoCerrado)
+    expect(dialog).not.toHaveBeenCalled()
+  })
+})
