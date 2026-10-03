@@ -1,5 +1,6 @@
 import { branchesApi } from '@/api/branchesApi'
 import { downloadBlob } from '@/utils/downloadBlob'
+import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
 import type {
   Branch,
   CreateBranchPayload,
@@ -40,7 +41,7 @@ export const branchService = {
     id: string,
     desde: string,
     hasta: string,
-    nombreArchivo = 'indicadores_sucursal.csv',
+    nombreArchivo = nombreArchivoIndicadores(null, desde, hasta),
   ): Promise<void> {
     const blob = await branchesApi.exportarIndicadores(id, desde, hasta)
     downloadBlob(blob, nombreArchivo)

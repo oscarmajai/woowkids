@@ -19,6 +19,7 @@ import { horarioService } from '@/services/horarioService'
 import { useAuthStore } from '@/stores/auth'
 import { rolTono } from '@/utils/rolTono'
 import { perteneceASucursal } from '@/utils/usuarios'
+import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
 import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 import { resolveErrorMessage } from '@/utils/errorHandler'
 import { DIAS_SEMANA } from '@/types/horario'
@@ -78,7 +79,12 @@ async function exportarIndicadores() {
   if (!id.value) return
   exportando.value = true
   try {
-    await branchService.exportarIndicadores(id.value, periodoDesde.value, periodoHasta.value)
+    await branchService.exportarIndicadores(
+      id.value,
+      periodoDesde.value,
+      periodoHasta.value,
+      nombreArchivoIndicadores(branch.value?.clave, periodoDesde.value, periodoHasta.value),
+    )
   } catch {
     Notify.create({ type: 'negative', message: 'Error al exportar los indicadores.' })
   } finally {
