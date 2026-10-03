@@ -46,12 +46,19 @@ class CompraEditar(BaseModel):
 
 class LineaRecepcion(BaseModel):
     detalle_id: UUID
-    cantidad: Decimal = Field(..., gt=0)
+    # 0 = esta línea no llegó en esta vuelta (A12: el cliente la manda explícita).
+    cantidad: Decimal = Field(..., ge=0)
 
 
 class RecibirCompraRequest(BaseModel):
     """Recepción parcial: qué líneas y cuánto de cada una llegó en esta vuelta.
-    Sin `lineas`, se recibe todo lo pendiente."""
+
+    - Sin `lineas` (campo ausente o null, body vacío): se recibe todo lo
+      pendiente de todas las líneas ("recibir completa").
+    - Con `lineas` (aunque sea una lista vacía): solo se recibe lo indicado; una
+      línea de la compra que no aparezca en la lista cuenta como 0 (A12). Una
+      cantidad mayor a lo pendiente, un `detalle_id` ajeno a la compra o
+      repetido responden 422 RECEPCION_INVALIDA (M23)."""
 
     lineas: list[LineaRecepcion] | None = None
 

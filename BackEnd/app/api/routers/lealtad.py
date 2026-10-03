@@ -13,6 +13,7 @@ from app.schemas.lealtad import (
     CELULAR_PATTERN,
     AjustePuntosRequest,
     ClienteLealtadOut,
+    ConfiguracionCanjeOut,
     ConfiguracionLealtadBase,
     ConfiguracionLealtadOut,
     MovimientoPuntoOut,
@@ -33,6 +34,22 @@ async def obtener_configuracion(
     current_user: TokenData = Depends(require_permission("lealtad:gestionar_configuracion")),
 ) -> ConfiguracionLealtadOut:
     return await svc.obtener_configuracion(conn, current_user, sucursal_id)
+
+
+@router.get(
+    "/configuracion/canje",
+    response_model=ConfiguracionCanjeOut,
+    summary="Valor del punto y mínimo de canje de la sucursal (solo lectura, para caja)",
+)
+async def obtener_configuracion_canje(
+    sucursal_id: UUID | None = Query(None),
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("lealtad:redimir")),
+) -> ConfiguracionCanjeOut:
+    """A6: el cajero tiene lealtad:redimir pero no lealtad:gestionar_configuracion,
+    así que GET /configuracion le respondía 403 y la caja no podía canjear.
+    Este endpoint solo expone lo que el cobro necesita y no permite modificar."""
+    return await svc.obtener_configuracion_canje(conn, current_user, sucursal_id)
 
 
 @router.put("/configuracion", response_model=ConfiguracionLealtadOut)

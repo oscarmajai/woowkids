@@ -4,8 +4,8 @@
 -- GENERADO por scripts/generar_schema_maestro.sh. NO editar a mano: agrega una
 -- migración en sql/migrations/ y vuelve a correr el script.
 --
--- Equivale a aplicar las 102 migraciones de sql/migrations/ en orden
--- (última: 080_devoluciones_comanda.sql).
+-- Equivale a aplicar las 105 migraciones de sql/migrations/ en orden
+-- (última: 089_usuarios_email_minusculas.sql).
 -- Incluye el esquema y los datos de catálogo que esas migraciones insertan
 -- (roles, permisos, etc.). No incluye datos de prueba: para eso está
 -- sql/seed_local.sql.
@@ -75,7 +75,8 @@ CREATE TYPE public.motivo_movimiento_inventario AS ENUM (
     'merma',
     'compra',
     'conteo_fisico',
-    'ajuste_fifo'
+    'ajuste_fifo',
+    'inventario_inicial'
 );
 
 
@@ -527,6 +528,39 @@ CREATE TABLE public.insumos (
     punto_reorden numeric(12,3),
     stock_maximo numeric(12,3)
 );
+
+
+--
+-- Name: intentos_pin_fallidos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.intentos_pin_fallidos (
+    id bigint NOT NULL,
+    usuario_id uuid NOT NULL,
+    sucursal_id uuid,
+    tipo character varying(20) NOT NULL,
+    intentado_por uuid,
+    creado timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: intentos_pin_fallidos_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.intentos_pin_fallidos_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: intentos_pin_fallidos_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.intentos_pin_fallidos_id_seq OWNED BY public.intentos_pin_fallidos.id;
 
 
 --
@@ -1323,6 +1357,13 @@ CREATE TABLE public.ws_tickets (
 
 
 --
+-- Name: intentos_pin_fallidos id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intentos_pin_fallidos ALTER COLUMN id SET DEFAULT nextval('public.intentos_pin_fallidos_id_seq'::regclass);
+
+
+--
 -- Name: movimientos_caja id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1508,6 +1549,14 @@ ALTER TABLE ONLY public.fotos
 
 ALTER TABLE ONLY public.insumos
     ADD CONSTRAINT insumos_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: intentos_pin_fallidos intentos_pin_fallidos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intentos_pin_fallidos
+    ADD CONSTRAINT intentos_pin_fallidos_pkey PRIMARY KEY (id);
 
 
 --
@@ -2041,6 +2090,13 @@ CREATE INDEX idx_insumos_sucursal ON public.insumos USING btree (sucursal_id);
 
 
 --
+-- Name: idx_intentos_pin_usuario_sucursal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_intentos_pin_usuario_sucursal ON public.intentos_pin_fallidos USING btree (usuario_id, sucursal_id, creado DESC);
+
+
+--
 -- Name: idx_lotes_puntos_celular_sucursal; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2262,6 +2318,13 @@ CREATE UNIQUE INDEX uq_productos_nombre_sucursal ON public.productos USING btree
 --
 
 CREATE UNIQUE INDEX uq_tipos_evento_nombre_sucursal ON public.tipos_evento USING btree (nombre, sucursal_id);
+
+
+--
+-- Name: uq_usuarios_email_lower; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_usuarios_email_lower ON public.usuarios USING btree (lower((email)::text));
 
 
 --
@@ -2789,6 +2852,30 @@ ALTER TABLE ONLY public.insumos
 
 ALTER TABLE ONLY public.insumos
     ADD CONSTRAINT insumos_unidad_compra_id_fkey FOREIGN KEY (unidad_compra_id) REFERENCES public.unidades_medida(id);
+
+
+--
+-- Name: intentos_pin_fallidos intentos_pin_fallidos_intentado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intentos_pin_fallidos
+    ADD CONSTRAINT intentos_pin_fallidos_intentado_por_fkey FOREIGN KEY (intentado_por) REFERENCES public.usuarios(id) ON DELETE SET NULL;
+
+
+--
+-- Name: intentos_pin_fallidos intentos_pin_fallidos_sucursal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intentos_pin_fallidos
+    ADD CONSTRAINT intentos_pin_fallidos_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursales(id) ON DELETE CASCADE;
+
+
+--
+-- Name: intentos_pin_fallidos intentos_pin_fallidos_usuario_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intentos_pin_fallidos
+    ADD CONSTRAINT intentos_pin_fallidos_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.usuarios(id) ON DELETE CASCADE;
 
 
 --
@@ -3609,11 +3696,11 @@ SET row_security = off;
 -- Data for Name: metodos_pago; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('755cfd15-7e77-4d39-ac99-f2c38457c2ba', 'Efectivo', NULL, '2026-10-03 10:30:35.626481+00', NULL, '2026-10-03 10:30:35.626481+00', NULL, 'E', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('545886c3-796d-4685-9b99-f9d7ab8ccc67', 'Otro', NULL, '2026-10-03 10:30:35.626481+00', NULL, '2026-10-03 10:30:35.626481+00', NULL, 'O', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('af66d45a-fd5e-44b0-a317-ac74ab6880fa', 'Cupones', NULL, '2026-10-03 10:30:35.626481+00', NULL, '2026-10-03 10:30:35.626481+00', NULL, 'C', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8260abe6-a8a5-41ca-adce-851597ee02a1', 'Lealtad', NULL, '2026-10-03 10:30:35.626481+00', NULL, '2026-10-03 10:30:35.626481+00', NULL, 'L', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('72647290-e038-48f2-9406-9fa29dd7f618', 'Tarjeta', NULL, '2026-10-03 10:30:35.626481+00', NULL, '2026-10-03 10:30:35.626481+00', NULL, 'T', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('ef250291-7aa4-4fe8-a73d-43ac5930e7eb', 'Efectivo', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'E', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('c0dff070-62c6-47a7-b3ac-7518285c2cda', 'Otro', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'O', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('6b2e18d6-2fac-4442-bc2d-b2ded5832543', 'Cupones', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'C', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('cfeb5b29-d4ef-4728-ac14-9f65ad5713e9', 'Lealtad', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'L', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8963ca17-95ad-4803-b5bb-bb239c664b68', 'Tarjeta', NULL, '2026-10-03 14:01:19.20355+00', NULL, '2026-10-03 14:01:19.20355+00', NULL, 'T', NULL, false);
 
 
 --
@@ -3969,27 +4056,27 @@ INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (3, 123);
 -- Data for Name: usuarios; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 10:30:35.122959+00', NULL, '2026-10-03 10:30:35.122959+00', NULL, 1, NULL, NULL, NULL, NULL);
+INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 14:01:18.631823+00', NULL, '2026-10-03 14:01:18.631823+00', NULL, 1, NULL, NULL, NULL, NULL);
 
 
 --
 -- Data for Name: turnos; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('23a97d17-91b6-4d84-adcd-2fd0f13db180', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 10:30:34.093727+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('1d9e5015-b2af-4ac8-bccb-6823e2f155cf', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 10:30:34.093727+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('618b40c8-5494-437f-a711-bc6367e81a87', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 10:30:34.093727+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('fd419fb4-53f4-449e-ae6c-58bce5eef2a7', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('c485521b-85e9-4cc9-8447-be23d2dd5c55', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('f6d73dfb-727c-4146-962b-d350c8eea09e', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 14:01:17.502207+00', NULL, NULL, NULL, true, NULL);
 
 
 --
 -- Data for Name: unidades_medida; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('6eebd040-53e9-4d97-937f-fa61eb2cd341', 'g', 'Gramo', 'masa', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('37f85285-e003-4642-a6b0-8f8d07e6f2c9', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('6d8876d0-6420-4ad5-a81c-505234d0af7e', 'ml', 'Mililitro', 'volumen', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('f047048c-2e39-415d-bbdb-bfc77439d3d3', 'l', 'Litro', 'volumen', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c398a334-f98f-4b20-b6c6-a8641de2bd1e', 'pza', 'Pieza', 'pieza', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c4790b7d-c72a-40ea-a8c9-220dc55082e7', 'g', 'Gramo', 'masa', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c65cff90-9bb4-4852-82a2-ffa802df9188', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('630502b4-7ac0-4591-adc4-8f9b61ffef0a', 'ml', 'Mililitro', 'volumen', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('f1b9864a-d7ac-4906-892d-0e9ba79f0d7c', 'l', 'Litro', 'volumen', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('5f698b0b-ae93-4f99-afdf-842ac5c20ac3', 'pza', 'Pieza', 'pieza', 1.000000, true);
 
 
 --

@@ -413,6 +413,26 @@ async def get_apertura_por_id(conn: asyncpg.Connection, apertura_id: str) -> dic
     return dict(row) if row else None
 
 
+async def get_dueno_y_sucursal_apertura(
+    conn: asyncpg.Connection, apertura_id: str
+) -> dict[str, Any] | None:
+    """Cajero dueño y sucursal de una apertura, sin bloqueo: solo para decidir
+    quién puede operarla antes de validar credenciales (A15/A16)."""
+    apertura_uuid = _uuid_o_none(apertura_id)
+    if apertura_uuid is None:
+        return None
+    row = await conn.fetchrow(
+        """
+        SELECT a.id, a.cajero_id, c.sucursal_id
+        FROM public.apertura_caja a
+        INNER JOIN public.cajas c ON a.caja_id = c.id
+        WHERE a.id = $1
+        """,
+        apertura_uuid,
+    )
+    return dict(row) if row else None
+
+
 async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[str, Any] | None:
     """Igual que get_apertura_por_id, pero bloquea la fila de apertura_caja hasta
     el fin de la transacción en curso (el llamador DEBE estar dentro de

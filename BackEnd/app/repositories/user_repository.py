@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import UUID
 
 import asyncpg
@@ -66,11 +66,17 @@ _SELECT = f"""
 """
 
 
+def normalizar_email(email: str) -> str:
+    """M1: los correos no distinguen mayúsculas ni espacios alrededor. Se
+    guardan y se buscan siempre así (índice único sobre lower(email), 089)."""
+    return email.strip().lower()
+
+
 async def get_usuario_by_email(conn: asyncpg.Connection, email: str) -> UsuarioRecord | None:
     """Devuelve el usuario activo por email para el flujo de login."""
     row = await conn.fetchrow(
-        _SELECT + "WHERE u.email = $1 AND u.activo = TRUE LIMIT 1",
-        email,
+        _SELECT + "WHERE lower(u.email) = $1 AND u.activo = TRUE LIMIT 1",
+        normalizar_email(email),
     )
     return _row_to_record(row) if row else None
 
@@ -83,21 +89,45 @@ async def get_usuario_by_id(conn: asyncpg.Connection, user_id: UUID) -> UsuarioR
     return _row_to_record(row) if row else None
 
 
-async def get_all_usuarios(conn: asyncpg.Connection) -> list[UsuarioRecord]:
-    rows = await conn.fetch(_SELECT + "WHERE u.activo = TRUE ORDER BY u.creado DESC")
+# A10: filtro de estado del listado. None = todos (activos e inactivos).
+_FILTRO_ACTIVO_SQL = "($1::boolean IS NULL OR u.activo = $1)"
+
+
+async def get_all_usuarios(
+    conn: asyncpg.Connection, activo: bool | None = True
+) -> list[UsuarioRecord]:
+    rows = await conn.fetch(
+        _SELECT + f"WHERE {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
+    )
     return [_row_to_record(r) for r in rows]
 
 
-async def get_usuarios_by_branch(conn: asyncpg.Connection, branch_id: UUID) -> list[UsuarioRecord]:
+async def get_usuarios_by_branch(
+    conn: asyncpg.Connection, branch_id: UUID, activo: bool | None = True
+) -> list[UsuarioRecord]:
     rows = await conn.fetch(
-        _SELECT + "WHERE us.sucursal_id = $1 AND u.activo = TRUE ORDER BY u.creado DESC",
+        _SELECT + f"WHERE us.sucursal_id = $2 AND {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
         branch_id,
     )
     return [_row_to_record(r) for r in rows]
 
 
-async def email_exists(conn: asyncpg.Connection, email: str) -> bool:
-    row = await conn.fetchrow("SELECT id FROM public.usuarios WHERE email = $1", email)
+async def email_exists(
+    conn: asyncpg.Connection, email: str, excluir_id: UUID | None = None
+) -> bool:
+    """M1: compara sin distinguir mayúsculas e incluye usuarios inactivos (el
+    correo sigue siendo de esa cuenta, que se puede reactivar)."""
+    row = await conn.fetchrow(
+        """
+        SELECT id FROM public.usuarios
+        WHERE lower(email) = $1 AND ($2::uuid IS NULL OR id <> $2)
+        LIMIT 1
+        """,
+        normalizar_email(email),
+        excluir_id,
+    )
     return row is not None
 
 
@@ -119,7 +149,7 @@ async def create_usuario(
         VALUES ($1, $2, $3, $4, $5, (SELECT id FROM public.roles WHERE nombre = $6), $7, $8)
         RETURNING id
         """,
-        email,
+        normalizar_email(email),
         password_hash,
         nombre_completo,
         apellidos,
@@ -157,7 +187,7 @@ async def update_usuario(
             modificado      = NOW(),
             modificado_por  = $8,
             pin_hash        = COALESCE($10, pin_hash)
-        WHERE id = $9 AND activo = TRUE
+        WHERE id = $9
         """,
         email,
         nombre_completo,
@@ -320,3 +350,42 @@ async def get_usuario_administrador_by_id(
         usuario_id,
     )
     return UUID(str(row["id"])) if row else None
+
+
+async def get_autorizador_por_email(
+    conn: asyncpg.Connection, email: str, sucursal_id: UUID | str | None, permiso: str
+) -> dict[str, Any] | None:
+    """Usuario activo por correo con lo necesario para decidir si puede
+    autorizar en una sucursal (A16): si su rol tiene ``permiso`` y si está
+    asignado (activo) a ``sucursal_id``."""
+    sucursal_uuid = UUID(str(sucursal_id)) if sucursal_id else None
+    row = await conn.fetchrow(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.pin_hash,
+            u.password_hash,
+            u.nombre_completo,
+            r.nombre AS rol,
+            EXISTS (
+                SELECT 1
+                FROM public.rol_permisos rp
+                JOIN public.permisos p ON p.id = rp.permiso_id
+                WHERE rp.rol_id = u.rol AND p.codigo = $3
+            ) AS tiene_permiso,
+            EXISTS (
+                SELECT 1
+                FROM public.usuarios_sucursal us
+                WHERE us.usuario_id = u.id AND us.activo = TRUE AND us.sucursal_id = $2
+            ) AS en_sucursal
+        FROM public.usuarios u
+        JOIN public.roles r ON r.id = u.rol
+        WHERE lower(u.email) = lower(btrim($1)) AND u.activo = TRUE
+        LIMIT 1
+        """,
+        email,
+        sucursal_uuid,
+        permiso,
+    )
+    return dict(row) if row else None

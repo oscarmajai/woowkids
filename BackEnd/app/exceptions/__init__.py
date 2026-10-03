@@ -118,3 +118,16 @@ class PedidoInvalidoError(HTTPException):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": code, "message": mensaje},
         )
+
+
+class RecepcionInvalidaError(HTTPException):
+    """La recepción de una compra no se puede aplicar tal como viene: una línea
+    excede lo pendiente, no pertenece a la compra, viene repetida o no trae nada
+    que recibir (A12, M23). `linea` lleva el detalle de la línea culpable para
+    que el cliente la señale."""
+
+    def __init__(self, mensaje: str, linea: dict[str, str] | None = None) -> None:
+        detail: dict[str, object] = {"code": "RECEPCION_INVALIDA", "message": mensaje}
+        if linea is not None:
+            detail["linea"] = linea
+        super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)

@@ -248,6 +248,16 @@ async def deactivate_sucursal(
     return str(result) == "UPDATE 1"
 
 
+# Días [$2, $3] de la sucursal $1 como instantes: del inicio de $2 al inicio
+# del día siguiente a $3, en su zona horaria.
+_RANGO_LOCAL = """
+    SELECT ($2::date::timestamp AT TIME ZONE s.zona_horaria)       AS inicio,
+           (($3::date + 1)::timestamp AT TIME ZONE s.zona_horaria) AS fin
+    FROM public.sucursales s
+    WHERE s.id = $1
+"""
+
+
 class IndicadoresSucursal(TypedDict):
     ventas: Decimal
     ninos_atendidos: int
@@ -263,7 +273,14 @@ async def get_indicadores_sucursal(
 ) -> IndicadoresSucursal:
     """Indicadores de solo lectura sobre tablas ya existentes.
 
-    - ventas: comandas cobradas (estado_actual = 'T', entregado) en el rango.
+    `desde` y `hasta` son días completos en la zona horaria de la sucursal
+    (M4: antes se comparaba la fecha UTC y lo vendido después de las 18:00 de
+    México caía en el día siguiente).
+
+    - ventas: lo cobrado en el rango, de todas las fuentes (comandas,
+      estancias y eventos), neto del cambio entregado; sin comandas canceladas
+      (`estado_actual = 'C'` o `activo = FALSE`) ni reservaciones canceladas
+      (M5/A3). Cuenta el día de cada pago, no el de la orden.
     - ninos_atendidos: niños distintos con un detalle de registro cuya
       entrada cae en el rango.
     - eventos: reservaciones activas, no canceladas, con fecha_evento en el
@@ -272,24 +289,65 @@ async def get_indicadores_sucursal(
       cajas de la sucursal tienen un turno abierto ahora mismo.
     """
     ventas = await conn.fetchval(
-        """
-        SELECT COALESCE(SUM(total_final), 0)
-        FROM public.comandas
-        WHERE sucursal_id = $1
-          AND estado_actual = 'T'
-          AND fecha_hora::date BETWEEN $2 AND $3
+        f"""
+        WITH rango AS ({_RANGO_LOCAL}),
+        cobros AS (
+            SELECT po.comanda_id AS referencia_id, po.monto
+            FROM public.pagos_ordenes po
+            JOIN public.comandas c ON c.id = po.comanda_id
+            CROSS JOIN rango
+            WHERE po.sucursal_id = $1
+              AND c.activo AND c.estado_actual <> 'C'
+              AND po.creado >= rango.inicio AND po.creado < rango.fin
+            UNION ALL
+            SELECT pe.registros_id, pe.monto
+            FROM public.pagos_estancia pe
+            CROSS JOIN rango
+            WHERE pe.sucursal_id = $1
+              AND pe.creado >= rango.inicio AND pe.creado < rango.fin
+            UNION ALL
+            SELECT pr.reservacion_id, pr.monto
+            FROM public.pagos_reservacion pr
+            JOIN public.reservaciones r ON r.id = pr.reservacion_id
+            CROSS JOIN rango
+            WHERE r.sucursal_id = $1
+              AND r.estado <> 'cancelada'
+              AND pr.fecha_pago >= rango.inicio AND pr.fecha_pago < rango.fin
+        ),
+        -- Cambio entregado en efectivo (movimiento de caja 'C', referenciado a
+        -- la orden), solo de órdenes que cuentan como venta.
+        cambios AS (
+            SELECT mc.monto
+            FROM public.movimientos_caja mc
+            CROSS JOIN rango
+            WHERE mc.tipo_movimiento = 'C'
+              AND mc.creado >= rango.inicio AND mc.creado < rango.fin
+              AND mc.referencia_id IN (
+                  SELECT c.id FROM public.comandas c
+                  WHERE c.sucursal_id = $1 AND c.activo AND c.estado_actual <> 'C'
+                  UNION ALL
+                  SELECT g.id FROM public.registros g WHERE g.sucursal_id = $1
+                  UNION ALL
+                  SELECT r.id FROM public.reservaciones r
+                  WHERE r.sucursal_id = $1 AND r.estado <> 'cancelada'
+              )
+        )
+        SELECT COALESCE((SELECT SUM(monto) FROM cobros), 0)
+             - COALESCE((SELECT SUM(monto) FROM cambios), 0)
         """,
         sucursal_id,
         desde,
         hasta,
     )
     ninos_atendidos = await conn.fetchval(
-        """
+        f"""
+        WITH rango AS ({_RANGO_LOCAL})
         SELECT COUNT(DISTINCT dr.ninos_id)
         FROM public.detalles_registro dr
+        CROSS JOIN rango
         WHERE dr.sucursal_id = $1
           AND dr.activo = TRUE
-          AND dr.entrada::date BETWEEN $2 AND $3
+          AND dr.entrada >= rango.inicio AND dr.entrada < rango.fin
         """,
         sucursal_id,
         desde,

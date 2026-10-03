@@ -14,6 +14,17 @@ export interface ConfiguracionLealtad {
   modificado_por?: string | null
 }
 
+/**
+ * Lo que la caja necesita para canjear puntos (GET /lealtad/configuracion/canje).
+ * Lo puede leer quien tiene `lealtad:redimir`, sin el permiso de configurar.
+ */
+export interface ConfiguracionCanje {
+  sucursal_id: string
+  activo: boolean
+  valor_punto: number
+  minimo_canje: number
+}
+
 export interface ConfiguracionLealtadInput {
   porcentaje_retorno: number
   dias_caducidad: number

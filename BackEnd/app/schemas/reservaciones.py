@@ -68,6 +68,10 @@ class ReservacionesUpdate(BaseModel):
     # aquí; si llegan, se ignoran.
     precio_personas_extra: Decimal | None = None
     precio_total: Decimal | None = None
+    # Solo cambia por la máquina de estados (409 si la transición no procede):
+    # nada sale de cancelada ni de completada, y completar exige que el evento
+    # ya haya empezado y no tenga saldo (A8/N12). Para cerrar el evento usar
+    # POST /reservaciones/{id}/cerrar, que conserva las notas.
     estado: Literal["pendiente", "confirmada", "en_curso", "completada", "cancelada"] | None = None
     notas: str | None = None
     activo: bool | None = None
@@ -79,6 +83,13 @@ class ReservacionesUpdate(BaseModel):
         if self.hora_fin <= self.hora_inicio:
             raise ValueError("hora_fin debe ser mayor a hora_inicio")
         return self
+
+
+class ReservacionCerrar(BaseModel):
+    """Cierre del evento. `notas_cierre` se agrega a las notas existentes de la
+    reservación; no las reemplaza (A8)."""
+
+    notas_cierre: str | None = Field(None, max_length=2000)
 
 
 class ReservacionesOut(ReservacionesBase):

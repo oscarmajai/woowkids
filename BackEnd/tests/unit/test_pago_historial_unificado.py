@@ -38,7 +38,7 @@ def test_select_estadisticas_reusa_el_union_y_excluye_canceladas():
     sql = pago_repository._SELECT_ESTADISTICAS
     assert "pagos_estancia" in sql
     assert "pagos_reservacion" in sql
-    assert "NOT v.es_cancelado" in sql
+    assert "HAVING NOT bool_or(v.es_cancelado)" in sql
 
 
 @pytest.mark.asyncio

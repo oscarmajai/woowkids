@@ -9,9 +9,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
 from app.core.database import get_db as get_db
-from app.core.roles import ROL_SISTEMA
+from app.core.roles import ROL_PADRE, ROL_SISTEMA
 from app.core.security import decode_access_token
-from app.repositories.token_repository import is_token_revoked
+from app.repositories.token_repository import get_estado_sesion
 from app.schemas.auth import TokenData
 
 _bearer = HTTPBearer()
@@ -25,6 +25,18 @@ _FORBIDDEN = HTTPException(
 _INVALID_TOKEN = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail={"code": "INVALID_TOKEN", "message": "Token inválido o expirado."},
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+# A11: el token es válido, pero la cuenta se desactivó o se eliminó después
+# del login. 401 para que el front intente renovar (también falla) y cierre
+# la sesión.
+_CUENTA_INACTIVA = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail={
+        "code": "ACCOUNT_DISABLED",
+        "message": "Tu cuenta está desactivada o ya no existe. Contacta al administrador.",
+    },
     headers={"WWW-Authenticate": "Bearer"},
 )
 
@@ -64,13 +76,22 @@ async def _resolve_token_data(token: str, conn: asyncpg.Connection) -> TokenData
         # Una caída/latencia de la conexión a BD (ej. Tailscale) no es lo mismo que un
         # token inválido — antes ambos casos se reportaban igual como 401, lo cual
         # confundía al usuario haciéndolo pensar en un problema de validación de datos.
+        # A11: además de la lista de revocados, el usuario debe seguir
+        # existiendo y activo (antes solo /auth/me lo revisaba y un empleado
+        # dado de baja conservaba acceso hasta que caducara el token). Es la
+        # misma consulta por petición de antes, ahora con las dos cosas. La
+        # sesión del portal de padres no es un usuario (su sub es el registro
+        # de estancia, que padres_service valida aparte).
+        usuario_id = None if role == ROL_PADRE else UUID(sub)
         try:
-            revocado = await is_token_revoked(conn, jti)
+            revocado, usuario_activo = await get_estado_sesion(conn, jti, usuario_id)
         except (asyncpg.PostgresError, OSError) as exc:
             raise _SERVICE_UNAVAILABLE from exc
 
         if revocado:
             raise _INVALID_TOKEN from None
+        if not usuario_activo:
+            raise _CUENTA_INACTIVA from None
 
         exp_dt = datetime.fromtimestamp(float(exp), tz=UTC) if exp is not None else None  # type: ignore[arg-type]
 

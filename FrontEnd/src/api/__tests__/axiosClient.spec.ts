@@ -156,6 +156,54 @@ describe('axiosClient interceptor', () => {
     expect(tokenMemory.get()).toBe('tok')
   })
 
+  // A5: un PIN mal escrito al abrir caja refrescaba el token, reenviaba el
+  // PIN equivocado y cerraba la sesión.
+  it.each([401, 403])(
+    'un PIN incorrecto al abrir caja (%i) no refresca, no reenvía ni cierra sesión',
+    async (status) => {
+      let apiCalls = 0
+      apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) => {
+        apiCalls++
+        return fail(config, status, {
+          detail: { code: 'PIN_INVALIDO', message: 'El PIN ingresado es incorrecto.' },
+        })
+      }) as AxiosAdapter
+      setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
+      const onUnauthorized = vi.fn()
+      window.addEventListener('auth:unauthorized', onUnauthorized)
+
+      const err = (await apiClient
+        .post('/api/turnos-caja/abrir', { pin: '1111' })
+        .catch((e: ApiError) => e)) as ApiError
+
+      expect(err.statusCode).toBe(status)
+      expect(err.code).toBe('PIN_INVALIDO')
+      expect(err.message).toBe('El PIN ingresado es incorrecto.')
+      expect(apiCalls).toBe(1)
+      expect(refreshCalls).toBe(0)
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      expect(localStorage.getItem('auth_session')).not.toBeNull()
+      window.removeEventListener('auth:unauthorized', onUnauthorized)
+    },
+  )
+
+  it('un 429 por demasiados intentos de PIN no toca la sesión', async () => {
+    apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) =>
+      fail(config, 429, {
+        detail: { code: 'PIN_BLOQUEADO', message: 'Demasiados intentos fallidos de PIN.' },
+      })) as AxiosAdapter
+    setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
+
+    const err = (await apiClient
+      .post('/api/turnos-caja/validar-pin-admin', {})
+      .catch((e: ApiError) => e)) as ApiError
+
+    expect(err.statusCode).toBe(429)
+    expect(err.code).toBe('PIN_BLOQUEADO')
+    expect(refreshCalls).toBe(0)
+    expect(localStorage.getItem('auth_session')).not.toBeNull()
+  })
+
   it('C3: el access token nunca se persiste en localStorage', async () => {
     setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
 

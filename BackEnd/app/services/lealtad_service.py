@@ -11,6 +11,7 @@ from app.repositories import lealtad_repository
 from app.schemas.auth import TokenData
 from app.schemas.lealtad import (
     ClienteLealtadOut,
+    ConfiguracionCanjeOut,
     ConfiguracionLealtadBase,
     ConfiguracionLealtadOut,
     MovimientoPuntoOut,
@@ -37,6 +38,20 @@ async def obtener_configuracion(
     if not row:
         raise NoEncontrado("Configuración de lealtad")
     return ConfiguracionLealtadOut.model_validate(row)
+
+
+async def obtener_configuracion_canje(
+    conn: asyncpg.Connection, current_user: TokenData, sucursal_id: UUID | None
+) -> ConfiguracionCanjeOut:
+    """A6: versión de solo lectura y acotada de la configuración, para que
+    quien cobra (lealtad:redimir) sepa el valor del punto y el mínimo de canje
+    de SU sucursal sin el permiso de configurar el programa. Mismo alcance
+    por sucursal (C1) que obtener_configuracion."""
+    scope = resolver_sucursal(current_user, sucursal_id)
+    row = await lealtad_repository.obtener_configuracion(conn, scope)
+    if not row:
+        raise NoEncontrado("Configuración de lealtad")
+    return ConfiguracionCanjeOut.model_validate(row)
 
 
 async def actualizar_configuracion(

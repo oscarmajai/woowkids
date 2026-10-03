@@ -17,7 +17,7 @@ import asyncpg
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.core.security import verify_password
+from app.core.scope import es_sistema
 from app.core.utils import get_mexico_now
 from app.exceptions import PinTokenRequeridoError
 from app.repositories import devolucion_repository, pin_token_repository
@@ -37,6 +37,7 @@ from app.repositories.caja_repository import (
     get_apertura_por_id,
     get_caja_por_codigo,
     get_caja_por_id,
+    get_dueno_y_sucursal_apertura,
     listar_cajas_por_sucursal,
     listar_cambios_por_apertura,
     listar_historial_cierres,
@@ -58,6 +59,7 @@ from app.repositories.caja_repository import (
     sumar_ventas_efectivo_apertura,
 )
 from app.repositories.user_repository import get_usuario_by_id
+from app.schemas.auth import TokenData
 from app.schemas.caja import (
     AbrirTurnoPayload,
     ArqueoResumen,
@@ -84,6 +86,13 @@ from app.schemas.caja import (
     RevisionAdminResponse,
     TurnoActivoResponse,
     TurnoResponse,
+)
+from app.services import pin_caja_service
+from app.services.permission_service import has_permission
+from app.services.pin_caja_service import (
+    PERMISO_AUTORIZAR_CIERRE,
+    PERMISO_REVISION_ARQUEO,
+    PinInvalidoError,
 )
 
 
@@ -120,12 +129,66 @@ class EfectivoInsuficienteError(HTTPException):
         )
 
 
-class CredencialesAdminInvalidasError(HTTPException):
+class CredencialesAdminInvalidasError(PinInvalidoError):
+    """A5: 403 (no 401) para que el front no lo confunda con la sesión vencida."""
+
     def __init__(self, mensaje: str = "Credenciales de administrador incorrectas."):
+        super().__init__(mensaje, code="CREDENCIALES_INVALIDAS")
+
+
+class TurnoAjenoError(HTTPException):
+    def __init__(self) -> None:
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "CREDENCIALES_INVALIDAS", "message": mensaje},
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "TURNO_AJENO",
+                "message": (
+                    "Este turno pertenece a otro cajero. Solo él o un administrador "
+                    "de la sucursal pueden operarlo."
+                ),
+            },
         )
+
+
+class TurnoYaAbiertoError(HTTPException):
+    def __init__(self, terminal: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "TURNO_YA_ABIERTO",
+                "message": (
+                    f"Ya tienes un turno abierto en {terminal}. Ciérralo antes de abrir otro."
+                ),
+            },
+        )
+
+
+class CajaOcupadaError(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "CAJA_OCUPADA",
+                "message": "La caja física seleccionada ya cuenta con un turno activo.",
+            },
+        )
+
+
+def _asegurar_dueno_o_autorizador(
+    apertura: dict[str, Any], user_id: str, solicitante: TokenData | None
+) -> None:
+    """A15: solo el cajero dueño del turno, o quien puede autorizar cierres
+    (permiso turnos_caja:confirmar) en la sucursal del turno, opera sobre él.
+    Sin ``solicitante`` (llamadas internas) solo pasa el dueño."""
+    if str(apertura["cajero_id"]) == str(user_id):
+        return
+    if solicitante is not None and has_permission(solicitante.role, PERMISO_AUTORIZAR_CIERRE):
+        if es_sistema(solicitante):
+            return
+        sucursal = apertura.get("sucursal_id")
+        if solicitante.branch_id and sucursal and str(solicitante.branch_id) == str(sucursal):
+            return
+    raise TurnoAjenoError()
 
 
 class SucursalNoAutorizadaError(HTTPException):
@@ -174,26 +237,30 @@ async def abrir_turno(
     branch_id: str | None,
     payload: AbrirTurnoPayload,
 ) -> TurnoActivoResponse:
+    """Abre el turno del cajero autenticado.
+
+    B15: el PIN se valida SIEMPRE, antes de mirar si ya hay un turno abierto.
+    Si el cajero ya tiene uno abierto:
+    - en otra sucursal → 409 TURNO_ACTIVO_OTRA_SUCURSAL;
+    - con la misma caja, turno horario y fondo (reintento de la misma apertura,
+      p. ej. tras un timeout o un doble clic) → se devuelve el existente;
+    - con otros datos → 409 TURNO_YA_ABIERTO (antes devolvía 201 con el
+      existente, ignorando la caja y el fondo pedidos).
+    N2: dos aperturas simultáneas chocaban con los índices únicos
+    (uq_apertura_cajero_activo / uq_apertura_caja_activa) y daban 500; ahora
+    se resuelven con la misma regla (existente o 409)."""
     sucursal = branch_id or payload.sucursal_id
+    if not sucursal:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "SUCURSAL_REQUERIDA",
+                "message": "Debes especificar la sucursal en la que se abrirá la caja.",
+            },
+        )
 
-    # 1. Verificar si el usuario ya tiene turno activo (RN-APE-001)
-    activa = await get_apertura_activa_por_usuario(conn, user_id)
-    if activa:
-        if sucursal and str(activa["sucursal_id"]) != str(sucursal):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "TURNO_ACTIVO_OTRA_SUCURSAL",
-                    "message": (
-                        f"Ya tienes un turno abierto en {activa['sucursal_nombre']}. "
-                        "Ciérralo antes de abrir uno en otra sucursal."
-                    ),
-                },
-            )
-        return await obtener_turno_activo(conn, user_id, sucursal)
-
-    # C1: el cajero que abre el turno debe validar su PIN (o su contraseña,
-    # mientras no tenga PIN configurado), igual que ya se exige en el cierre.
+    # C1/A16: el cajero valida su PIN (o su contraseña solo si aún no tiene PIN),
+    # con límite de intentos.
     if not payload.pin:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -204,22 +271,20 @@ async def abrir_turno(
         )
     cajero_row = await get_usuario_by_id(conn, uuid.UUID(str(user_id)))
     if not cajero_row:
-        raise CredencialesAdminInvalidasError("Usuario no encontrado.")
-    cajero_pin_hash = cajero_row["pin_hash"]
-    pin_ok = verify_password(payload.pin, cajero_pin_hash) if cajero_pin_hash else False
-    if not pin_ok:
-        pin_ok = verify_password(payload.pin, cajero_row["password_hash"])
-    if not pin_ok:
-        raise CredencialesAdminInvalidasError("El PIN ingresado es incorrecto.")
+        raise PinInvalidoError("Usuario no encontrado.")
+    pin = payload.pin
+    await pin_caja_service.verificar_con_limite(
+        conn,
+        usuario_id=user_id,
+        sucursal_id=sucursal,
+        tipo="apertura",
+        verificar=lambda: pin_caja_service.credencial_valida(
+            pin, cajero_row["pin_hash"], cajero_row["password_hash"]
+        ),
+        error=PinInvalidoError("El PIN ingresado es incorrecto."),
+        intentado_por=user_id,
+    )
 
-    if not sucursal:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "SUCURSAL_REQUERIDA",
-                "message": "Debes especificar la sucursal en la que se abrirá la caja.",
-            },
-        )
     if not payload.caja_id and not payload.terminal:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -248,17 +313,6 @@ async def abrir_turno(
 
     caja_id = str(caja["id"])
 
-    # Verificar si la caja física ya tiene un turno abierto (RN-APE-002)
-    caja_activa = await get_apertura_activa_por_caja(conn, caja_id)
-    if caja_activa:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "CAJA_OCUPADA",
-                "message": "La caja física seleccionada ya cuenta con un turno activo.",
-            },
-        )
-
     if not payload.turno_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -266,15 +320,41 @@ async def abrir_turno(
         )
     turno_id = payload.turno_id
 
-    # Crear la apertura
-    nueva = await crear_apertura_caja(
-        conn,
-        caja_id=caja_id,
-        cajero_id=user_id,
-        turno_id=turno_id,
-        fondo_inicial=payload.fondo_inicial,
-        creado_por=user_id,
-    )
+    # RN-APE-001: un turno activo por cajero.
+    activa = await get_apertura_activa_por_usuario(conn, user_id)
+    if activa:
+        return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
+
+    # RN-APE-002: un turno activo por caja física. Si quien la ocupa es este
+    # mismo cajero (otra petición suya ganó entre las dos lecturas), se aplica
+    # la regla del turno existente.
+    if await get_apertura_activa_por_caja(conn, caja_id):
+        activa = await get_apertura_activa_por_usuario(conn, user_id)
+        if activa:
+            return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
+        raise CajaOcupadaError()
+
+    try:
+        nueva = await crear_apertura_caja(
+            conn,
+            caja_id=caja_id,
+            cajero_id=user_id,
+            turno_id=turno_id,
+            fondo_inicial=payload.fondo_inicial,
+            creado_por=user_id,
+        )
+    except asyncpg.UniqueViolationError as exc:
+        # N2: otra petición abrió entre la verificación y el INSERT. Si fue
+        # del mismo cajero (cualquiera de los dos índices puede saltar
+        # primero), se aplica la regla del turno existente.
+        if exc.constraint_name not in ("uq_apertura_cajero_activo", "uq_apertura_caja_activa"):
+            raise
+        activa = await get_apertura_activa_por_usuario(conn, user_id)
+        if activa:
+            return await _turno_existente(conn, user_id, sucursal, caja_id, payload, activa)
+        if exc.constraint_name == "uq_apertura_caja_activa":
+            raise CajaOcupadaError() from exc
+        raise TurnoYaAbiertoError(payload.terminal or "otra caja") from exc
 
     return TurnoActivoResponse(
         id=str(nueva["id"]),
@@ -291,6 +371,37 @@ async def abrir_turno(
         total_ingresos=Decimal("0"),
         movimientos=[],
     )
+
+
+async def _turno_existente(
+    conn: asyncpg.Connection,
+    user_id: str,
+    sucursal: str,
+    caja_id: str,
+    payload: AbrirTurnoPayload,
+    activa: dict[str, Any],
+) -> TurnoActivoResponse:
+    """B15: con turno ya abierto, solo se devuelve si la petición es la misma
+    apertura (misma caja, turno horario y fondo); si no, 409."""
+    if str(activa["sucursal_id"]) != str(sucursal):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "TURNO_ACTIVO_OTRA_SUCURSAL",
+                "message": (
+                    f"Ya tienes un turno abierto en {activa['sucursal_nombre']}. "
+                    "Ciérralo antes de abrir uno en otra sucursal."
+                ),
+            },
+        )
+    misma_apertura = (
+        str(activa["caja_id"]) == caja_id
+        and str(activa["turno_id"]) == str(payload.turno_id)
+        and Decimal(str(activa["fondo_inicial"])) == Decimal(str(payload.fondo_inicial))
+    )
+    if not misma_apertura:
+        raise TurnoYaAbiertoError(str(activa["terminal"]))
+    return await obtener_turno_activo(conn, user_id, sucursal)
 
 
 async def obtener_turno_activo(
@@ -525,39 +636,60 @@ async def _calcular_balance(
 
 
 async def _verificar_credenciales_usuario(
-    conn: asyncpg.Connection, email: str, password: str
-) -> asyncpg.Record:
-    """Busca el usuario por email y verifica su contraseña o PIN contra la BD.
-    Lanza CredencialesAdminInvalidasError si no existe o las credenciales son incorrectas."""
-    row = await conn.fetchrow(
-        """
-        SELECT u.id, u.email, u.password_hash, u.pin_hash, u.nombre_completo, us.sucursal_id
-        FROM public.usuarios u
-        LEFT JOIN public.usuarios_sucursal us ON us.usuario_id = u.id AND us.activo = TRUE
-        WHERE u.email = $1 AND u.activo = TRUE
-        LIMIT 1
-        """,
-        email,
+    conn: asyncpg.Connection,
+    email: str,
+    password: str,
+    sucursal_id: str | None = None,
+    *,
+    intentado_por: str | None = None,
+) -> dict[str, Any]:
+    """Revisión del administrador (A16): el autorizador debe poder revisar
+    arqueos (turnos_caja:revision_admin) en la sucursal del turno —o ser
+    AdministradorSistema— y su contraseña (o su PIN) se valida con límite de
+    intentos. Lanza AutorizadorNoValidoError (403), CredencialesAdminInvalidasError
+    (403) o PinBloqueadoError (429)."""
+    return await pin_caja_service.verificar_pin_autorizador(
+        conn,
+        email=email,
+        pin=password,
+        sucursal_id=sucursal_id,
+        permiso=PERMISO_REVISION_ARQUEO,
+        tipo="revision",
+        intentado_por=intentado_por,
+        # El formulario de revisión pide la contraseña del administrador.
+        acepta_password=True,
+        error=CredencialesAdminInvalidasError("Contraseña o PIN incorrecto."),
     )
-    if not row:
-        raise CredencialesAdminInvalidasError("Usuario no encontrado.")
 
-    pass_ok = verify_password(password, row["password_hash"])
-    pin_ok = bool(row["pin_hash"]) and verify_password(password, row["pin_hash"])
 
-    if not pass_ok and not pin_ok:
-        raise CredencialesAdminInvalidasError("Contraseña o PIN incorrecto.")
-
-    return row
+async def _apertura_para_autorizar(
+    conn: asyncpg.Connection, turno_id: str, user_id: str, solicitante: TokenData | None
+) -> dict[str, Any]:
+    """Lectura previa (sin bloqueo) del dueño y la sucursal del turno, para
+    validar quién llama y contra qué sucursal se buscan las credenciales
+    ANTES de verificar un PIN. El resto de validaciones se repite bajo el
+    bloqueo de la apertura."""
+    apertura = await get_dueno_y_sucursal_apertura(conn, turno_id)
+    if not apertura:
+        raise TurnoNoEncontradoError()
+    _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
+    return apertura
 
 
 async def autenticar_admin_revision(
     conn: asyncpg.Connection,
     user_id: str,
     payload: RevisionAdminPayload,
+    *,
+    solicitante: TokenData | None = None,
 ) -> RevisionAdminResponse:
+    previa = await _apertura_para_autorizar(conn, payload.turno_id, user_id, solicitante)
     admin_row = await _verificar_credenciales_usuario(
-        conn, payload.admin_email, payload.admin_password
+        conn,
+        payload.admin_email,
+        payload.admin_password,
+        str(previa["sucursal_id"]) if previa.get("sucursal_id") else None,
+        intentado_por=user_id,
     )
 
     # 3. Calcular montos esperados reales para el turno. C4: bajo el bloqueo de
@@ -570,13 +702,8 @@ async def autenticar_admin_revision(
         if apertura["estado"] == "CERRADA":
             raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
-        # Validar que el administrador pertenezca a la misma sucursal de la caja
-        admin_sucursal = admin_row.get("sucursal_id")
-        turno_sucursal = apertura.get("sucursal_id")
-        if admin_sucursal and turno_sucursal and str(admin_sucursal) != str(turno_sucursal):
-            raise CredencialesAdminInvalidasError(
-                "El administrador no está asignado a esta sucursal."
-            )
+        # La sucursal del administrador ya se validó en _verificar_credenciales_usuario
+        # (A16: busca solo entre los autorizadores de la sucursal del turno).
 
         if apertura["monto_declarado"] is None:
             raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
@@ -636,28 +763,33 @@ async def validar_pin_cajero(
     user_id: str,
     turno_id: str,
     pin: str,
+    *,
+    solicitante: TokenData | None = None,
 ) -> dict[str, Any]:
     apertura = await get_apertura_por_id(conn, turno_id)
     if not apertura:
         raise TurnoNoEncontradoError()
+    # A16: solo el dueño del turno (o un autorizador de la sucursal) puede
+    # probar el PIN de ese cajero.
+    _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
-    cajero_row = await conn.fetchrow(
-        """
-        SELECT id, email, pin_hash, password_hash, nombre_completo
-        FROM public.usuarios
-        WHERE id = $1 AND activo = TRUE
-        """,
-        uuid.UUID(str(apertura["cajero_id"])),
+    cajero_row = await get_usuario_by_id(conn, uuid.UUID(str(apertura["cajero_id"])))
+    if not cajero_row or not cajero_row["activo"]:
+        raise PinInvalidoError("Usuario cajero no encontrado.")
+
+    # A16: con PIN configurado solo vale el PIN; límite de intentos por cajero
+    # y sucursal.
+    await pin_caja_service.verificar_con_limite(
+        conn,
+        usuario_id=cajero_row["id"],
+        sucursal_id=apertura.get("sucursal_id"),
+        tipo="cajero",
+        verificar=lambda: pin_caja_service.credencial_valida(
+            pin, cajero_row["pin_hash"], cajero_row["password_hash"]
+        ),
+        error=PinInvalidoError("El PIN ingresado para el Cajero es incorrecto."),
+        intentado_por=user_id,
     )
-    if not cajero_row:
-        raise CredencialesAdminInvalidasError("Usuario cajero no encontrado.")
-
-    pin_ok = bool(cajero_row["pin_hash"]) and verify_password(pin, cajero_row["pin_hash"])
-    if not pin_ok:
-        pin_ok = verify_password(pin, cajero_row["password_hash"])
-
-    if not pin_ok:
-        raise CredencialesAdminInvalidasError("El PIN ingresado para el Cajero es incorrecto.")
 
     token = await _emitir_token_pin(conn, str(cajero_row["id"]), turno_id, "cajero")
     return {
@@ -672,32 +804,32 @@ async def validar_pin_admin(
     turno_id: str,
     admin_email: str,
     pin: str,
+    *,
+    user_id: str | None = None,
+    solicitante: TokenData | None = None,
 ) -> dict[str, Any]:
+    """Valida el PIN del administrador que autoriza el cierre del turno.
+
+    A16: el administrador se busca solo entre los usuarios de la sucursal del
+    turno con permiso de autorizar cierres (turnos_caja:confirmar) —o
+    AdministradorSistema—; con PIN configurado solo vale el PIN, y hay límite
+    de intentos. Los argumentos posicionales son los de antes; ``user_id`` y
+    ``solicitante`` (quien llama) son opcionales para no romper llamadores."""
     apertura = await get_apertura_por_id(conn, turno_id)
     if not apertura:
         raise TurnoNoEncontradoError()
+    if user_id is not None:
+        _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
-    admin_row = await conn.fetchrow(
-        """
-        SELECT u.id, u.pin_hash, u.password_hash, u.nombre_completo, us.sucursal_id
-        FROM public.usuarios u
-        LEFT JOIN public.usuarios_sucursal us ON us.usuario_id = u.id AND us.activo = TRUE
-        WHERE u.email = $1 AND u.activo = TRUE
-        LIMIT 1
-        """,
-        admin_email,
+    admin_row = await pin_caja_service.verificar_pin_autorizador(
+        conn,
+        email=admin_email,
+        pin=pin,
+        sucursal_id=apertura.get("sucursal_id"),
+        permiso=PERMISO_AUTORIZAR_CIERRE,
+        tipo="admin",
+        intentado_por=user_id,
     )
-    if not admin_row:
-        raise CredencialesAdminInvalidasError("Administrador no encontrado.")
-
-    pin_ok = bool(admin_row["pin_hash"]) and verify_password(pin, admin_row["pin_hash"])
-    if not pin_ok:
-        pin_ok = verify_password(pin, admin_row["password_hash"])
-
-    if not pin_ok:
-        raise CredencialesAdminInvalidasError(
-            "El PIN ingresado para el Administrador es incorrecto."
-        )
 
     token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin")
     return {
@@ -708,7 +840,11 @@ async def validar_pin_admin(
 
 
 async def cancelar_conteo(
-    conn: asyncpg.Connection, user_id: str, turno_id: str
+    conn: asyncpg.Connection,
+    user_id: str,
+    turno_id: str,
+    *,
+    solicitante: TokenData | None = None,
 ) -> TurnoActivoResponse:
     # C4: bajo el bloqueo de la apertura, para que una revisión del admin que
     # llega al mismo tiempo no quede autorizada sobre un conteo ya cancelado.
@@ -716,6 +852,10 @@ async def cancelar_conteo(
         apertura = await bloquear_apertura(conn, turno_id)
         if not apertura:
             raise TurnoNoEncontradoError()
+
+        # A15: una cajera no puede revertir el conteo de otra. Solo el dueño o
+        # quien autoriza cierres en esa sucursal.
+        _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
         if apertura["estado"] != "EN_CORTE":
             raise TransicionInvalidaError("Solo se puede cancelar un conteo en curso.")
@@ -729,7 +869,9 @@ async def cancelar_conteo(
 
         await resetear_conteo_apertura(conn, turno_id)
         await actualizar_estado_apertura(conn, turno_id, "ABIERTA")
-    return await obtener_turno_activo(conn, user_id)
+    # El turno devuelto es el del cajero dueño (si cancela un administrador, su
+    # propio turno activo no tiene nada que ver).
+    return await obtener_turno_activo(conn, str(apertura["cajero_id"]))
 
 
 async def obtener_apertura_operando_id(conn: asyncpg.Connection, user_id: str) -> str:
@@ -897,6 +1039,8 @@ async def confirmar_cierre(
     conn: asyncpg.Connection,
     user_id: str,
     payload: ConfirmarCierrePayload,
+    *,
+    solicitante: TokenData | None = None,
 ) -> ConfirmarCierreResponse:
     # C4: todo el cierre bajo el bloqueo de la apertura y en una sola transacción.
     # Dos confirmaciones simultáneas: la segunda espera, ve el turno CERRADA y
@@ -907,6 +1051,9 @@ async def confirmar_cierre(
         apertura = await bloquear_apertura(conn, payload.turno_id)
         if not apertura:
             raise TurnoNoEncontradoError()
+
+        # A15/A16: solo el dueño del turno o un autorizador de la sucursal.
+        _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
         if apertura["estado"] == "CERRADA":
             raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")

@@ -124,10 +124,11 @@ async def test_recibir_misma_compra_en_paralelo_suma_stock_una_sola_vez(
 async def test_recepciones_parciales_en_paralelo_no_exceden_lo_pedido(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
-    # Cada petición pide 3 de 10: solo caben 3 + 3 + 3 + 1; el resto llega con
-    # la compra ya completa y recibe 409.
+    # Cada petición pide 2 de 10: solo caben 5; el resto llega con la compra ya
+    # completa y recibe 409. (Con 3 de 10 la cuarta pediría más de lo pendiente
+    # y, desde M23, recibe 422 en vez de recortarse: ver test_recepcion_compras.)
     compra_id, detalle_id, insumo_id = await _crear_compra(pool, escenario, Decimal("10"))
-    body = RecibirCompraRequest(lineas=[LineaRecepcion(detalle_id=detalle_id, cantidad=3)])
+    body = RecibirCompraRequest(lineas=[LineaRecepcion(detalle_id=detalle_id, cantidad=2)])
 
     resultados = await _en_paralelo(
         pool,
@@ -137,11 +138,11 @@ async def test_recepciones_parciales_en_paralelo_no_exceden_lo_pedido(
 
     exitos = [r for r in resultados if not isinstance(r, BaseException)]
     errores = [r for r in resultados if isinstance(r, BaseException)]
-    assert len(exitos) == 4
+    assert len(exitos) == 5
     assert all(isinstance(e, Conflicto) for e in errores), errores
 
     estado = await _estado(pool, compra_id, insumo_id)
-    assert estado == {"estado": "R", "stock": 10, "recibido": 10, "movimientos": 4, "capas": 4}
+    assert estado == {"estado": "R", "stock": 10, "recibido": 10, "movimientos": 5, "capas": 5}
 
 
 async def test_recibir_y_cancelar_en_paralelo_solo_gana_uno(

@@ -19,34 +19,26 @@ function activateChildScan(childId: string, index: number) {
   setTimeout(() => childScanRefs.value[childId]?.focus(), 100)
 }
 
-function onChildScanEnter(childId: string) {
+// Niño cuya pulsera se está verificando con el servidor (B14).
+const verificandoChildId = ref<string | null>(null)
+
+async function onChildScanEnter(childId: string) {
   const scanned = (childScanInputs.value[childId] ?? '').trim()
-  if (!scanned) return
+  if (!scanned || verificandoChildId.value === childId) return
 
-  const found = store.pulseras.find((p) => p.pulseraRfid === scanned)
-  if (!found) {
-    childScanErrors.value[childId] = `Pulsera "${scanned}" no encontrada.`
-    childScanInputs.value[childId] = ''
-    return
+  verificandoChildId.value = childId
+  try {
+    const resultado = await store.asignarPulseraEscaneada(childId, scanned)
+    if (!resultado.ok) {
+      childScanErrors.value[childId] = resultado.mensaje
+      childScanInputs.value[childId] = ''
+      return
+    }
+    activeChildScanIndex.value = -1
+    childScanErrors.value[childId] = ''
+  } finally {
+    verificandoChildId.value = null
   }
-
-  // Validar que no esté usada por otro niño
-  const usedByOtherChild = store.savedChildren.some(
-    (c) => c.id !== childId && c.rfidBracelet === found.id,
-  )
-
-  if (usedByOtherChild) {
-    childScanErrors.value[childId] = `Pulsera "${scanned}" ya está en uso.`
-    childScanInputs.value[childId] = ''
-    return
-  }
-
-  // Asignar
-  const child = store.children.find((c) => c.id === childId)
-  if (child) child.rfidBracelet = found.id
-
-  activeChildScanIndex.value = -1
-  childScanErrors.value[childId] = ''
 }
 
 function clearChildBracelet(childId: string) {
@@ -118,7 +110,9 @@ function braceletLabelForChild(childId: string) {
             @click="activateChildScan(child.id, i)"
           />
           <template v-else>
-            <span class="rfid__waiting">Esperando…</span>
+            <span class="rfid__waiting">
+              {{ verificandoChildId === child.id ? 'Verificando…' : 'Esperando…' }}
+            </span>
             <q-btn
               flat
               round
