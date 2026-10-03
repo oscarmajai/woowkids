@@ -336,6 +336,16 @@ async def cambiar_estado(
     return comanda
 
 
+def ids_con_hijos_de_combo(detalles: list[DetalleComanda], ids: list[str]) -> list[str]:
+    """`ids` más los hijos de combo cuyos renglones padre están en `ids` (M13),
+    sin repetir y en el orden original."""
+    seleccionados = set(ids)
+    extra = [
+        d.id for d in detalles if d.detalle_padre_id in seleccionados and d.id not in seleccionados
+    ]
+    return [*ids, *extra]
+
+
 async def modificar_comanda_parcial(
     conn: asyncpg.Connection,
     comanda_id: str,
@@ -354,10 +364,15 @@ async def modificar_comanda_parcial(
     A4: quitar todos los productos de una comanda cobrada equivale a
     cancelarla, y eso exige la autorización y la devolución de cambiar_estado:
     responde 409 para que el cliente use ese flujo.
+
+    M13: quitar el renglón de un combo quita también sus productos (los hijos
+    con detalle_padre_id = ese renglón).
+
     """
     actual = await comanda_repository.get_comanda_por_id(conn, comanda_id)
     if actual is not None:
         detalles = cast(list[DetalleComanda], actual.detalles)
+        detalles_ids_a_eliminar = ids_con_hijos_de_combo(detalles, detalles_ids_a_eliminar)
         restantes = {d.id for d in detalles} - set(detalles_ids_a_eliminar)
         if not restantes and await devolucion_service.comanda_tiene_pagos(conn, comanda_id):
             raise ComandaPagadaRequiereCancelacionError()

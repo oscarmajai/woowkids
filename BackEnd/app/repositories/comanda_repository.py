@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 import asyncpg
 
 from app.core.utils import get_mexico_now
-from app.models.comanda import Comanda, DetalleComanda
+from app.models.comanda import Comanda, DetalleComanda, indices_renglon_padre
 
 if TYPE_CHECKING:
     from app.schemas.comanda import ComandaCreate
@@ -37,6 +37,7 @@ def _row_to_detalle(row: asyncpg.Record) -> DetalleComanda:
         es_hijo_de=str(row["es_hijo_de"]) if row.get("es_hijo_de") else None,
         es_hijo_combo=bool(row.get("es_hijo_combo", False)),
         id_combo_padre=str(row["id_combo_padre"]) if row.get("id_combo_padre") else None,
+        detalle_padre_id=str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None,
     )
 
 
@@ -131,7 +132,19 @@ async def crear_comanda_con_detalles(
             detalles_procesados if detalles_procesados is not None else comanda_in.detalles_comanda
         )
 
-        for item in detalles:
+        # M13: cada hijo de combo apunta a su renglón padre. Los ids se generan
+        # antes de insertar para poder enlazarlos. Se respeta el orden del
+        # pedido (el que ven cocina y el ticket), salvo un hijo que llegó antes
+        # que su padre: va al final, porque la FK no es diferible.
+        ids_detalle = [str(uuid.uuid4()) for _ in detalles]
+        padres = indices_renglon_padre(detalles)
+        orden = sorted(
+            range(len(detalles)),
+            key=lambda i: (padre := padres[i]) is not None and padre > i,
+        )
+
+        for idx in orden:
+            item = detalles[idx]
             (
                 producto_id,
                 cantidad,
@@ -148,10 +161,10 @@ async def crear_comanda_con_detalles(
                 INSERT INTO public.detalles_comanda
                     (id, comanda_id, producto_id, cantidad, precio_unitario, importe,
                     sucursal_id, notas_especiales, nombre_combo_padre, es_hijo_de,
-                    es_hijo_combo, id_combo_padre, creado_por)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    es_hijo_combo, id_combo_padre, creado_por, detalle_padre_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 """,
-                str(uuid.uuid4()),
+                ids_detalle[idx],
                 comanda_id,
                 producto_id,
                 cantidad,
@@ -164,6 +177,7 @@ async def crear_comanda_con_detalles(
                 es_hijo_combo,
                 id_combo_padre,
                 creado_por,
+                ids_detalle[padre] if (padre := padres[idx]) is not None else None,
             )
 
     # Releer para devolver el objeto completo
@@ -403,6 +417,7 @@ async def get_comandas_pendientes(
             dc.es_hijo_de,
             dc.es_hijo_combo,
             dc.id_combo_padre,
+            dc.detalle_padre_id,
             p.nombre,
             p.tipo AS producto_tipo
         FROM public.comandas c
@@ -452,6 +467,9 @@ async def get_comandas_pendientes(
                     id_combo_padre=(
                         str(row["id_combo_padre"]) if row.get("id_combo_padre") else None
                     ),
+                    detalle_padre_id=(
+                        str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None
+                    ),
                 )
             )
 
@@ -478,6 +496,7 @@ async def get_comanda_por_id(
             dc.es_hijo_de,
             dc.es_hijo_combo,
             dc.id_combo_padre,
+            dc.detalle_padre_id,
             p.nombre,
             p.tipo AS producto_tipo
         FROM public.comandas c
@@ -523,6 +542,9 @@ async def get_comanda_por_id(
                     es_hijo_combo=bool(row.get("es_hijo_combo", False)),
                     id_combo_padre=(
                         str(row["id_combo_padre"]) if row.get("id_combo_padre") else None
+                    ),
+                    detalle_padre_id=(
+                        str(row["detalle_padre_id"]) if row.get("detalle_padre_id") else None
                     ),
                 )
             )

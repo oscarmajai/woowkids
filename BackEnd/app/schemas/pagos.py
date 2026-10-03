@@ -174,6 +174,10 @@ class DetalleProductoOut(BaseModel):
     # QA #34: agrupa los hijos de una misma instancia de combo (migración 038).
     # None para productos sueltos o cuando el dato no existe (estancias/reservaciones).
     id_combo_padre: str | None = None
+    # M13: renglón (id de detalle) del combo al que pertenece el hijo; None en
+    # productos sueltos, renglones de combo y filas viejas que no se pudieron
+    # asignar (migración 093).
+    detalle_padre_id: str | None = None
 
 
 class MetodoPagoDetalle(BaseModel):
