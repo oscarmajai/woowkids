@@ -219,15 +219,22 @@ export async function checkout(
   return data
 }
 
-// POST /estancias/{registro_id}/pago
+// POST /estancias/{registro_id}/pagos
+// N9: el backend espera un objeto PagoEstanciaExtraRequest ({ pagos, cambio }),
+// no la lista de pagos suelta (con la lista respondía 422).
 export async function pagarExtra(
   registroId: string,
   sucursalId: string,
   pagos: OnboardingPago[],
+  cambio = 0,
 ): Promise<void> {
-  await onboardingClient.post(`/estancias/${registroId}/pagos`, pagos, {
-    params: {
-      sucursal_id: sucursalId,
+  await onboardingClient.post(
+    `/estancias/${registroId}/pagos`,
+    { pagos, cambio },
+    {
+      params: {
+        sucursal_id: sucursalId,
+      },
     },
-  })
+  )
 }
