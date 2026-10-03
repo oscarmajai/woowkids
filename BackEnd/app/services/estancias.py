@@ -33,6 +33,7 @@ from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
 from app.services import lealtad_service
 from app.services.padres_service import emitir_codigo_acceso
+from app.services.pagos_estancia import validar_referencias_pago
 from app.services.tramos_estancia import tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
 
@@ -96,6 +97,8 @@ async def create_estancia(
         cambio,
         ids_efectivo,
     )
+    if data.reservacionId is None:
+        await validar_referencias_pago(conn, data.sucursalId, data.pagos or [])
 
     data_ine = await validar_y_leer(foto_ine)
     data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
@@ -396,7 +399,13 @@ async def _crear_estancia_tx(
             total_pagado = 0.0
             for p in data.pagos or []:
                 await pago_create(
-                    conn, data.sucursalId, registro_id, p.metodoPagoId, p.monto, usuario_id
+                    conn,
+                    data.sucursalId,
+                    registro_id,
+                    p.metodoPagoId,
+                    p.monto,
+                    usuario_id,
+                    p.referencia,
                 )
                 await registrar_movimiento_caja(
                     conn,

@@ -19,6 +19,7 @@ import pytest
 import pytest_asyncio
 from app.core.security import hash_codigo_acceso_padres
 from app.repositories import codigos_acceso_padres
+from app.repositories.pagos_comanda import pago_create
 from app.repositories.producto_repository import get_producto_estancia_by_branch_id
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -135,3 +136,22 @@ async def test_n7_con_dos_productos_de_estancia_usa_el_mas_reciente(
     await conn_test.execute("UPDATE productos SET activo = FALSE WHERE id = $1", reciente)
     fila = await get_producto_estancia_by_branch_id(conn_test, str(sucursal_id))
     assert fila is not None and fila["id"] != reciente
+
+
+async def test_n8_la_referencia_del_pago_se_guarda_y_sale_en_el_detalle(
+    conn_test: asyncpg.Connection,
+) -> None:
+    from app.repositories import pago_repository
+
+    sucursal_id = await _sucursal(conn_test)
+    registro_id, _ = await _registro_con_nino(conn_test, sucursal_id, None)
+    metodo_id = await conn_test.fetchval("SELECT id FROM metodos_pago ORDER BY nombre LIMIT 1")
+
+    await pago_create(conn_test, sucursal_id, registro_id, metodo_id, 240.0, None, "VOUCHER-77")
+
+    guardada = await conn_test.fetchval(
+        "SELECT notas_pago FROM pagos_estancia WHERE registros_id = $1", registro_id
+    )
+    assert guardada == "VOUCHER-77"
+    pagos = await conn_test.fetch(pago_repository._SELECT_DETALLE_PAGOS_ESTANCIA, registro_id)
+    assert [p["notas_pago"] for p in pagos] == ["VOUCHER-77"]

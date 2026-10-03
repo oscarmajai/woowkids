@@ -10,16 +10,18 @@
 """
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 from app.schemas.ninos import NinoIn
-from app.schemas.pagos import PagoIn
+from app.schemas.pagos import PagoEstanciaExtraRequest, PagoIn
 from app.schemas.registros import DetalleIn, OnboardingRequest
 from app.schemas.tutores import TutorIn
-from app.services import estancias, pagos_estancia
+from app.services import chekouts, estancias, pagos_estancia
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -201,3 +203,92 @@ def test_n6_el_checkin_no_acepta_cero_horas(horas: int) -> None:
 def test_n6_una_hora_es_valida() -> None:
     detalle = DetalleIn(nino=NinoIn(nombreCompleto="Leo", edad=5), cantidad=1, pulseraId=uuid4())
     assert detalle.cantidad == 1
+
+
+# --- N8 ------------------------------------------------------------------------
+
+
+async def test_n8_checkin_con_tarjeta_sin_referencia_da_422(checkin: dict[str, Any]) -> None:
+    with pytest.raises(HTTPException) as exc:
+        await _registrar(_onboarding(metodo=TARJETA, referencia="   "))
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "REFERENCIA_REQUERIDA"
+    checkin["pago_create"].assert_not_awaited()
+    checkin["upload"].assert_not_awaited()
+
+
+async def test_n8_checkin_con_referencia_la_guarda(checkin: dict[str, Any]) -> None:
+    await _registrar(_onboarding(metodo=TARJETA, referencia=" A-123 "))
+    args = checkin["pago_create"].await_args.args
+    assert args[3] == TARJETA
+    assert args[6] == "A-123"
+
+
+async def test_n8_checkin_con_metodo_inexistente_da_422(checkin: dict[str, Any]) -> None:
+    with pytest.raises(HTTPException) as exc:
+        await _registrar(_onboarding(metodo=uuid4()))
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "METODO_PAGO_INVALIDO"
+
+
+@pytest.fixture
+def checkout(monkeypatch: pytest.MonkeyPatch, metodos: None) -> dict[str, AsyncMock]:
+    detalle = {
+        "sucursal_id": SUCURSAL,
+        "registros_id": uuid4(),
+        "salida": None,
+        "precio": Decimal("50.00"),
+        # 1 h 20 min excedido: 2 h extra -> $100.
+        "salida_esperada": datetime.now(UTC) - timedelta(minutes=80),
+    }
+    mocks = {"pago_create": AsyncMock(), "salida": AsyncMock()}
+    m = chekouts
+    monkeypatch.setattr(m, "get_detalle_registro_by_id", AsyncMock(return_value=detalle))
+    monkeypatch.setattr(m, "put_hora_salida_by_id", mocks["salida"])
+    monkeypatch.setattr(m, "make_extra_charge", AsyncMock())
+    monkeypatch.setattr(m, "registro_add_total", AsyncMock())
+    monkeypatch.setattr(m, "pago_create", mocks["pago_create"])
+    monkeypatch.setattr(m, "registrar_movimiento_caja", AsyncMock())
+    monkeypatch.setattr(m, "count_detalles_registro_abiertos", AsyncMock(return_value=1))
+    monkeypatch.setattr(m.manager, "broadcast", AsyncMock())
+    return mocks
+
+
+async def test_n8_checkout_con_tarjeta_sin_referencia_no_da_la_salida(
+    checkout: dict[str, AsyncMock],
+) -> None:
+    with pytest.raises(HTTPException) as exc:
+        await chekouts.create_chekout(
+            _conn(), uuid4(), uuid4(), [PagoIn(metodoPagoId=TARJETA, monto=100.0)], str(uuid4())
+        )
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "REFERENCIA_REQUERIDA"
+    checkout["salida"].assert_not_awaited()
+    checkout["pago_create"].assert_not_awaited()
+
+
+async def test_n8_checkout_guarda_la_referencia(checkout: dict[str, AsyncMock]) -> None:
+    pago = PagoIn(metodoPagoId=TARJETA, monto=100.0, referencia="VOUCHER-9")
+    await chekouts.create_chekout(_conn(), uuid4(), uuid4(), [pago], str(uuid4()))
+    assert checkout["pago_create"].await_args.args[6] == "VOUCHER-9"
+
+
+async def test_n8_pago_extra_con_tarjeta_sin_referencia_da_422(
+    monkeypatch: pytest.MonkeyPatch, metodos: None
+) -> None:
+    pago_create = AsyncMock()
+    monkeypatch.setattr(pagos_estancia, "pago_create", pago_create)
+    monkeypatch.setattr(
+        pagos_estancia,
+        "obtener_saldo_para_cobro",
+        AsyncMock(
+            return_value={"sucursal_id": SUCURSAL, "total": Decimal("100"), "pagado_neto": 0}
+        ),
+    )
+    body = PagoEstanciaExtraRequest(pagos=[PagoIn(metodoPagoId=TARJETA, monto=50.0)])
+    with pytest.raises(HTTPException) as exc:
+        await pagos_estancia.pago_create_service(
+            _conn(), body, SUCURSAL, uuid4(), uuid4(), str(uuid4())
+        )
+    assert exc.value.status_code == 422
+    pago_create.assert_not_awaited()

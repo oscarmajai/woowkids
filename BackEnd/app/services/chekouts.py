@@ -23,6 +23,7 @@ from app.repositories.registros import (
 )
 from app.schemas.pagos import PagoIn
 from app.services.padres_service import revocar_codigos_acceso
+from app.services.pagos_estancia import validar_referencias_pago
 
 EXTRA_GRACE_MINUTES = 10
 
@@ -102,6 +103,7 @@ async def create_chekout(
         extra_horas, total_extra = await _calcular_cargo_extra(detalle, now)
 
         if total_extra > 0:
+            await validar_referencias_pago(conn, detalle["sucursal_id"], pagos)
             monto_pagado = sum(Decimal(str(pago.monto)) for pago in pagos)
             if abs(monto_pagado - Decimal(str(total_extra))) > CENTAVO:
                 # El detail va estructurado para que el frontend pueda
@@ -142,6 +144,7 @@ async def create_chekout(
                     pago.metodoPagoId,
                     pago.monto,
                     usuario_id,
+                    pago.referencia,
                 )
                 await registrar_movimiento_caja(
                     conn,

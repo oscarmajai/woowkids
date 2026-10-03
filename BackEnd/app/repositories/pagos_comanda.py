@@ -10,6 +10,7 @@ async def pago_create(
     metodo_pago_id: UUID,
     monto: float,
     usuario_id: UUID,
+    notas_pago: str | None = None,
 ) -> None:
     await conn.execute(
         """
@@ -18,13 +19,15 @@ async def pago_create(
            registros_id,
            metodos_pago_id,
            monto,
-           creado_por
+           creado_por,
+           notas_pago
        )
-       VALUES ($1,$2,$3,$4,$5)
+       VALUES ($1,$2,$3,$4,$5,$6)
    """,
         sucursal_id,
         registro_id,
         metodo_pago_id,
         monto,
         usuario_id,
+        notas_pago,
     )

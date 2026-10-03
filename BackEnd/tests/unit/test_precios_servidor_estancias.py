@@ -36,6 +36,10 @@ TRAMOS = [
 ]
 
 
+# N8: los cobros de estancia validan el método de pago (referencia).
+METODO_EFECTIVO = {"nombre": "Efectivo", "requiere_referencia": False, "activo": True}
+
+
 def _conn() -> MagicMock:
     conn = MagicMock()
 
@@ -59,6 +63,9 @@ def checkin(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     m = estancias
     monkeypatch.setattr(
         m.metodos_pago_repository, "obtener_ids_por_tipo", AsyncMock(return_value={EFECTIVO})
+    )
+    monkeypatch.setattr(
+        m.metodos_pago_repository, "obtener", AsyncMock(return_value=METODO_EFECTIVO)
     )
     monkeypatch.setattr(m, "esta_disponible_para_asignar", AsyncMock(return_value=True))
     monkeypatch.setattr(m, "get_tutor_by_phone", AsyncMock(return_value={"id": uuid4()}))
@@ -161,6 +168,11 @@ def checkout(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     }
     mocks = {"cargo": AsyncMock(), "pago_create": AsyncMock(), "salida": AsyncMock()}
     m = chekouts
+    monkeypatch.setattr(
+        pagos_estancia.metodos_pago_repository,
+        "obtener",
+        AsyncMock(return_value=METODO_EFECTIVO),
+    )
     monkeypatch.setattr(m, "get_detalle_registro_by_id", AsyncMock(return_value=detalle))
     monkeypatch.setattr(m, "put_hora_salida_by_id", mocks["salida"])
     monkeypatch.setattr(m, "make_extra_charge", mocks["cargo"])
@@ -205,6 +217,9 @@ def pago_extra(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     m = pagos_estancia
     monkeypatch.setattr(
         m.metodos_pago_repository, "obtener_ids_por_tipo", AsyncMock(return_value={EFECTIVO})
+    )
+    monkeypatch.setattr(
+        m.metodos_pago_repository, "obtener", AsyncMock(return_value=METODO_EFECTIVO)
     )
     monkeypatch.setattr(m, "obtener_saldo_para_cobro", mocks["saldo"])
     monkeypatch.setattr(m, "pago_create", mocks["pago_create"])
