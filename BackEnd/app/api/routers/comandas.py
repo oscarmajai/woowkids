@@ -126,14 +126,7 @@ async def cambiar_estado(
             detail="Comanda no encontrada",
         )
 
-    scope = sucursal_scope(current_user)
-    canal = scope if scope is not None else CANAL_GLOBAL
-
-    await manager.broadcast(
-        canal,
-        {"type": "comanda_actualizada", "comanda": asdict(comanda)},
-    )
-
+    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 
@@ -171,14 +164,7 @@ async def modificar_detalles(
             detail="La comanda no existe o no está en estado Pendiente.",
         )
 
-    scope = sucursal_scope(current_user)
-    canal = scope if scope is not None else CANAL_GLOBAL
-
-    await manager.broadcast(
-        canal,
-        {"type": "comanda_actualizada", "comanda": asdict(comanda)},
-    )
-
+    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 

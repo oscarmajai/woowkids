@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -419,3 +420,23 @@ async def test_cancelaciones_simultaneas_revierten_una_vez(esc: Esc) -> None:
     assert all(isinstance(r, ComandaCanceladaError) for r in resultados if r not in exitos)
     assert await _stock(esc) == Decimal("10")
     assert await _reversiones(esc, cid) == 1
+
+
+# ── M27: una sola emisión por cambio ─────────────────────────────────────────
+
+
+async def test_un_solo_broadcast_por_cambio_de_estado(
+    esc: Esc, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.ws_manager import manager
+
+    cid = await _sin_cobro(esc)
+    emitir = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast", emitir)
+
+    assert (await _patch(esc.cocina, cid, "E")).status_code == 200
+    assert emitir.await_count == 1
+    sucursal, mensaje = emitir.await_args.args
+    assert sucursal == str(esc.sucursal)
+    assert mensaje["type"] == "comanda_actualizada"
+    assert mensaje["comanda"]["estado_actual"] == "E"

@@ -251,7 +251,7 @@ async def cambiar_estado(
 ) -> Comanda | None:
     """
     Cambia el estado de una comanda siguiendo la máquina de estados (A2) y
-    notifica a los clientes conectados. Registra auditoría
+    notifica a los clientes conectados (una sola vez, M27). Registra auditoría
     (modificado, modificado_por). Retorna None si la comanda no existe.
 
     Cancelar ('C') exige motivo, desactiva la comanda y revierte el stock y
