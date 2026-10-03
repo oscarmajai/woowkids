@@ -8,8 +8,11 @@ el asistente de alta (`FrontEnd/src/pages/NuevaReservacionPage.vue`,
 
     total = precio_base del paquete
           + niños x precio_hora_pulsera x horas facturables   (pulseras)
-          + Σ precio de cada extra (cantidad 1, ver M15)
+          + Σ precio de cada extra x su cantidad según la unidad (M15)
           + Σ precio_unitario x cantidad de cada producto adicional
+
+La cantidad de un extra depende de su `unidad`: "persona" se cobra por cada
+invitado, "hora" por cada hora facturable del evento y "evento" una sola vez.
 
 Funciones puras (sin BD) para poder probarlas sin mocks.
 """
@@ -63,6 +66,54 @@ def calcular_pulseras(precio_hora_pulsera: Decimal, invitados: int, horas: int) 
     return _dinero(Decimal(precio_hora_pulsera) * invitados * max(1, horas))
 
 
+UNIDAD_EVENTO = "evento"
+UNIDAD_PERSONA = "persona"
+UNIDAD_HORA = "hora"
+
+
+def cantidad_extra(unidad: str | None, invitados: int, horas: int, actual: int = 1) -> int:
+    """Veces que se cobra un extra según su unidad (M15).
+
+    "persona": una por invitado; "hora": una por hora facturable (mínimo 1);
+    "evento" (o una unidad desconocida): se conserva `actual`, que en el alta
+    es 1. Antes todos se cobraban una sola vez: la "Bolsita de dulces"
+    ($35/persona) de un evento de 12 niños salía en $35 y no en $420.
+    """
+    if unidad == UNIDAD_PERSONA:
+        return max(1, invitados)
+    if unidad == UNIDAD_HORA:
+        return max(1, horas)
+    return max(1, actual)
+
+
+@dataclass(frozen=True)
+class ExtraCobrado:
+    """Un extra ya guardado en la reservación (`reservacion_extras`)."""
+
+    id: Any
+    unidad: str | None
+    precio_unitario: Decimal
+    cantidad: int
+
+
+def recalcular_extras(
+    extras: Iterable[ExtraCobrado], invitados: int, horas: int
+) -> tuple[Decimal, dict[Any, int]]:
+    """(precio_extras, {id: cantidad nueva}) al cambiar invitados u horas.
+
+    Se conserva el precio pactado de cada extra; solo cambia la cantidad de
+    los que se cobran por persona o por hora. El dict trae solo los que
+    cambiaron."""
+    total = Decimal(0)
+    cambios: dict[Any, int] = {}
+    for extra in extras:
+        cantidad = cantidad_extra(extra.unidad, invitados, horas, extra.cantidad)
+        total += Decimal(extra.precio_unitario) * cantidad
+        if cantidad != extra.cantidad:
+            cambios[extra.id] = cantidad
+    return _dinero(total), cambios
+
+
 @dataclass(frozen=True)
 class DesglosePrecio:
     precio_base: Decimal
@@ -85,16 +136,20 @@ def calcular_desglose(
     numero_personas: int,
     hora_inicio: time,
     hora_fin: time,
-    precios_extras: Iterable[Decimal],
+    extras: Iterable[tuple[Decimal, str | None]],
     productos: Iterable[tuple[Decimal, int]],
 ) -> DesglosePrecio:
     """Precio de una reservación nueva con los precios de catálogo.
 
-    `precios_extras`: precio de catálogo de cada extra elegido (cada uno se
-    cobra una sola vez, como hoy el asistente; pendiente M15).
+    `extras`: pares (precio de catálogo, unidad) de cada extra elegido; la
+    cantidad sale de la unidad (`cantidad_extra`, M15).
     `productos`: pares (precio_unitario de catálogo, cantidad).
     """
     horas = horas_facturables(hora_inicio, hora_fin)
+    precios_extras = [
+        Decimal(precio) * cantidad_extra(unidad, numero_personas, horas)
+        for precio, unidad in extras
+    ]
     return DesglosePrecio(
         precio_base=_dinero(paquete["precio_base"]),
         precio_pulseras=calcular_pulseras(
@@ -108,25 +163,43 @@ def calcular_desglose(
     )
 
 
+_PARTES_DEL_TOTAL = (
+    "precio_base",
+    "precio_personas_extra",
+    "precio_horas",
+    "precio_productos",
+    "precio_extras",
+)
+
+
+def total_desde_partes(reservacion: dict[str, Any], **cambios: Decimal) -> Decimal:
+    """Total de una reservación guardada reconstruido desde sus partes, con
+    `cambios` aplicados (p. ej. `precio_extras=...`). `precio_horas` se
+    conserva (histórico) y `precio_personas_extra` es el cargo de pulseras."""
+
+    def parte(nombre: str) -> Decimal:
+        return Decimal(cambios[nombre] if nombre in cambios else reservacion[nombre])
+
+    return _dinero(sum((parte(p) for p in _PARTES_DEL_TOTAL), Decimal(0)) - parte("descuento"))
+
+
 def recalcular_total_edicion(
     reservacion: dict[str, Any],
     precio_hora_pulsera: Decimal,
     numero_personas: int,
     horas_reservadas: int,
+    precio_extras: Decimal | None = None,
 ) -> tuple[Decimal, Decimal]:
     """(pulseras, total) de una reservación existente al cambiarle invitados u
     horas. Igual que `recalcularReservacion()` del frontend: se reconstruye
-    desde las partes guardadas y `precio_horas` se conserva (histórico)."""
+    desde las partes guardadas y `precio_horas` se conserva (histórico).
+    `precio_extras`: el de los extras ya recalculados por persona/hora (M15);
+    si no se pasa, se conserva el guardado."""
     pulseras = calcular_pulseras(precio_hora_pulsera, numero_personas, horas_reservadas)
-    total = _dinero(
-        Decimal(reservacion["precio_base"])
-        + pulseras
-        + Decimal(reservacion["precio_horas"])
-        + Decimal(reservacion["precio_productos"])
-        + Decimal(reservacion["precio_extras"])
-        - Decimal(reservacion["descuento"])
-    )
-    return pulseras, total
+    cambios = {"precio_personas_extra": pulseras}
+    if precio_extras is not None:
+        cambios["precio_extras"] = precio_extras
+    return pulseras, total_desde_partes(reservacion, **cambios)
 
 
 def porcentaje_anticipo(anticipo_porcentaje_paquete: Decimal | None) -> Decimal:

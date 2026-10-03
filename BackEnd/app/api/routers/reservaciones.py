@@ -138,7 +138,7 @@ async def actualizar_reservacion(
     current_user: TokenData = Depends(require_permission("reservaciones:editar")),
 ) -> ReservacionesOut:
     await alcance_service.asegurar_recurso(conn, current_user, "reservacion", reservacion_id)
-    return await svc.actualizar(conn, reservacion_id, body)
+    return await svc.actualizar(conn, reservacion_id, body, UUID(current_user.sub))
 
 
 @router.post(

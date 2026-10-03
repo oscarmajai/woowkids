@@ -19,9 +19,9 @@ from app.schemas.reservaciones import ReservacionesCrear, ReservacionesOut
 
 class ReservacionCompletaExtraItem(BaseModel):
     extra_id: UUID
-    # El servidor cobra cada extra una vez (cantidad 1) al precio de catálogo,
-    # igual que el asistente de alta (pendiente M15). Se aceptan por
-    # compatibilidad, pero no se usan.
+    # El servidor cobra cada extra al precio de catálogo y con la cantidad que
+    # marca su unidad: por persona = invitados, por hora = horas del evento,
+    # por evento = 1 (M15). Se aceptan por compatibilidad, pero no se usan.
     cantidad: int = Field(1, ge=1)
     precio_unitario: Decimal | None = Field(None, ge=0)
 

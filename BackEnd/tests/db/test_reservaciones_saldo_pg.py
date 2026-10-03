@@ -73,9 +73,11 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
         ids["paquete"],
         ids["sucursal"],
     )
+    # Por evento: se cobra una vez. Los extras por hora/persona (M15) se
+    # prueban en test_reservacion_partidas_pg.py.
     await pg.execute(
         """INSERT INTO extras (id, sucursal_id, nombre, precio, unidad)
-           VALUES ($1, $2, 'Animador adicional', 350, 'hora')""",
+           VALUES ($1, $2, 'Animador adicional', 350, 'evento')""",
         ids["extra"],
         ids["sucursal"],
     )
