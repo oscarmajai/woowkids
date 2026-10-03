@@ -5,7 +5,8 @@ Schemas Pydantic para los CRUDs administrativos de horarios (turnos) y cajas.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time
+from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
@@ -19,6 +20,18 @@ def _validar_dias(dias: DiasSemana) -> DiasSemana:
     return dias
 
 
+def _validar_hora(valor: str | None) -> str | None:
+    """M3: una hora mal escrita ("xx", "25:00") reventaba con 500 en el
+    repositorio; ahora es un 422 de validación."""
+    if valor is None:
+        return None
+    try:
+        time.fromisoformat(valor)
+    except ValueError:
+        raise ValueError("Hora inválida: usa el formato HH:MM (de 00:00 a 23:59).") from None
+    return valor
+
+
 # ── Horarios (turnos de trabajo) ──────────────────────────────────────────────
 
 
@@ -27,11 +40,20 @@ class HorarioCreate(BaseModel):
     hora_inicio: str  # "HH:MM"
     hora_fin: str  # "HH:MM"
     dias: DiasSemana = None
+    # M19: sucursal del horario. Roles con sucursal fija: solo la suya (es la
+    # que se usa si no viene). AdministradorSistema: la indicada, la del
+    # selector o, sin ninguna, un horario global.
+    sucursal_id: UUID | None = None
 
     @field_validator("dias")
     @classmethod
     def _check_dias(cls, v: DiasSemana) -> DiasSemana:
         return _validar_dias(v)
+
+    @field_validator("hora_inicio", "hora_fin")
+    @classmethod
+    def _check_hora(cls, v: str) -> str:
+        return _validar_hora(v) or v
 
 
 class HorarioUpdate(BaseModel):
@@ -46,6 +68,11 @@ class HorarioUpdate(BaseModel):
     def _check_dias(cls, v: DiasSemana) -> DiasSemana:
         return _validar_dias(v)
 
+    @field_validator("hora_inicio", "hora_fin")
+    @classmethod
+    def _check_hora(cls, v: str | None) -> str | None:
+        return _validar_hora(v)
+
 
 class HorarioResponse(BaseModel):
     id: str
@@ -54,6 +81,8 @@ class HorarioResponse(BaseModel):
     hora_fin: str
     activo: bool
     dias: DiasSemana = None
+    # M19: None = horario global (todas las sucursales).
+    sucursal_id: str | None = None
 
 
 # ── Cajas físicas (gestión administrativa) ────────────────────────────────────

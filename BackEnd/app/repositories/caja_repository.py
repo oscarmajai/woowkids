@@ -124,16 +124,45 @@ async def listar_cajas_por_sucursal(
     return [dict(r) for r in rows]
 
 
-async def listar_turnos(conn: asyncpg.Connection) -> list[dict[str, Any]]:
+async def listar_turnos(
+    conn: asyncpg.Connection, sucursal_id: str | None = None
+) -> list[dict[str, Any]]:
+    """M19: con sucursal, los horarios activos de esa sucursal más los globales
+    (sucursal_id NULL); sin sucursal (AdministradorSistema sin selector), todos."""
     rows = await conn.fetch(
         """
         SELECT id, nombre, hora_inicio, hora_fin
         FROM public.turnos
         WHERE activo = TRUE
+          AND ($1::uuid IS NULL OR sucursal_id IS NULL OR sucursal_id = $1::uuid)
         ORDER BY hora_inicio ASC
-        """
+        """,
+        uuid.UUID(sucursal_id) if sucursal_id else None,
     )
     return [dict(r) for r in rows]
+
+
+async def turno_disponible_en_sucursal(
+    conn: asyncpg.Connection, turno_id: str, sucursal_id: str
+) -> bool:
+    """M19: el horario existe, está activo y es global o de esa sucursal."""
+    try:
+        tid = uuid.UUID(str(turno_id))
+    except ValueError:
+        return False
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM public.turnos
+                WHERE id = $1 AND activo = TRUE
+                  AND (sucursal_id IS NULL OR sucursal_id = $2::uuid)
+            )
+            """,
+            tid,
+            uuid.UUID(str(sucursal_id)),
+        )
+    )
 
 
 async def get_primer_turno(conn: asyncpg.Connection) -> dict[str, Any] | None:

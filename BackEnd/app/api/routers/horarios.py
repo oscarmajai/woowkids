@@ -1,6 +1,7 @@
 """
 app/api/routers/horarios.py
 CRUD administrativo de horarios/turnos de trabajo (/api/horarios).
+Las reglas de alcance por sucursal (M19) viven en app/services/horarios_service.py.
 """
 
 from __future__ import annotations
@@ -8,110 +9,42 @@ from __future__ import annotations
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.core.roles import ROL_SISTEMA
-from app.repositories.horarios_repository import (
-    actualizar_horario,
-    crear_horario,
-    eliminar_horario,
-    listar_horarios,
-)
 from app.schemas.auth import TokenData
 from app.schemas.horarios_cajas import HorarioCreate, HorarioResponse, HorarioUpdate
+from app.services import horarios_service
 
 router = APIRouter(prefix="/api/horarios", tags=["Horarios"])
 
-_NOT_FOUND = HTTPException(
-    status_code=status.HTTP_404_NOT_FOUND,
-    detail={"code": "HORARIO_NOT_FOUND", "message": "Horario no encontrado."},
+
+@router.get(
+    "",
+    response_model=list[HorarioResponse],
+    summary="Lista los horarios de la sucursal más los globales",
 )
-
-_NOMBRE_DUPLICADO = HTTPException(
-    status_code=status.HTTP_409_CONFLICT,
-    detail={"code": "NOMBRE_DUPLICADO", "message": "Ya existe un horario con ese nombre."},
-)
-
-_FORBIDDEN_SUCURSAL = HTTPException(
-    status_code=status.HTTP_403_FORBIDDEN,
-    detail={
-        "code": "FORBIDDEN",
-        "message": "No puedes consultar los horarios de otra sucursal.",
-    },
-)
-
-
-_SOLO_SISTEMA = HTTPException(
-    status_code=status.HTTP_403_FORBIDDEN,
-    detail={
-        "code": "FORBIDDEN",
-        "message": (
-            "Los horarios son compartidos por todas las sucursales; solo el "
-            "Administrador del Sistema puede crearlos, editarlos o desactivarlos."
-        ),
-    },
-)
-
-
-def _solo_sistema(current_user: TokenData) -> None:
-    """C1: la tabla `turnos` no tiene `sucursal_id` (catálogo global, ver M19),
-    así que un Administrador de sucursal que la edita cambia los horarios de
-    TODAS las sucursales. Mientras no exista horario por sucursal, solo
-    AdministradorSistema puede escribirla; el resto solo la lee."""
-    if current_user.role != ROL_SISTEMA:
-        raise _SOLO_SISTEMA
-
-
-def _validar_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> None:
-    """D1.1: los horarios son un catálogo global (tabla `turnos`, sin
-    `sucursal_id`), así que el parámetro no filtra datos, pero se valida el
-    permiso igual que en /cajas: AdministradorSistema puede pedir cualquier
-    sucursal; el resto solo la suya (403 si pide otra)."""
-    if sucursal_id is None or current_user.role == ROL_SISTEMA:
-        return
-    if str(current_user.branch_id) != str(sucursal_id):
-        raise _FORBIDDEN_SUCURSAL
-
-
-@router.get("", response_model=list[HorarioResponse], summary="Lista los horarios de trabajo")
 async def listar(
     sucursal_id: UUID | None = Query(None),
     current_user: TokenData = Depends(require_permission("horarios:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[HorarioResponse]:
-    _validar_sucursal(current_user, sucursal_id)
-    rows = await listar_horarios(conn)
-    return [HorarioResponse(**r) for r in rows]
+    return await horarios_service.listar(conn, current_user, sucursal_id)
 
 
 @router.post(
     "",
     response_model=HorarioResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crea un nuevo horario de trabajo",
+    summary="Crea un horario en la sucursal de la sesión (global si es AdministradorSistema)",
 )
 async def crear(
     payload: HorarioCreate,
     current_user: TokenData = Depends(require_permission("horarios:crear")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> HorarioResponse:
-    _solo_sistema(current_user)
-    try:
-        row = await crear_horario(
-            conn,
-            nombre=payload.nombre,
-            hora_inicio=payload.hora_inicio,
-            hora_fin=payload.hora_fin,
-            creado_por=current_user.sub,
-            dias=payload.dias,
-        )
-    except Exception as exc:
-        if "unique" in str(exc).lower() and "nombre" in str(exc).lower():
-            raise _NOMBRE_DUPLICADO from exc
-        raise
-    return HorarioResponse(**row)
+    return await horarios_service.crear(conn, current_user, payload)
 
 
 @router.patch(
@@ -125,26 +58,7 @@ async def editar(
     current_user: TokenData = Depends(require_permission("horarios:editar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> HorarioResponse:
-    _solo_sistema(current_user)
-    try:
-        row = await actualizar_horario(
-            conn,
-            horario_id=horario_id,
-            nombre=payload.nombre,
-            hora_inicio=payload.hora_inicio,
-            hora_fin=payload.hora_fin,
-            activo=payload.activo,
-            modificado_por=current_user.sub,
-            dias=payload.dias,
-            actualizar_dias="dias" in payload.model_fields_set,
-        )
-    except Exception as exc:
-        if "unique" in str(exc).lower() and "nombre" in str(exc).lower():
-            raise _NOMBRE_DUPLICADO from exc
-        raise
-    if row is None:
-        raise _NOT_FOUND
-    return HorarioResponse(**row)
+    return await horarios_service.editar(conn, current_user, horario_id, payload)
 
 
 @router.delete(
@@ -158,7 +72,4 @@ async def eliminar(
     current_user: TokenData = Depends(require_permission("horarios:eliminar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> None:
-    _solo_sistema(current_user)
-    found = await eliminar_horario(conn, horario_id=horario_id, modificado_por=current_user.sub)
-    if not found:
-        raise _NOT_FOUND
+    await horarios_service.eliminar(conn, current_user, horario_id)
