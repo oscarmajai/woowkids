@@ -1,7 +1,6 @@
 # Stack completo de Woow Kids: PostgreSQL, MinIO, backend y frontend.
 #
 #   docker compose up -d --build          # construye desde el código del monorepo
-#   WOOWKIDS_TAG=v1.0.0 docker compose up -d --no-build   # usa las imágenes publicadas
 #
 # Valores genéricos por defecto (admin / admin1234): cámbialos antes de producción
 # copiando .env.example a .env.
@@ -55,7 +54,7 @@ services:
 
   backend:
     build: ./BackEnd
-    image: ghcr.io/oscarmajai/woowkids-backend:${WOOWKIDS_TAG:-local}
+    image: woowkids-backend:local
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin1234}@db:5432/${POSTGRES_DB:-woowkids}
       SECRET_KEY: ${SECRET_KEY:-woowkids-secret-key-cambiar-en-produccion}
@@ -86,7 +85,7 @@ services:
       args:
         VITE_API_BASE_URL: /api
         VITE_APP_TITLE: Woow Kids
-    image: ghcr.io/oscarmajai/woowkids-frontend:${WOOWKIDS_TAG:-local}
+    image: woowkids-frontend:local
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:

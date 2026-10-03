@@ -1,8 +1,8 @@
 name: Release
 
 # Al llegar commits a main: corre el CI completo, calcula la versión con
-# Conventional Commits, crea el tag vX.Y.Z y publica en GHCR las tres imágenes
-# (frontend, backend y todo en uno) con ese tag y con "latest".
+# Conventional Commits, crea el tag vX.Y.Z y publica en GHCR la imagen todo en
+# uno (frontend, API, PostgreSQL y MinIO) con ese tag y con "latest".
 on:
   push:
     branches: [main]
@@ -61,60 +61,33 @@ jobs:
           git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
           git push origin "${{ steps.version.outputs.version }}"
 
-      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Imagen del frontend
-        uses: docker/build-push-action@v6
-        with:
-          context: FrontEnd
-          push: true
-          build-args: |
-            VITE_API_BASE_URL=/api
-            VITE_APP_TITLE=Woow Kids
-          tags: |
-            ${{ env.REGISTRO }}/woowkids-frontend:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRO }}/woowkids-frontend:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-      - name: Imagen del backend
-        uses: docker/build-push-action@v6
-        with:
-          context: BackEnd
-          push: true
-          tags: |
-            ${{ env.REGISTRO }}/woowkids-backend:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRO }}/woowkids-backend:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+      # Frontend y backend se construyen solo en el runner (no se publican): el
+      # driver docker por defecto deja que Dockerfile.allinone los use como base.
+      - name: Imágenes base (sin publicar)
+        run: |
+          docker build -t woowkids-frontend:local \
+            --build-arg VITE_API_BASE_URL=/api \
+            --build-arg "VITE_APP_TITLE=Woow Kids" FrontEnd
+          docker build -t woowkids-backend:local BackEnd
 
       - name: Imagen todo en uno
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.allinone
-          push: true
-          build-args: |
-            FRONTEND_IMAGE=${{ env.REGISTRO }}/woowkids-frontend:${{ steps.version.outputs.version }}
-            BACKEND_IMAGE=${{ env.REGISTRO }}/woowkids-backend:${{ steps.version.outputs.version }}
-          tags: |
-            ${{ env.REGISTRO }}/woowkids:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRO }}/woowkids:latest
-          labels: |
-            org.opencontainers.image.title=Woow Kids (todo en uno)
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          FUENTE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          docker build -f Dockerfile.allinone \
+            --label "org.opencontainers.image.title=Woow Kids (todo en uno)" \
+            --label "org.opencontainers.image.source=$FUENTE" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            -t "$REGISTRO/woowkids:$VERSION" -t "$REGISTRO/woowkids:latest" .
+          docker push "$REGISTRO/woowkids:$VERSION"
+          docker push "$REGISTRO/woowkids:latest"
 
       - name: GitHub Release
         env:
