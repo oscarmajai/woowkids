@@ -27,7 +27,13 @@ from app.repositories import comanda_repository, producto_repository
 from app.repositories.caja_repository import registrar_movimiento_caja
 from app.schemas.auth import TokenData
 from app.schemas.comanda import ComandaCreate
-from app.services import devolucion_service, inventario_service, lealtad_service, precios_venta
+from app.services import (
+    devolucion_service,
+    inventario_service,
+    lealtad_service,
+    precios_venta,
+    turnos_caja_service,
+)
 
 
 def _producto_id_de_detalle(item: Any) -> str:
@@ -147,6 +153,10 @@ async def crear_comanda(
     creado_por = str(UUID(current_user.sub))
 
     async with conn.transaction():
+        if apertura_caja_id is not None:
+            # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que la venta
+            # confirme.
+            await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         comanda = await comanda_repository.crear_comanda_con_detalles(
             conn, comanda_in, None, creado_por
         )

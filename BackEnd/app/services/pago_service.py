@@ -35,7 +35,7 @@ from app.schemas.pagos import (
     PaymentOut,
     PaymentRequest,
 )
-from app.services import inventario_service, lealtad_service, precios_venta
+from app.services import inventario_service, lealtad_service, precios_venta, turnos_caja_service
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -198,6 +198,12 @@ async def completar_pago(
         )
 
     async with conn.transaction():
+        # N1: bloqueo compartido de la apertura antes de nada (orden de
+        # bloqueo de caja: apertura_caja primero) y el turno debe seguir
+        # ABIERTA: un cobro ya no entra a la mitad del inicio de un conteo o
+        # de un cierre.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
+
         if idempotency_key:
             # M3: dos cobros simultáneos con la misma clave pasaban los dos la
             # revisión de arriba y el segundo chocaba con la llave primaria de

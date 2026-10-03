@@ -6,6 +6,7 @@ Endpoints FastAPI para el módulo de Cierre de Caja (/api/turnos-caja).
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -14,6 +15,8 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal
+from app.core.utils import get_mexico_now
+from app.repositories import sucursales as sucursales_repository
 from app.schemas.auth import TokenData
 from app.schemas.caja import (
     AbrirTurnoPayload,
@@ -82,11 +85,16 @@ async def listar_turnos(
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[TurnoResponse]:
-    # M19: los horarios de la sucursal de la sesión más los globales (antes
-    # se veían los de todas las sucursales).
-    return await turnos_caja_service.obtener_turnos(
-        conn, _sucursal_filtro(current_user, sucursal_id)
-    )
+    # M19: los horarios de la sucursal de la sesión (o la del selector, para
+    # AdministradorSistema) más los globales. M8: `vigente` se calcula con la
+    # hora local de esa sucursal; sin sucursal, con la hora de México.
+    sucursal = _sucursal_filtro(current_user, sucursal_id)
+    ahora = None
+    if sucursal:
+        ahora = await sucursales_repository.ahora_en_sucursal(conn, UUID(sucursal))
+    if ahora is None:
+        ahora = get_mexico_now().replace(tzinfo=None)
+    return await turnos_caja_service.obtener_turnos(conn, sucursal, ahora)
 
 
 @router.get(
@@ -128,14 +136,21 @@ async def abrir_turno(
 
 @router.get(
     "/activo",
-    response_model=TurnoActivoResponse,
+    response_model=TurnoActivoResponse | None,
     summary="Obtiene el turno activo del cajero autenticado",
 )
 async def obtener_activo(
     sucursal_id: str | None = Query(None),
+    opcional: bool = Query(
+        False,
+        description=(
+            "B4: con true, si no hay turno activo responde 200 con null en vez de "
+            "404 (para consultas de fondo que no son un error)."
+        ),
+    ),
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
-) -> TurnoActivoResponse:
+) -> TurnoActivoResponse | None:
     # AdministradorSistema no tiene sucursal propia: la apertura activa debe
     # respetar la sucursal elegida en el selector global, no cualquier turno
     # abierto en otra sucursal. El resto de roles siempre usa su propia
@@ -145,7 +160,14 @@ async def obtener_activo(
         sucursal_efectiva = sucursal_id
     else:
         sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
-    return await turnos_caja_service.obtener_turno_activo(conn, current_user.sub, sucursal_efectiva)
+    try:
+        return await turnos_caja_service.obtener_turno_activo(
+            conn, current_user.sub, sucursal_efectiva
+        )
+    except turnos_caja_service.TurnoNoEncontradoError:
+        if opcional:
+            return None
+        raise
 
 
 @router.get(

@@ -83,13 +83,12 @@
           />
         </div>
       </div>
-      <p
-        v-if="
-          !cargandoCajas && opcionesCajas.length === 0 && (!esAdminSistema || sucursalSeleccionada)
-        "
-        class="apertura__hint"
-      >
-        No hay cajas registradas para esta sucursal todavía. Se creará una nueva automáticamente.
+      <p v-if="turnoNoVigente" class="apertura__hint" data-test="aviso-horario-no-vigente">
+        El horario elegido no corresponde a la hora actual. Se te pedirá confirmar al abrir la caja.
+      </p>
+      <p v-if="sinCajas" class="apertura__hint" data-test="aviso-sin-cajas">
+        No hay cajas registradas para esta sucursal. Pide al administrador que registre una en
+        Administración › Cajas para poder abrir turno.
       </p>
 
       <div class="apertura__field">
@@ -136,6 +135,22 @@
       </div>
     </div>
 
+    <BaseDialog
+      v-model="confirmarHorario"
+      title="El horario no corresponde a la hora actual"
+      subtitle="Confirma que quieres abrir la caja con este turno"
+      icon="schedule"
+      tone="amber"
+      :width="460"
+      secondary-label="Elegir otro horario"
+      primary-label="Abrir de todos modos"
+      @confirm="confirmarAperturaFueraDeHorario"
+    >
+      Vas a abrir la caja con el turno <strong>{{ etiquetaTurnoSeleccionado }}</strong
+      >, que no corresponde a la hora actual ({{ horaActual }}). Si es correcto, continúa; si no,
+      elige el horario vigente.
+    </BaseDialog>
+
     <footer class="apertura__foot">
       <q-btn
         unelevated
@@ -157,11 +172,14 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { useAuthStore } from '@/stores/auth'
 import { turnoCajaService } from '@/services/turnoCajaService'
 import { filtrarTeclaDecimal, reglaDecimal } from '@/utils/validacionNumerica'
+import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { TurnoItem, CajaItem } from '@/types/turnoCaja'
 
 interface OptionItem {
   label: string
   value: string
+  /** M8: el horario corresponde a la hora local actual de la sucursal. */
+  vigente?: boolean
 }
 
 const $q = useQuasar()
@@ -209,7 +227,8 @@ const puedeAbrirCaja = computed(() => {
   if (typeof fondoInicial.value !== 'number' || !Number.isFinite(fondoInicial.value)) return false
   if (fondoInicial.value < 0) return false
   if (esAdminSistema.value && !sucursalSeleccionada.value) return false
-  if (opcionesCajas.value.length > 0 && !cajaSeleccionada.value) return false
+  // El backend no crea cajas al abrir turno: sin caja registrada no se puede abrir.
+  if (!cajaSeleccionada.value) return false
   if (!pin.value) return false
   return true
 })
@@ -217,6 +236,26 @@ const puedeAbrirCaja = computed(() => {
 const emit = defineEmits<{
   (e: 'apertura-exitosa'): void
 }>()
+
+const sinCajas = computed(
+  () =>
+    !cargandoCajas.value &&
+    opcionesCajas.value.length === 0 &&
+    (!esAdminSistema.value || !!sucursalSeleccionada.value),
+)
+
+// M8: se preselecciona el horario vigente a la hora local de la sucursal (lo
+// calcula el backend); si se elige uno que no corresponde, se pide confirmar.
+// No se bloquea: abrir fuera de horario es decisión de negocio.
+const opcionTurnoSeleccionado = computed(() =>
+  opcionesTurnos.value.find((t) => t.value === turnoSeleccionado.value),
+)
+const turnoNoVigente = computed(
+  () => !!opcionTurnoSeleccionado.value && !opcionTurnoSeleccionado.value.vigente,
+)
+const etiquetaTurnoSeleccionado = computed(() => opcionTurnoSeleccionado.value?.label ?? '')
+const horaActual = ref('')
+const confirmarHorario = ref(false)
 
 async function cargarCajas() {
   // El admin de sistema debe elegir sucursal primero; los demás usan la suya propia.
@@ -257,9 +296,11 @@ onMounted(async () => {
         ? `${t.nombre} (${t.horaInicio.slice(0, 5)} - ${t.horaFin?.slice(0, 5)})`
         : t.nombre,
       value: t.id,
+      vigente: t.vigente === true,
     }))
-    if (opcionesTurnos.value.length > 0 && !turnoSeleccionado.value) {
-      turnoSeleccionado.value = opcionesTurnos.value[0].value
+    // M8: antes se preseleccionaba el primero de la lista, fuera la hora que fuera.
+    if (!turnoSeleccionado.value) {
+      turnoSeleccionado.value = opcionesTurnos.value.find((t) => t.vigente)?.value ?? null
     }
   } catch (err) {
     console.error('Error al consultar turnos desde la base de datos:', err)
@@ -300,6 +341,28 @@ async function realizarApertura() {
     })
     return
   }
+  if (!turnoSeleccionado.value) {
+    $q.notify({ type: 'warning', message: 'Selecciona el turno de trabajo.' })
+    return
+  }
+  if (turnoNoVigente.value) {
+    horaActual.value = new Date().toLocaleTimeString('es-MX', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    confirmarHorario.value = true
+    return
+  }
+  await abrirCaja()
+}
+
+async function confirmarAperturaFueraDeHorario() {
+  confirmarHorario.value = false
+  await abrirCaja()
+}
+
+async function abrirCaja() {
+  if (typeof fondoInicial.value !== 'number') return
 
   const terminalFinal = cajaSeleccionada.value || 'CAJA 01'
 

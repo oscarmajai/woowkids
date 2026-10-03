@@ -6,11 +6,18 @@ vi.mock('@/api/turnoCajaApi', () => ({
     abrirTurno: vi.fn(),
     autenticarRevisionAdmin: vi.fn(),
     validarPinAdmin: vi.fn(),
+    registrarRetiro: vi.fn(),
+    registrarIngreso: vi.fn(),
+    obtenerActivo: vi.fn(),
   },
 }))
 
 import { turnoCajaApi } from '@/api/turnoCajaApi'
-import { turnoCajaService, CredencialesAdminInvalidasError } from '@/services/turnoCajaService'
+import {
+  turnoCajaService,
+  CredencialesAdminInvalidasError,
+  TurnoNoEncontradoError,
+} from '@/services/turnoCajaService'
 
 const api = vi.mocked(turnoCajaApi)
 
@@ -68,6 +75,66 @@ describe('turnoCajaService — errores de PIN (A5/A16)', () => {
 
     await expect(turnoCajaService.abrirTurno({ fondoInicial: 500, pin: '1234' })).rejects.toThrow(
       'Ya tienes un turno abierto en CAJA 01.',
+    )
+  })
+})
+
+describe('turnoCajaService — retiros e ingresos rechazados (B17)', () => {
+  const RETIRO = {
+    turnoId: 't1',
+    concepto: 'Gastos varios' as const,
+    tipoDestinatario: 'Empleado' as const,
+    monto: 6000,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('un retiro mayor al disponible muestra el mensaje del backend con el monto', async () => {
+    const mensaje = 'El retiro excede el efectivo disponible en caja (disponible: $6,040.00).'
+    api.registrarRetiro.mockRejectedValue(apiError(409, 'EFECTIVO_INSUFICIENTE', mensaje))
+
+    await expect(turnoCajaService.registrarRetiro(RETIRO)).rejects.toThrow(mensaje)
+  })
+
+  it('un 409 sin mensaje conserva el texto genérico', async () => {
+    api.registrarRetiro.mockRejectedValue(apiError(409, 'TRANSICION_INVALIDA', ''))
+
+    await expect(turnoCajaService.registrarRetiro(RETIRO)).rejects.toThrow(
+      'No se pueden registrar retiros en este momento.',
+    )
+  })
+
+  it('un ingreso rechazado muestra el mensaje del backend', async () => {
+    const mensaje =
+      'No se pueden registrar ingresos de efectivo mientras el turno está en conteo o cierre.'
+    api.registrarIngreso.mockRejectedValue(apiError(409, 'TRANSICION_INVALIDA', mensaje))
+
+    await expect(turnoCajaService.registrarIngreso({ turnoId: 't1', monto: 100 })).rejects.toThrow(
+      mensaje,
+    )
+  })
+})
+
+describe('turnoCajaService — turno activo sin turno (B4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('un null del backend (opcional=true) es "no hay turno", sin 404', async () => {
+    api.obtenerActivo.mockResolvedValue(null)
+
+    await expect(turnoCajaService.cargarTurnoActivo()).rejects.toBeInstanceOf(
+      TurnoNoEncontradoError,
+    )
+  })
+
+  it('un 404 de un backend viejo también es "no hay turno"', async () => {
+    api.obtenerActivo.mockRejectedValue(apiError(404, 'TURNO_NO_ENCONTRADO', 'No hay turno.'))
+
+    await expect(turnoCajaService.cargarTurnoActivo()).rejects.toBeInstanceOf(
+      TurnoNoEncontradoError,
     )
   })
 })

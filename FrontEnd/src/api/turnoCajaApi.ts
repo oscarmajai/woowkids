@@ -18,6 +18,7 @@ import type {
   RetiroParcialPayload,
   RetiroParcialResponse,
   FilaBalance,
+  ConteoGuardado,
 } from '@/types/turnoCaja'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,21 +40,58 @@ function mapTurnoActivo(raw: any): TurnoActivoResponse {
     cajeroId: raw.cajero_id,
     cajeroNombre: raw.cajero_nombre,
     terminal: raw.terminal,
+    cajaNombre: raw.caja_nombre ?? null,
     estado: raw.estado,
     fondoInicial: Number(raw.fondo_inicial),
     fechaApertura: raw.fecha_apertura,
+    observacionesApertura: raw.observaciones_apertura ?? null,
     totalVentas: Number(raw.total_ventas ?? 0),
     totalRetiros: Number(raw.total_retiros ?? 0),
     totalIngresos: Number(raw.total_ingresos ?? 0),
     numeroVentas: Number(raw.numero_ventas ?? 0),
     totalVendido: Number(raw.total_vendido ?? 0),
+    totalCambio: Number(raw.total_cambio ?? 0),
+    efectivoEsperado:
+      raw.efectivo_esperado === undefined || raw.efectivo_esperado === null
+        ? null
+        : Number(raw.efectivo_esperado),
+    ventasPorMetodo: (raw.ventas_por_metodo ?? []).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (v: any) => ({ metodo: v.metodo, label: v.label, total: Number(v.total) }),
+    ),
     movimientos: (raw.movimientos ?? []).map(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (m: any) => ({ metodo: m.metodo, totalVentas: Number(m.total_ventas) }),
     ),
+    conteoGuardado: mapConteoGuardado(raw.conteo_guardado),
     // QA #8: solo vienen poblados cuando estado === 'BALANCE_REVELADO'.
     adminEmail: raw.admin_email ?? null,
     balancePorMetodo: mapBalancePorMetodo(raw.balance_por_metodo),
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapConteoGuardado(raw: any): ConteoGuardado | null {
+  if (!raw) return null
+  const desglose = raw.desglose_efectivo ?? {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const denominaciones = (lista: any[] | undefined) =>
+    (lista ?? []).map((d) => ({
+      denominacion: Number(d.denominacion),
+      cantidad: Number(d.cantidad ?? 0),
+    }))
+  return {
+    desgloseEfectivo: {
+      billetes: denominaciones(desglose.billetes),
+      monedas: denominaciones(desglose.monedas),
+      total: Number(desglose.total ?? 0),
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    metodosPago: (raw.metodos_pago ?? []).map((m: any) => ({
+      metodo: String(m.metodo ?? ''),
+      monto: Number(m.monto ?? 0),
+    })),
+    totalDeclarado: Number(raw.total_declarado ?? 0),
   }
 }
 
@@ -86,6 +124,7 @@ function mapArqueoResumen(raw: any) {
     id: raw.id,
     cajeroNombre: raw.cajero_nombre,
     terminal: raw.terminal,
+    cajaNombre: raw.caja_nombre ?? null,
     sucursalNombre: raw.sucursal_nombre,
     fechaApertura: raw.fecha_apertura,
     fechaCierre: raw.fecha_cierre,
@@ -116,6 +155,7 @@ export const turnoCajaApi = {
       nombre: t.nombre,
       horaInicio: t.hora_inicio,
       horaFin: t.hora_fin,
+      vigente: t.vigente === true,
     }))
   },
 
@@ -159,13 +199,15 @@ export const turnoCajaApi = {
    * sucursalId es solo relevante para AdministradorSistema, que no tiene
    * sucursal propia: filtra la apertura activa por la sucursal seleccionada
    * en el selector global en vez de devolver la de cualquier otra sucursal.
-   * 404 si no existe turno activo (o no en esa sucursal).
+   * Sin turno activo (o no en esa sucursal) devuelve `null`: se pide con
+   * `opcional=true` para que el backend responda 200 con null en vez de un 404
+   * que ensuciaba la consola en cada página (B4).
    */
-  async obtenerActivo(sucursalId?: string | null): Promise<TurnoActivoResponse> {
+  async obtenerActivo(sucursalId?: string | null): Promise<TurnoActivoResponse | null> {
     const { data } = await apiClient.get(`${BASE}/activo`, {
-      params: sucursalId ? { sucursal_id: sucursalId } : undefined,
+      params: sucursalId ? { sucursal_id: sucursalId, opcional: true } : { opcional: true },
     })
-    return mapTurnoActivo(data)
+    return data ? mapTurnoActivo(data) : null
   },
 
   /**
@@ -304,11 +346,13 @@ export const turnoCajaApi = {
     const { data } = await apiClient.post(`${BASE}/ingreso-efectivo`, {
       apertura_caja_id: payload.turnoId,
       monto: payload.monto,
+      observaciones: payload.observaciones || undefined,
     })
     return {
       id: data.id,
       turnoId: data.apertura_caja_id,
       monto: Number(data.monto),
+      observaciones: data.observaciones ?? null,
       creado: data.creado,
     }
   },
@@ -407,6 +451,14 @@ export const turnoCajaApi = {
       balancePorMetodo: mapBalancePorMetodo(data.balance_por_metodo),
       observaciones: data.observaciones ?? '',
       adminNombre: data.admin_nombre ?? '',
+      observacionesApertura: data.observaciones_apertura ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ingresos: (data.ingresos ?? []).map((i: any) => ({
+        id: String(i.id),
+        monto: Number(i.monto),
+        observaciones: i.observaciones ?? null,
+        creado: i.creado,
+      })),
     }
   },
 

@@ -22,6 +22,7 @@ from app.repositories.registros import (
     registro_add_total,
 )
 from app.schemas.pagos import PagoIn
+from app.services import turnos_caja_service
 from app.services.padres_service import revocar_codigos_acceso
 from app.services.pagos_estancia import validar_referencias_pago
 
@@ -89,6 +90,8 @@ async def create_chekout(
     apertura_caja_id: str,
 ) -> dict[str, Any]:
     async with conn.transaction():
+        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         now = datetime.now(UTC)
 
         detalle = await get_detalle_registro_by_id(conn, detalle_id)

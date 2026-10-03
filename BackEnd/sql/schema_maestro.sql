@@ -4,7 +4,7 @@
 -- GENERADO por scripts/generar_schema_maestro.sh. NO editar a mano: agrega una
 -- migración en sql/migrations/ y vuelve a correr el script.
 --
--- Equivale a aplicar las 106 migraciones de sql/migrations/ en orden
+-- Equivale a aplicar las 114 migraciones de sql/migrations/ en orden
 -- (última: 104_pagos_estancia_notas_pago.sql).
 -- Incluye el esquema y los datos de catálogo que esas migraciones insertan
 -- (roles, permisos, etc.). No incluye datos de prueba: para eso está
@@ -192,6 +192,7 @@ CREATE TABLE public.apertura_caja (
     creado_por uuid,
     modificado timestamp with time zone DEFAULT now(),
     modificado_por uuid,
+    observaciones_apertura text,
     CONSTRAINT chk_apertura_estado CHECK (((estado)::text = ANY ((ARRAY['ABIERTA'::character varying, 'EN_CORTE'::character varying, 'CERRADA'::character varying])::text[]))),
     CONSTRAINT chk_fondo_no_negativo CHECK ((fondo_inicial >= (0)::numeric))
 );
@@ -225,13 +226,33 @@ CREATE TABLE public.capas_costo_insumo (
     insumo_id uuid NOT NULL,
     cantidad_inicial numeric(12,3) NOT NULL,
     cantidad_restante numeric(12,3) NOT NULL,
-    costo_unitario numeric(12,4) NOT NULL,
+    costo_unitario numeric(14,6) NOT NULL,
     origen character varying(20) NOT NULL,
     referencia_id uuid,
     creado timestamp with time zone DEFAULT now() NOT NULL,
+    secuencia bigint NOT NULL,
     CONSTRAINT capas_costo_insumo_cantidad_inicial_check CHECK ((cantidad_inicial > (0)::numeric)),
     CONSTRAINT capas_costo_insumo_cantidad_restante_check CHECK ((cantidad_restante >= (0)::numeric))
 );
+
+
+--
+-- Name: capas_costo_insumo_secuencia_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.capas_costo_insumo_secuencia_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: capas_costo_insumo_secuencia_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.capas_costo_insumo_secuencia_seq OWNED BY public.capas_costo_insumo.secuencia;
 
 
 --
@@ -368,14 +389,34 @@ CREATE TABLE public.detalle_compras (
     insumo_id uuid NOT NULL,
     unidad_medida_id uuid,
     cantidad numeric(12,3) NOT NULL,
-    costo_unitario numeric(10,2) NOT NULL,
-    subtotal numeric(10,2) GENERATED ALWAYS AS ((cantidad * costo_unitario)) STORED,
+    costo_unitario numeric(14,6) NOT NULL,
     presentacion_id uuid,
     cantidad_recibida numeric(12,3) DEFAULT 0 NOT NULL,
+    subtotal numeric(10,2) GENERATED ALWAYS AS ((cantidad * costo_unitario)) STORED,
+    secuencia bigint NOT NULL,
     CONSTRAINT chk_detalle_compras_una_unidad CHECK (((((unidad_medida_id IS NOT NULL))::integer + ((presentacion_id IS NOT NULL))::integer) = 1)),
     CONSTRAINT detalle_compras_cantidad_check CHECK ((cantidad > (0)::numeric)),
     CONSTRAINT detalle_compras_costo_unitario_check CHECK ((costo_unitario >= (0)::numeric))
 );
+
+
+--
+-- Name: detalle_compras_secuencia_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.detalle_compras_secuencia_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: detalle_compras_secuencia_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.detalle_compras_secuencia_seq OWNED BY public.detalle_compras.secuencia;
 
 
 --
@@ -398,7 +439,8 @@ CREATE TABLE public.detalles_comanda (
     creado_por uuid,
     modificado timestamp with time zone DEFAULT now(),
     modificado_por uuid,
-    id_combo_padre uuid
+    id_combo_padre uuid,
+    detalle_padre_id uuid
 );
 
 
@@ -518,7 +560,7 @@ CREATE TABLE public.insumos (
     unidad_compra_id uuid NOT NULL,
     stock_actual numeric(12,3) DEFAULT 0 NOT NULL,
     stock_minimo numeric(12,3) DEFAULT 0 NOT NULL,
-    costo_unitario numeric(10,2),
+    costo_unitario numeric(14,6),
     proveedor_principal_id uuid,
     activo boolean DEFAULT true NOT NULL,
     creado timestamp with time zone DEFAULT now() NOT NULL,
@@ -618,6 +660,7 @@ CREATE TABLE public.movimientos_caja (
     monto numeric(12,2) NOT NULL,
     creado timestamp with time zone DEFAULT now() NOT NULL,
     creado_por uuid,
+    observaciones text,
     CONSTRAINT movimientos_caja_monto_check CHECK ((monto > (0)::numeric))
 );
 
@@ -658,8 +701,28 @@ CREATE TABLE public.movimientos_inventario (
     creado timestamp with time zone DEFAULT now() NOT NULL,
     creado_por uuid,
     costo_total numeric(14,4),
+    secuencia bigint NOT NULL,
     CONSTRAINT movimientos_inventario_cantidad_check CHECK ((cantidad > (0)::numeric))
 );
+
+
+--
+-- Name: movimientos_inventario_secuencia_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.movimientos_inventario_secuencia_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: movimientos_inventario_secuencia_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.movimientos_inventario_secuencia_seq OWNED BY public.movimientos_inventario.secuencia;
 
 
 --
@@ -1270,7 +1333,8 @@ CREATE TABLE public.turnos (
     modificado timestamp with time zone,
     modificado_por uuid,
     activo boolean DEFAULT true NOT NULL,
-    dias smallint[]
+    dias smallint[],
+    sucursal_id uuid
 );
 
 
@@ -1358,6 +1422,20 @@ CREATE TABLE public.ws_tickets (
 
 
 --
+-- Name: capas_costo_insumo secuencia; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.capas_costo_insumo ALTER COLUMN secuencia SET DEFAULT nextval('public.capas_costo_insumo_secuencia_seq'::regclass);
+
+
+--
+-- Name: detalle_compras secuencia; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detalle_compras ALTER COLUMN secuencia SET DEFAULT nextval('public.detalle_compras_secuencia_seq'::regclass);
+
+
+--
 -- Name: intentos_pin_fallidos id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1369,6 +1447,13 @@ ALTER TABLE ONLY public.intentos_pin_fallidos ALTER COLUMN id SET DEFAULT nextva
 --
 
 ALTER TABLE ONLY public.movimientos_caja ALTER COLUMN id SET DEFAULT nextval('public.movimientos_caja_id_seq'::regclass);
+
+
+--
+-- Name: movimientos_inventario secuencia; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.movimientos_inventario ALTER COLUMN secuencia SET DEFAULT nextval('public.movimientos_inventario_secuencia_seq'::regclass);
 
 
 --
@@ -1865,14 +1950,6 @@ ALTER TABLE ONLY public.tokens_revocados
 
 
 --
--- Name: turnos turnos_nombre_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.turnos
-    ADD CONSTRAINT turnos_nombre_key UNIQUE (nombre);
-
-
---
 -- Name: turnos turnos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2014,6 +2091,13 @@ CREATE INDEX idx_capas_insumo_fifo ON public.capas_costo_insumo USING btree (ins
 
 
 --
+-- Name: idx_capas_insumo_fifo_secuencia; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_capas_insumo_fifo_secuencia ON public.capas_costo_insumo USING btree (insumo_id, secuencia) WHERE (cantidad_restante > (0)::numeric);
+
+
+--
 -- Name: idx_cierre_apertura; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2056,10 +2140,24 @@ CREATE INDEX idx_detalle_compras_compra ON public.detalle_compras USING btree (c
 
 
 --
+-- Name: idx_detalle_compras_compra_secuencia; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_detalle_compras_compra_secuencia ON public.detalle_compras USING btree (compra_id, secuencia);
+
+
+--
 -- Name: idx_detalles_comanda_comanda; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_detalles_comanda_comanda ON public.detalles_comanda USING btree (comanda_id);
+
+
+--
+-- Name: idx_detalles_comanda_detalle_padre; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_detalles_comanda_detalle_padre ON public.detalles_comanda USING btree (detalle_padre_id) WHERE (detalle_padre_id IS NOT NULL);
 
 
 --
@@ -2130,6 +2228,13 @@ CREATE INDEX idx_movimientos_apertura_metodo ON public.movimientos_caja USING bt
 --
 
 CREATE INDEX idx_movimientos_inventario_insumo ON public.movimientos_inventario USING btree (insumo_id, creado DESC);
+
+
+--
+-- Name: idx_movimientos_inventario_insumo_secuencia; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_movimientos_inventario_insumo_secuencia ON public.movimientos_inventario USING btree (insumo_id, secuencia);
 
 
 --
@@ -2319,6 +2424,13 @@ CREATE UNIQUE INDEX uq_productos_nombre_sucursal ON public.productos USING btree
 --
 
 CREATE UNIQUE INDEX uq_tipos_evento_nombre_sucursal ON public.tipos_evento USING btree (nombre, sucursal_id);
+
+
+--
+-- Name: uq_turnos_sucursal_nombre; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_turnos_sucursal_nombre ON public.turnos USING btree (COALESCE(sucursal_id, '00000000-0000-0000-0000-000000000000'::uuid), nombre);
 
 
 --
@@ -2757,6 +2869,14 @@ ALTER TABLE ONLY public.devoluciones_comanda
 
 ALTER TABLE ONLY public.extras
     ADD CONSTRAINT extras_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursales(id);
+
+
+--
+-- Name: detalles_comanda fk_detalles_comanda_detalle_padre; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detalles_comanda
+    ADD CONSTRAINT fk_detalles_comanda_detalle_padre FOREIGN KEY (detalle_padre_id) REFERENCES public.detalles_comanda(id) ON DELETE CASCADE;
 
 
 --
@@ -3576,6 +3696,14 @@ ALTER TABLE ONLY public.turnos
 
 
 --
+-- Name: turnos turnos_sucursal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.turnos
+    ADD CONSTRAINT turnos_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursales(id);
+
+
+--
 -- Name: tutores tutores_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3697,11 +3825,11 @@ SET row_security = off;
 -- Data for Name: metodos_pago; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('bb20b244-1451-4857-962f-107f0879d575', 'Efectivo', NULL, '2026-10-03 15:54:52.656418+00', NULL, '2026-10-03 15:54:52.656418+00', NULL, 'E', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('eda30a43-47ce-4781-bc71-e70775f34c8f', 'Otro', NULL, '2026-10-03 15:54:52.656418+00', NULL, '2026-10-03 15:54:52.656418+00', NULL, 'O', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('a6cab2b1-1f02-47b8-b93a-c6b792ff8700', 'Cupones', NULL, '2026-10-03 15:54:52.656418+00', NULL, '2026-10-03 15:54:52.656418+00', NULL, 'C', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('5eb19405-aa9a-4707-bf73-fe78c0ee8b29', 'Lealtad', NULL, '2026-10-03 15:54:52.656418+00', NULL, '2026-10-03 15:54:52.656418+00', NULL, 'L', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8af5534a-734f-4997-b06f-3a1a591f4b93', 'Tarjeta', NULL, '2026-10-03 15:54:52.656418+00', NULL, '2026-10-03 15:54:52.656418+00', NULL, 'T', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('d366dcfc-3a77-47b6-bc54-e8213c5eab81', 'Efectivo', NULL, '2026-10-03 17:36:54.474663+00', NULL, '2026-10-03 17:36:54.474663+00', NULL, 'E', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('cf2095ec-68ef-423d-b11e-4e51827d82ea', 'Otro', NULL, '2026-10-03 17:36:54.474663+00', NULL, '2026-10-03 17:36:54.474663+00', NULL, 'O', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('3ee6942c-783b-4a17-9ec1-cb49094952d9', 'Cupones', NULL, '2026-10-03 17:36:54.474663+00', NULL, '2026-10-03 17:36:54.474663+00', NULL, 'C', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('43ead464-3398-4964-8039-4453bd7770b8', 'Lealtad', NULL, '2026-10-03 17:36:54.474663+00', NULL, '2026-10-03 17:36:54.474663+00', NULL, 'L', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('34b36c03-0216-4b31-a9f0-1c61a1bf4c89', 'Tarjeta', NULL, '2026-10-03 17:36:54.474663+00', NULL, '2026-10-03 17:36:54.474663+00', NULL, 'T', NULL, false);
 
 
 --
@@ -4051,33 +4179,37 @@ INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 104);
 INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (1, 123);
 INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 123);
 INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (3, 123);
+INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 40);
+INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 54);
+INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 106);
+INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 121);
 
 
 --
 -- Data for Name: usuarios; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 15:54:51.656268+00', NULL, '2026-10-03 15:54:51.656268+00', NULL, 1, NULL, NULL, NULL, NULL);
+INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-03 17:36:53.927506+00', NULL, '2026-10-03 17:36:53.927506+00', NULL, 1, NULL, NULL, NULL, NULL);
 
 
 --
 -- Data for Name: turnos; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('1a4578ae-2bbe-4f78-9154-bd61f09f94dc', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 15:54:49.814281+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('7a6d818a-fba3-4877-b950-b5d172814931', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 15:54:49.814281+00', NULL, NULL, NULL, true, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias) VALUES ('52c2c9f3-6f8a-48aa-b90f-ffae9b62f3b5', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 15:54:49.814281+00', NULL, NULL, NULL, true, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('60fe58db-86b5-44a9-b5ac-8771d8e4ff9e', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-03 17:36:52.673412+00', NULL, NULL, NULL, true, NULL, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('57756d1b-d33e-4494-95c7-41da069da6e5', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-03 17:36:52.673412+00', NULL, NULL, NULL, true, NULL, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('b7a2f12e-c213-4d91-84e0-f86c782089ec', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-03 17:36:52.673412+00', NULL, NULL, NULL, true, NULL, NULL);
 
 
 --
 -- Data for Name: unidades_medida; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('64f7f76f-9bd4-4da9-9282-29d29ba0c76d', 'g', 'Gramo', 'masa', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('afe72b6e-bdc8-43ae-8f53-1a0df8078ddd', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('b990917e-4a89-40f0-8e04-b6bd17ce4a08', 'ml', 'Mililitro', 'volumen', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('b531ae67-cce6-43d3-9b71-9a437318a4ee', 'l', 'Litro', 'volumen', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('efe98885-a40f-49d6-9a27-f4b33a9c0201', 'pza', 'Pieza', 'pieza', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('11f026e8-0621-4ee3-a8d8-9b35fac51627', 'g', 'Gramo', 'masa', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('689e4dde-e516-4390-9b34-75365150a606', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('8339e97e-d1a2-486e-9888-b733c68c19d6', 'ml', 'Mililitro', 'volumen', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('9dd6fd9d-312a-4b5b-b2e8-a58d4e819719', 'l', 'Litro', 'volumen', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('83bed44d-d48b-4623-90e2-a98e56f4e24d', 'pza', 'Pieza', 'pieza', 1.000000, true);
 
 
 --

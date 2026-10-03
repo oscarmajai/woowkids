@@ -346,3 +346,17 @@ async def test_abrir_turno_con_horario_de_otra_sucursal_da_422(
     assert disponible.await_args is not None
     assert disponible.await_args.args[1:] == (TURNO_ID, SUCURSAL_ID)
     entorno["crear_apertura_caja"].assert_not_called()
+
+
+async def test_abrir_turno_guarda_las_notas_de_apertura(entorno: dict[str, AsyncMock]) -> None:
+    """B13: las "Notas" del formulario se descartaban; ahora se guardan."""
+    await _abrir(_payload(observaciones_apertura="  Fondo con monedas de $10  "))
+
+    kwargs = entorno["crear_apertura_caja"].call_args.kwargs
+    assert kwargs["observaciones_apertura"] == "Fondo con monedas de $10"
+
+
+async def test_abrir_turno_sin_notas_guarda_null(entorno: dict[str, AsyncMock]) -> None:
+    await _abrir(_payload(observaciones_apertura="   "))
+
+    assert entorno["crear_apertura_caja"].call_args.kwargs["observaciones_apertura"] is None

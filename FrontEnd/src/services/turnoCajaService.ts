@@ -89,8 +89,12 @@ export const turnoCajaService = {
       return await turnoCajaApi.registrarRetiro(payload)
     } catch (err) {
       const apiErr = err as ApiError
+      // B17: el 409 puede ser "excede el efectivo disponible (disponible: $X)"
+      // o "el turno está en conteo": se muestra lo que dice el backend.
       if (apiErr.statusCode === 409)
-        throw new TransicionInvalidaError('No se pueden registrar retiros en este momento.')
+        throw new TransicionInvalidaError(
+          apiErr.message || 'No se pueden registrar retiros en este momento.',
+        )
       throw new Error(toMensajeError(err), { cause: err })
     }
   },
@@ -104,7 +108,9 @@ export const turnoCajaService = {
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.statusCode === 409)
-        throw new TransicionInvalidaError('No se pueden registrar ingresos en este momento.')
+        throw new TransicionInvalidaError(
+          apiErr.message || 'No se pueden registrar ingresos en este momento.',
+        )
       throw new Error(toMensajeError(err), { cause: err })
     }
   },
@@ -123,16 +129,19 @@ export const turnoCajaService = {
 
   /**
    * Carga el turno activo del cajero.
-   * Lanza TurnoNoEncontradoError si el backend responde 404.
+   * Lanza TurnoNoEncontradoError si no hay turno (null, o 404 de un backend viejo).
    */
   async cargarTurnoActivo(sucursalId?: string | null): Promise<TurnoActivoResponse> {
+    let turno: TurnoActivoResponse | null
     try {
-      return await turnoCajaApi.obtenerActivo(sucursalId)
+      turno = await turnoCajaApi.obtenerActivo(sucursalId)
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.statusCode === 404) throw new TurnoNoEncontradoError()
       throw new Error(toMensajeError(err), { cause: err })
     }
+    if (!turno) throw new TurnoNoEncontradoError()
+    return turno
   },
 
   /**

@@ -29,12 +29,11 @@ export function useNuevaReservacion() {
       return
     }
 
-    // El Administrador de sucursal no opera caja por diseño, y el guard del router
-    // lo rebota de /pos/cierre al historial de arqueos. Mandarlo ahí lo dejaba en
-    // una pantalla que no pidió y sin ninguna explicación, así que aquí se le dice
-    // qué falta en vez de navegarlo a ningún lado.
-    const esAdminDeSucursal = auth.hasRole('Administrador') && !auth.hasRole('AdministradorSistema')
-    if (esAdminDeSucursal) {
+    // M10: quien puede abrir caja (Cajero, y también el Administrador de sucursal
+    // desde la migración 073: abre y cierra su propio turno en /pos/cierre) va a
+    // abrirla. Solo a un rol que no abre caja se le explica qué falta en vez de
+    // navegarlo a una pantalla que no puede usar.
+    if (!auth.hasPermission('turnos_caja:abrir')) {
       $q.notify({
         type: 'warning',
         message: 'Se necesita una caja abierta para registrar el anticipo.',

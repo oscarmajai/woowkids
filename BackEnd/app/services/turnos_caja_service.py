@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -26,6 +26,7 @@ from app.repositories.caja_repository import (
     actualizar_conteo_apertura,
     actualizar_estado_apertura,
     bloquear_apertura,
+    bloquear_apertura_para_cobro,
     calcular_efectivo_disponible,
     contar_historial_cierres,
     contar_ventas_apertura,
@@ -68,6 +69,7 @@ from app.schemas.caja import (
     CambioResponse,
     ConfirmarCierrePayload,
     ConfirmarCierreResponse,
+    ConteoGuardado,
     ConteoPayload,
     DesgloseEfectivoDetalle,
     DetalleArqueoResponse,
@@ -87,6 +89,7 @@ from app.schemas.caja import (
     RevisionAdminResponse,
     TurnoActivoResponse,
     TurnoResponse,
+    VentaPorMetodo,
 )
 from app.services import pin_caja_service
 from app.services.permission_service import has_permission
@@ -116,16 +119,23 @@ class TransicionInvalidaError(HTTPException):
         )
 
 
+def _pesos(monto: Decimal) -> str:
+    return f"${monto:,.2f}"
+
+
 class EfectivoInsuficienteError(HTTPException):
     def __init__(self, efectivo_disponible: Decimal):
+        # B17: el front muestra este mensaje tal cual; `disponible` va aparte
+        # para quien quiera el número.
         super().__init__(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "EFECTIVO_INSUFICIENTE",
                 "message": (
                     f"El retiro excede el efectivo disponible en caja "
-                    f"(disponible: {efectivo_disponible})."
+                    f"(disponible: {_pesos(efectivo_disponible)})."
                 ),
+                "disponible": float(efectivo_disponible),
             },
         )
 
@@ -135,6 +145,22 @@ class CredencialesAdminInvalidasError(PinInvalidoError):
 
     def __init__(self, mensaje: str = "Credenciales de administrador incorrectas."):
         super().__init__(mensaje, code="CREDENCIALES_INVALIDAS")
+
+
+class TurnoNoAbiertoError(HTTPException):
+    """RN-APE-005 / RN-CIE-001: sin turno OPERANDO (ABIERTA) no se cobra."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "TURNO_NO_ABIERTO",
+                "message": (
+                    "Debes tener un turno de caja abierto (operando) para "
+                    "registrar ventas o pagos."
+                ),
+            },
+        )
 
 
 class TurnoAjenoError(HTTPException):
@@ -219,10 +245,39 @@ async def obtener_cajas(
     ]
 
 
+def horario_vigente(
+    hora_inicio: time, hora_fin: time, dias: list[int] | None, ahora: datetime
+) -> bool:
+    """M8: True si `ahora` (hora de pared de la sucursal) cae dentro del
+    horario, con los extremos incluidos y a nivel de minuto (un horario que
+    termina a las 23:59 vale hasta las 23:59:59). Un horario que cruza la
+    medianoche (22:00-06:00) vale después del inicio y antes del fin; en la
+    parte de la madrugada cuenta como del día en que empezó. `dias` usa
+    0 = lunes ... 6 = domingo; None o vacío = todos los días."""
+    minuto = ahora.time().replace(second=0, microsecond=0)
+    inicio = hora_inicio.replace(second=0, microsecond=0)
+    fin = hora_fin.replace(second=0, microsecond=0)
+    dia = ahora.weekday()
+    if inicio <= fin:
+        if not inicio <= minuto <= fin:
+            return False
+    elif minuto >= inicio:
+        pass
+    elif minuto <= fin:
+        dia = (dia - 1) % 7
+    else:
+        return False
+    return not dias or dia in dias
+
+
 async def obtener_turnos(
-    conn: asyncpg.Connection, sucursal_id: str | None = None
+    conn: asyncpg.Connection,
+    sucursal_id: str | None = None,
+    ahora: datetime | None = None,
 ) -> list[TurnoResponse]:
-    """M19: los horarios de la sucursal más los globales (todos si None)."""
+    """Horarios activos de la sucursal más los globales (todos si None, M19).
+    `ahora` es la hora local de la sucursal (sin zona); con ella se marca cuál
+    está vigente (M8). Sin ella, ninguno."""
     rows = await listar_turnos(conn, sucursal_id)
     return [
         TurnoResponse(
@@ -230,6 +285,11 @@ async def obtener_turnos(
             nombre=r["nombre"],
             hora_inicio=r["hora_inicio"],
             hora_fin=r["hora_fin"],
+            dias=list(r["dias"]) if r.get("dias") else None,
+            vigente=(
+                ahora is not None
+                and horario_vigente(r["hora_inicio"], r["hora_fin"], r.get("dias"), ahora)
+            ),
         )
         for r in rows
     ]
@@ -356,6 +416,7 @@ async def abrir_turno(
             turno_id=turno_id,
             fondo_inicial=payload.fondo_inicial,
             creado_por=user_id,
+            observaciones_apertura=(payload.observaciones_apertura or "").strip() or None,
         )
     except asyncpg.UniqueViolationError as exc:
         # N2: otra petición abrió entre la verificación y el INSERT. Si fue
@@ -377,12 +438,15 @@ async def abrir_turno(
         cajero_id=str(nueva["cajero_id"]),
         cajero_nombre=str(nueva["cajero_nombre"]),
         terminal=str(nueva["terminal"]),
+        caja_nombre=nueva.get("caja_nombre"),
         estado="OPERANDO",
         fondo_inicial=Decimal(str(nueva["fondo_inicial"])),
         fecha_apertura=str(nueva["fecha_apertura"]),
+        observaciones_apertura=nueva.get("observaciones_apertura"),
         total_ventas=Decimal("0"),
         total_retiros=Decimal("0"),
         total_ingresos=Decimal("0"),
+        efectivo_esperado=Decimal(str(nueva["fondo_inicial"])),
         movimientos=[],
     )
 
@@ -426,10 +490,12 @@ async def obtener_turno_activo(
         raise TurnoNoEncontradoError()
 
     apertura_id = str(activa["id"])
+    fondo_inicial = Decimal(str(activa["fondo_inicial"]))
     total_ventas = await sumar_total_ventas_apertura(conn, apertura_id)
     numero_ventas = await contar_ventas_apertura(conn, apertura_id)
     total_retiros = await sumar_retiros_por_apertura(conn, apertura_id)
     total_ingresos = await sumar_ingresos_por_apertura(conn, apertura_id)
+    total_cambio = await sumar_cambio_apertura(conn, apertura_id)
     movs_raw = await obtener_movimientos_por_metodo(conn, apertura_id)
 
     movimientos = [
@@ -437,6 +503,25 @@ async def obtener_turno_activo(
             metodo=r["metodo_nombre"].lower(), total_ventas=Decimal(str(r["total_ventas"]))
         )
         for r in movs_raw
+    ]
+
+    # M7: efectivo esperado en vivo (misma fórmula que el arqueo) y lo
+    # cobrado por método, con el efectivo neto del cambio.
+    efectivo_esperado = await calcular_efectivo_disponible(conn, apertura_id, fondo_inicial)
+    ventas_por_metodo = [
+        VentaPorMetodo(
+            metodo="efectivo",
+            label="Efectivo",
+            total=await sumar_ventas_efectivo_apertura(conn, apertura_id) - total_cambio,
+        )
+    ] + [
+        VentaPorMetodo(
+            metodo=r["metodo_nombre"].lower(),
+            label=r["metodo_nombre"],
+            total=Decimal(str(r["total_ventas"])),
+        )
+        for r in movs_raw
+        if r["metodo_tipo"] != "E"
     ]
 
     # apertura_caja.estado solo distingue ABIERTA/EN_CORTE/CERRADA — el sub-estado real
@@ -465,17 +550,39 @@ async def obtener_turno_activo(
         cajero_id=str(activa["cajero_id"]),
         cajero_nombre=str(activa["cajero_nombre"]),
         terminal=str(activa["terminal"]),
+        caja_nombre=activa.get("caja_nombre"),
         estado=estado_ui,
-        fondo_inicial=Decimal(str(activa["fondo_inicial"])),
+        fondo_inicial=fondo_inicial,
         fecha_apertura=str(activa["fecha_apertura"]),
+        observaciones_apertura=activa.get("observaciones_apertura"),
         total_ventas=total_ventas,
         numero_ventas=numero_ventas,
-        total_vendido=total_ventas,
+        # M6: lo aplicado (neto del cambio), no el efectivo recibido.
+        total_vendido=total_ventas - total_cambio,
+        total_cambio=total_cambio,
         total_retiros=total_retiros,
         total_ingresos=total_ingresos,
+        efectivo_esperado=efectivo_esperado,
+        ventas_por_metodo=ventas_por_metodo,
         movimientos=movimientos,
         admin_email=admin_email,
         balance_por_metodo=balance_por_metodo,
+        conteo_guardado=_conteo_guardado(activa),
+    )
+
+
+def _conteo_guardado(apertura: dict[str, Any]) -> ConteoGuardado | None:
+    """B23: el conteo que el cajero ya envió, tal como quedó congelado."""
+    if apertura.get("monto_declarado") is None or not apertura.get("conteo_json"):
+        return None
+    try:
+        conteo = json.loads(apertura["conteo_json"])
+    except (TypeError, ValueError):
+        return None
+    return ConteoGuardado(
+        desglose_efectivo=conteo.get("desglose_efectivo") or {},
+        metodos_pago=conteo.get("metodos_pago") or [],
+        total_declarado=Decimal(str(apertura["monto_declarado"])),
     )
 
 
@@ -894,17 +1001,21 @@ async def obtener_apertura_operando_id(conn: asyncpg.Connection, user_id: str) -
     Devuelve el id de la apertura activa para que el llamador registre el movimiento."""
     apertura = await get_apertura_activa_por_usuario(conn, user_id)
     if not apertura or apertura["estado"] != "ABIERTA":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "TURNO_NO_ABIERTO",
-                "message": (
-                    "Debes tener un turno de caja abierto (operando) para "
-                    "registrar ventas o pagos."
-                ),
-            },
-        )
+        raise TurnoNoAbiertoError()
     return str(apertura["id"])
+
+
+async def bloquear_turno_para_cobro(conn: asyncpg.Connection, apertura_caja_id: str) -> None:
+    """N1: la validación de obtener_apertura_operando_id corre fuera de
+    cualquier bloqueo, así que un cobro podía entrar justo cuando empezaba el
+    conteo o el cierre. Esta función se llama al principio de la transacción
+    del cobro: toma un bloqueo compartido de la apertura (los cobros del
+    mismo turno no se esperan entre sí, pero sí esperan a una transición del
+    turno y la hacen esperar) y vuelve a exigir que el turno esté ABIERTA.
+    Debe correr dentro de `conn.transaction()`."""
+    apertura = await bloquear_apertura_para_cobro(conn, apertura_caja_id)
+    if not apertura or apertura["estado"] != "ABIERTA":
+        raise TurnoNoAbiertoError()
 
 
 async def verificar_turno_abierto(conn: asyncpg.Connection, user_id: str) -> None:
@@ -1040,11 +1151,13 @@ async def crear_ingreso(
             referencia_id=payload.apertura_caja_id,
             monto=payload.monto,
             creado_por=user_id,
+            observaciones=(payload.observaciones or "").strip() or None,
         )
     return IngresoEfectivoResponse(
         id=str(row["id"]),
         apertura_caja_id=str(row["apertura_caja_id"]),
         monto=Decimal(str(row["monto"])),
+        observaciones=row.get("observaciones"),
         creado=row["creado"],
     )
 
@@ -1147,6 +1260,7 @@ def _arqueos_desde_filas(rows: list[dict[str, Any]]) -> list[ArqueoResumen]:
             id=str(r["id"]),
             cajero_nombre=r["cajero_nombre"] or "—",
             terminal=r["terminal"],
+            caja_nombre=r.get("caja_nombre"),
             sucursal_nombre=r["sucursal_nombre"],
             fecha_apertura=str(r["fecha_apertura"]),
             fecha_cierre=str(r["fecha_cierre"]),
@@ -1274,7 +1388,12 @@ async def obtener_detalle(
 
     ingresos_raw = await listar_ingresos_por_apertura(conn, apertura_caja_id)
     ingresos = [
-        IngresoDetalle(id=str(i["id"]), monto=Decimal(str(i["monto"])), creado=i["creado"])
+        IngresoDetalle(
+            id=str(i["id"]),
+            monto=Decimal(str(i["monto"])),
+            observaciones=i.get("observaciones"),
+            creado=i["creado"],
+        )
         for i in ingresos_raw
     ]
 
@@ -1296,6 +1415,7 @@ async def obtener_detalle(
         id=str(cierre["id"]),
         cajero_nombre=cierre["cajero_nombre"] or "—",
         terminal=cierre["terminal"],
+        caja_nombre=cierre.get("caja_nombre"),
         sucursal_nombre=cierre["sucursal_nombre"],
         fecha_apertura=str(cierre["fecha_apertura"]),
         fecha_cierre=str(cierre["fecha_cierre"]),
@@ -1308,6 +1428,7 @@ async def obtener_detalle(
         admin_nombre=cierre["admin_nombre"],
         tipo_cierre=cierre["tipo_cierre"],
         observaciones=cierre["observaciones"] or "",
+        observaciones_apertura=cierre.get("observaciones_apertura"),
         desglose_efectivo=DesgloseEfectivoDetalle(total=Decimal(str(cierre["total_declarado"]))),
         balance_por_metodo=balance,
         retiros=retiros,

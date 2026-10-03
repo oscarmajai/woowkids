@@ -125,7 +125,7 @@ onMounted(() => {
   store.startTicking()
   // Roles sin ningún permiso de caja (ej. Personal de atención de niños)
   // nunca tendrán un turno abierto — pedirlo solo genera un 403 de más.
-  if (auth.hasPermission('pos:acceder')) {
+  if (auth.hasPermission('turnos_caja:ver_activo')) {
     void turno.cargarTurnoActivo()
   }
 })
