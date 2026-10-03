@@ -199,6 +199,9 @@
       :total-to-pay="saldoSeleccionado ?? 0"
       :metodos-pago="metodosPagoStore.activos"
       :permitir-lealtad="false"
+      permitir-pago-parcial
+      titulo="Registrar pago"
+      subtitulo="Cobra el saldo completo o registra un abono parcial"
       @pago-exitoso="onCobroExitoso"
     />
 
@@ -319,9 +322,7 @@ const filasVisibles = computed(() => {
     .filter((f) => !q || `${f.folio ?? ''} ${f.cliente} ${f.evento}`.toLowerCase().includes(q))
 })
 
-const anticipos = computed(() =>
-  pagosStore.pagos_reservacion.filter((p) => p.tipo === 'anticipo'),
-)
+const anticipos = computed(() => pagosStore.pagos_reservacion.filter((p) => p.tipo === 'anticipo'))
 const totalAnticipos = computed(() => anticipos.value.reduce((s, p) => s + parseFloat(p.monto), 0))
 
 const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
