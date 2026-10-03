@@ -75,12 +75,25 @@ async def _resolver_tipo(
     return tipo_solicitado or "pago"
 
 
+async def _validar_metodo_pago(conn: asyncpg.Connection, metodo_pago_id: UUID) -> None:
+    """Sin esto un metodo_pago_id inexistente llegaba hasta el INSERT y la
+    llave foránea respondía 500 en lugar de un error de validación."""
+    if not await metodos_pago_repository.existe(conn, metodo_pago_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El método de pago no existe.",
+        )
+
+
 async def crear(
     conn: asyncpg.Connection,
     body: PagosReservacionCreate,
     usuario_id: UUID,
     apertura_caja_id: str,
 ) -> PagosReservacionOut:
+    if await reservaciones_repository.obtener(conn, body.reservacion_id) is None:
+        raise NoEncontrado("Reservación")
+    await _validar_metodo_pago(conn, body.metodo_pago_id)
     tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
     row = await pagos_reservacion_repository.crear(
         conn,
@@ -174,6 +187,8 @@ async def actualizar(
 ) -> PagosReservacionOut:
     await obtener(conn, pago_id)
     updates = body.model_dump(exclude_unset=True)
+    if updates.get("metodo_pago_id") is not None:
+        await _validar_metodo_pago(conn, updates["metodo_pago_id"])
     row = await pagos_reservacion_repository.actualizar(conn, pago_id, updates)
     if not row:
         raise NoEncontrado("Pago")
