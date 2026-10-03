@@ -1,10 +1,15 @@
 <template>
   <div class="caja-root">
     <section class="caja-col">
-      <!-- El catálogo y el armado del pedido se pueden usar sin turno abierto;
-           lo único que se bloquea es el cobro (ver abrirModalPago), que redirige
-           a Apertura de Caja en vez de dejar pagar sin turno. -->
+      <!-- Sin turno abierto se puede ver el catálogo, pero no armar un pedido:
+           se perdería al cobrar (el cobro redirige a Apertura de Caja). Se
+           avisa antes de empezar. -->
       <div class="caja-top">
+        <div v-if="sinTurnoParaVender" class="caja-sin-turno" role="alert">
+          <q-icon name="point_of_sale" size="20px" />
+          <span>No hay un turno de caja abierto. Abre la caja antes de armar un pedido.</span>
+          <q-btn flat dense no-caps color="primary" label="Abrir caja" @click="irAApertura" />
+        </div>
         <q-input
           v-model="busqueda"
           outlined
@@ -89,7 +94,7 @@
       :enviando="enviando"
       :nombre-cliente="nombreCliente"
       :mesa="mesa"
-      @cancelar="cancelarTicket"
+      @cancelar="pedirCancelarTicket"
       @cambiar-cantidad="cambiarCantidad"
       @editar-notas="abrirNotasDialog"
       @split-combo="handleSplitCombo"
@@ -152,6 +157,43 @@
       unidad independiente?
     </BaseDialog>
 
+    <BaseDialog
+      v-model="confirmarCancelarDialog"
+      title="Cancelar pedido"
+      :subtitle="`${unidadesTicket} producto(s) · $${totalTicket.toFixed(2)}`"
+      icon="delete_sweep"
+      tone="red"
+      danger
+      :width="440"
+      secondary-label="No, seguir"
+      primary-label="Sí, cancelar"
+      @confirm="confirmarCancelarTicket"
+    >
+      Se quitarán todos los productos del pedido. No se cobró nada.
+    </BaseDialog>
+
+    <BaseDialog
+      v-model="restaurarDialog"
+      title="Pedido sin terminar"
+      :subtitle="
+        pedidoGuardado
+          ? `${unidadesDelPedido(pedidoGuardado.items)} producto(s)` +
+            (pedidoGuardado.nombreCliente ? ` · ${pedidoGuardado.nombreCliente}` : '')
+          : ''
+      "
+      icon="restore"
+      tone="amber"
+      :width="440"
+      persistent
+      secondary-label="Descartar"
+      primary-label="Restaurar"
+      @confirm="restaurarPedidoGuardado"
+      @cancel="descartarPedidoGuardado"
+    >
+      Esta pestaña tenía un pedido sin cobrar. ¿Quieres restaurarlo? Los pagos se vuelven a
+      capturar.
+    </BaseDialog>
+
     <!-- MODAL DE INGRESO DE EFECTIVO PREVENTIVO -->
     <IngresoEfectivoModal
       v-if="pagosPendientes"
@@ -164,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import axios from 'axios'
@@ -191,6 +233,14 @@ import { CATEGORIAS_METODO_PAGO, type MetodosPago } from '@/types/metodos_pago'
 import type { AppliedPayment, PagoCompletoRequest } from '@/types/payments'
 import type { Comanda, ComandaWsMessage } from '@/types/comanda'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
+import {
+  borrarPedidoEnCurso,
+  clavePedidoEnCurso,
+  guardarPedidoEnCurso,
+  leerPedidoEnCurso,
+  unidadesDelPedido,
+  type PedidoEnCurso,
+} from '@/utils/pedidoEnCurso'
 
 const router = useRouter()
 const $q = useQuasar()
@@ -239,6 +289,7 @@ const abrirModalPago = () => {
     return
   }
   idempotencyKey ??= crypto.randomUUID()
+  persistirPedido()
   modalPagoAbierto.value = true
 }
 const props = defineProps<{ searchTerm?: string }>()
@@ -253,6 +304,7 @@ const {
   guardarNotas,
   detallesParaEnvio,
   actualizarPrecios,
+  restaurarItems,
   nombreCliente,
 } = useTicketComanda()
 
@@ -271,6 +323,24 @@ const error = ref<string | null>(null)
 const enviando = ref(false)
 const ticketAbierto = ref(false)
 const metodosPagoDisponibles = ref<MetodosPago[]>([])
+
+// Ya se cargó el turno y no está operando (mientras carga no se bloquea).
+const sinTurnoParaVender = computed(() => !turno.estaOperando && !turno.cargando)
+
+const irAApertura = () => {
+  void router.push('/pos/cierre')
+}
+
+const avisarSinTurno = () => {
+  $q.notify({
+    type: 'warning',
+    message: 'No hay un turno de caja abierto.',
+    caption: 'Abre la caja antes de armar el pedido; sin turno no se puede cobrar.',
+    position: 'top-right',
+    timeout: 5000,
+    actions: [{ label: 'Abrir caja', color: 'white', handler: irAApertura }],
+  })
+}
 
 const iniciarNuevoPedido = () => {
   // Se valida al hacer clic en "Nuevo Pedido", no hasta el cobro: sin turno
@@ -364,6 +434,10 @@ const agregarAlTicket = async (producto: ReturnType<typeof Object> & { id: strin
     })
     return
   }
+  if (sinTurnoParaVender.value) {
+    avisarSinTurno()
+    return
+  }
   ticketAbierto.value = true
   const ok = await agregarProducto(producto as Parameters<typeof agregarProducto>[0])
   if (!ok) {
@@ -381,6 +455,68 @@ const cancelarTicket = () => {
   ticketAbierto.value = false
   nombreCliente.value = ''
   mesa.value = ''
+  borrarPedidoEnCurso(claveStorage)
+}
+
+// "Cancelar" del ticket: con productos pide confirmación (un toque accidental
+// borraba todo el pedido).
+const confirmarCancelarDialog = ref(false)
+const pedirCancelarTicket = () => {
+  if (itemsTicket.value.length === 0) {
+    cancelarTicket()
+    return
+  }
+  confirmarCancelarDialog.value = true
+}
+const confirmarCancelarTicket = () => {
+  confirmarCancelarDialog.value = false
+  cancelarTicket()
+}
+
+const unidadesTicket = computed(() => unidadesDelPedido(itemsTicket.value))
+
+// ── Pedido en curso en sessionStorage (por pestaña) ────────────────
+// Recargar a mitad de una venta perdía el pedido. Se guarda cada cambio y, al
+// volver a cargar la pestaña, se ofrece restaurarlo. Ya cobrado no se guarda.
+const claveStorage = clavePedidoEnCurso(
+  authStore.currentUser?.id ?? null,
+  authStore.currentBranchId ?? null,
+)
+const pedidoGuardado = ref<PedidoEnCurso | null>(leerPedidoEnCurso(claveStorage))
+const restaurarDialog = ref(pedidoGuardado.value !== null)
+
+function persistirPedido() {
+  if (restaurarDialog.value || comandaPagadaId.value) return
+  guardarPedidoEnCurso(claveStorage, {
+    items: itemsTicket.value,
+    nombreCliente: nombreCliente.value,
+    mesa: mesa.value,
+    idempotencyKey,
+  })
+}
+watch([itemsTicket, nombreCliente, mesa], persistirPedido, { deep: true })
+
+async function restaurarPedidoGuardado() {
+  const pedido = pedidoGuardado.value
+  restaurarDialog.value = false
+  pedidoGuardado.value = null
+  if (!pedido) return
+  // TicketPanel copia nombre y mesa al montarse: se vuelve a montar con ellos.
+  ticketAbierto.value = false
+  await nextTick()
+  restaurarItems(pedido.items)
+  nombreCliente.value = pedido.nombreCliente
+  mesa.value = pedido.mesa
+  idempotencyKey = pedido.idempotencyKey
+  ticketAbierto.value = true
+  persistirPedido()
+}
+
+function descartarPedidoGuardado() {
+  restaurarDialog.value = false
+  pedidoGuardado.value = null
+  if (itemsTicket.value.length === 0) borrarPedidoEnCurso(claveStorage)
+  else persistirPedido()
 }
 
 const actualizarNombreCliente = (nombre: string) => {
@@ -550,13 +686,15 @@ const procesarPago = async (
     $q.notify({
       type: 'positive',
       message: '¡Pedido enviado a cocina!',
-      caption: `${itemsTicket.value.length} producto(s) en camino`,
+      caption: `${unidadesTicket.value} producto(s) en camino`,
       position: 'top-right',
       timeout: 2500,
       icon: 'check_circle',
     })
 
     comandaPagadaId.value = comanda.id
+    // Ya cobrado: no se ofrece restaurarlo si se recarga la pestaña.
+    borrarPedidoEnCurso(claveStorage)
     ticketPostPagoAbierto.value = true
     // Un pago exitoso consume la clave: si el cajero inicia otro ticket, debe
     // generarse una nueva al abrir el cobro, nunca reutilizar esta.
@@ -693,6 +831,22 @@ onBeforeUnmount(() => abortController.abort())
   flex-direction: column;
   gap: 16px;
   flex-shrink: 0;
+}
+
+.caja-sin-turno {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--tone-warn-bg);
+  color: var(--tone-warn-fg);
+  font-size: 14px;
+  font-weight: 600;
+
+  span {
+    flex: 1;
+  }
 }
 
 .caja-search {

@@ -1,4 +1,4 @@
-import { flushPromises, shallowMount } from '@vue/test-utils'
+import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
@@ -6,6 +6,8 @@ import CajaComponent from '../CajaComponent.vue'
 import ProductoCard from '@/components/comandas/ProductoCard.vue'
 import TicketPanel from '@/components/comandas/TicketPanel.vue'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
+import BaseDialog from '@/components/ui/BaseDialog.vue'
+import { clavePedidoEnCurso, guardarPedidoEnCurso } from '@/utils/pedidoEnCurso'
 import { pagosApi } from '@/api/pagosApi'
 import { obtenerProductos } from '@/services/productoService'
 import type { Producto } from '@/types/producto'
@@ -46,13 +48,13 @@ vi.mock('@/composables/useCajaMetrics', () => ({
   }),
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentBranchId: 's1' }) }))
-vi.mock('@/stores/turnoCaja', () => ({
-  useTurnoCajaStore: () => ({
-    estaOperando: true,
-    efectivoDisponible: 1000,
-    cargarTurnoActivo: vi.fn(),
-  }),
+const turnoMock = vi.hoisted(() => ({
+  estaOperando: true,
+  cargando: false,
+  efectivoDisponible: 1000,
+  cargarTurnoActivo: vi.fn(),
 }))
+vi.mock('@/stores/turnoCaja', () => ({ useTurnoCajaStore: () => turnoMock }))
 
 const pizza: Producto = {
   id: 'pizza',
@@ -90,6 +92,7 @@ describe('CajaComponent: cobro rechazado por precio cambiado (C2)', () => {
     notify.mockReset()
     mockCompletar.mockReset()
     mockProductos.mockReset()
+    sessionStorage.clear()
   })
 
   it('muestra el mensaje del backend, refresca precios y deja volver a cobrar', async () => {
@@ -131,5 +134,134 @@ describe('CajaComponent: cobro rechazado por precio cambiado (C2)', () => {
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Error al procesar el pago' }),
     )
+  })
+})
+
+function dialogo(wrapper: VueWrapper, titulo: string) {
+  const d = wrapper.findAllComponents(BaseDialog).find((c) => c.props('title') === titulo)
+  if (!d) throw new Error(`No está el diálogo «${titulo}»`)
+  return d
+}
+
+async function conPizza() {
+  const wrapper = shallowMount(CajaComponent)
+  await flushPromises()
+  wrapper.findComponent(ProductoCard).vm.$emit('agregar', pizza)
+  await flushPromises()
+  return wrapper
+}
+
+describe('CajaComponent: UX del pedido', () => {
+  beforeEach(() => {
+    notify.mockReset()
+    mockCompletar.mockReset()
+    mockProductos.mockReset()
+    mockProductos.mockResolvedValue([pizza])
+    sessionStorage.clear()
+    turnoMock.estaOperando = true
+    turnoMock.cargando = false
+  })
+
+  it('sin turno abierto avisa y no deja armar el pedido', async () => {
+    turnoMock.estaOperando = false
+    const wrapper = await conPizza()
+
+    expect(wrapper.findComponent(TicketPanel).exists()).toBe(false)
+    expect(wrapper.find('.caja-sin-turno').exists()).toBe(true)
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'No hay un turno de caja abierto.' }),
+    )
+  })
+
+  it('"Cancelar" con productos pide confirmación antes de borrar el pedido', async () => {
+    const wrapper = await conPizza()
+    wrapper.findComponent(TicketPanel).vm.$emit('cancelar')
+    await flushPromises()
+
+    expect(dialogo(wrapper, 'Cancelar pedido').props('modelValue')).toBe(true)
+    expect(wrapper.findComponent(TicketPanel).props('items')).toHaveLength(1)
+
+    dialogo(wrapper, 'Cancelar pedido').vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.findComponent(TicketPanel).exists()).toBe(false)
+  })
+
+  it('guarda el pedido en la pestaña y lo ofrece restaurar al recargar', async () => {
+    const primera = await conPizza()
+    primera.findComponent(TicketPanel).vm.$emit('actualizar-nombre', 'Ana')
+    await flushPromises()
+    primera.unmount()
+
+    const wrapper = shallowMount(CajaComponent)
+    await flushPromises()
+    const restaurar = dialogo(wrapper, 'Pedido sin terminar')
+    expect(restaurar.props('modelValue')).toBe(true)
+
+    restaurar.vm.$emit('confirm')
+    await flushPromises()
+    const ticket = wrapper.findComponent(TicketPanel)
+    expect(ticket.props('items')).toHaveLength(1)
+    expect(ticket.props('nombreCliente')).toBe('Ana')
+  })
+
+  it('descartar el pedido guardado lo borra', async () => {
+    guardarPedidoEnCurso(clavePedidoEnCurso(null, 's1'), {
+      items: [{ id: 'r1', producto: pizza, cantidad: 1, notas: '' }],
+      nombreCliente: '',
+      mesa: '',
+      idempotencyKey: null,
+    })
+    const wrapper = shallowMount(CajaComponent)
+    await flushPromises()
+    dialogo(wrapper, 'Pedido sin terminar').vm.$emit('cancel')
+    await flushPromises()
+    expect(sessionStorage.getItem(clavePedidoEnCurso(null, 's1'))).toBeNull()
+  })
+
+  it('"Pedido enviado" cuenta unidades, no renglones, y limpia el pedido guardado', async () => {
+    mockCompletar.mockResolvedValueOnce({ id: 'c1' } as never)
+    const wrapper = await conPizza()
+    wrapper.findComponent(ProductoCard).vm.$emit('agregar', pizza)
+    await flushPromises()
+    const ticket = wrapper.findComponent(TicketPanel)
+    ticket.vm.$emit('actualizar-nombre', 'Ana')
+    ticket.vm.$emit('pagar')
+    await flushPromises()
+    const modal = wrapper.findComponent(PaymentModal)
+    const total = modal.props('totalToPay') as number
+    modal.vm.$emit('pago-exitoso', [{ id: 'p1', method: 'Efectivo', amount: total }], null, 0, 0, 0)
+    await flushPromises()
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '¡Pedido enviado a cocina!',
+        caption: '2 producto(s) en camino',
+      }),
+    )
+    expect(sessionStorage.getItem(clavePedidoEnCurso(null, 's1'))).toBeNull()
+  })
+})
+
+describe('CajaComponent: servicios (M14)', () => {
+  beforeEach(() => {
+    mockProductos.mockReset()
+    sessionStorage.clear()
+    turnoMock.estaOperando = true
+  })
+
+  it('muestra los servicios en el catálogo y en su categoría', async () => {
+    const servicio: Producto = { ...pizza, id: 'pinta', nombre: 'Pintacaritas', tipo: 'S' }
+    const estancia: Producto = { ...pizza, id: 'hora', nombre: 'Hora de juego', tipo: 'E' }
+    mockProductos.mockResolvedValue([pizza, servicio, estancia])
+    const wrapper = shallowMount(CajaComponent)
+    await flushPromises()
+
+    const ids = () =>
+      wrapper.findAllComponents(ProductoCard).map((c) => (c.props('producto') as Producto).id)
+    expect(ids()).toEqual(['pizza', 'pinta'])
+
+    const servicios = wrapper.findAll('.cat-pill').find((b) => b.text() === 'Servicios')
+    await servicios!.trigger('click')
+    expect(ids()).toEqual(['pinta'])
   })
 })

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import { useTicketComanda } from '../useTicketComanda'
 import { obtenerComboHijos } from '@/services/productoService'
@@ -118,5 +119,23 @@ describe('useTicketComanda', () => {
       expect(resultado).toEqual({ actualizados: [], eliminados: ['Combo Kids'] })
       expect(itemsTicket.value.map((i) => i.producto.id)).toEqual(['pizza'])
     })
+  })
+
+  it('restaurarItems repone el pedido y sigue sincronizando los hijos del combo', async () => {
+    mockHijos.mockResolvedValue(HIJOS as never)
+    const original = useTicketComanda()
+    await original.agregarProducto(combo)
+    const guardado = JSON.parse(JSON.stringify(original.itemsTicket.value))
+
+    const { itemsTicket, restaurarItems, cambiarCantidad } = useTicketComanda()
+    restaurarItems(guardado)
+    await nextTick()
+    const padre = itemsTicket.value.find((i) => !i.es_hijo_combo)!
+    cambiarCantidad(padre, 1)
+    await nextTick()
+
+    const refresco = itemsTicket.value.find((i) => i.producto.id === 'h2')
+    expect(padre.cantidad).toBe(2)
+    expect(refresco?.cantidad).toBe(4)
   })
 })
