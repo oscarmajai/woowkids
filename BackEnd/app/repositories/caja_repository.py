@@ -36,7 +36,7 @@ async def get_caja_por_codigo(
         """
         SELECT id, sucursal_id, codigo, nombre, creado
         FROM public.cajas
-        WHERE sucursal_id = $1 AND codigo = $2
+        WHERE sucursal_id = $1 AND codigo = $2 AND activo = TRUE
         """,
         uuid.UUID(sucursal_id),
         codigo,
@@ -47,7 +47,8 @@ async def get_caja_por_codigo(
 async def get_caja_por_id(
     conn: asyncpg.Connection, sucursal_id: str, caja_id: str
 ) -> dict[str, Any] | None:
-    """Caja por id, solo si pertenece a la sucursal indicada."""
+    """Caja activa por id, solo si pertenece a la sucursal indicada (M9: una
+    caja desactivada ya no admite turnos nuevos)."""
     try:
         caja_uuid = uuid.UUID(caja_id)
     except ValueError:
@@ -56,7 +57,7 @@ async def get_caja_por_id(
         """
         SELECT id, sucursal_id, codigo, nombre, creado
         FROM public.cajas
-        WHERE sucursal_id = $1 AND id = $2
+        WHERE sucursal_id = $1 AND id = $2 AND activo = TRUE
         """,
         uuid.UUID(sucursal_id),
         caja_uuid,
@@ -287,6 +288,34 @@ async def actualizar_caja_admin(
         "impresora": row["impresora"],
         "turno_actual": None,
     }
+
+
+async def bloquear_caja(conn: asyncpg.Connection, caja_id: str) -> bool:
+    """M9: bloquea la fila de la caja hasta el fin de la transacción en curso
+    (el llamador DEBE estar en `conn.transaction()`). FOR UPDATE choca con el
+    FOR KEY SHARE que toma la llave foránea al insertar una apertura, así que
+    una apertura en curso termina antes de revisar si la caja tiene turno.
+    Devuelve False si la caja no existe."""
+    fila = await conn.fetchval(
+        "SELECT id FROM public.cajas WHERE id = $1 FOR UPDATE",
+        uuid.UUID(caja_id),
+    )
+    return fila is not None
+
+
+async def caja_tiene_turno_activo(conn: asyncpg.Connection, caja_id: str) -> bool:
+    """M9: True si la caja tiene una apertura ABIERTA o EN_CORTE."""
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM public.apertura_caja
+                WHERE caja_id = $1 AND estado IN ('ABIERTA', 'EN_CORTE')
+            )
+            """,
+            uuid.UUID(caja_id),
+        )
+    )
 
 
 async def eliminar_caja_admin(

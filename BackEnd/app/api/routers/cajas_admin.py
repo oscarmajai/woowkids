@@ -16,6 +16,8 @@ from app.core.database import get_db
 from app.core.roles import ROL_SISTEMA
 from app.repositories.caja_repository import (
     actualizar_caja_admin,
+    bloquear_caja,
+    caja_tiene_turno_activo,
     crear_caja_admin,
     eliminar_caja_admin,
     get_caja_admin_por_id,
@@ -51,6 +53,28 @@ _NUMERO_DUPLICADO = HTTPException(
         "message": "Ya existe una caja activa con ese número en esta sucursal.",
     },
 )
+
+
+_CAJA_CON_TURNO = HTTPException(
+    status_code=status.HTTP_409_CONFLICT,
+    detail={
+        "code": "CAJA_CON_TURNO_ABIERTO",
+        "message": (
+            "La caja tiene un turno abierto. Pide al cajero que haga el cierre antes de "
+            "desactivarla."
+        ),
+    },
+)
+
+
+async def _asegurar_sin_turno_activo(conn: asyncpg.Connection, caja_id: str) -> None:
+    """M9: una caja con turno ABIERTA o EN_CORTE no se desactiva (dejaba al
+    cajero operando una caja que ya no existe para el resto del sistema).
+    Debe correr dentro de una transacción: bloquea la caja para que una
+    apertura en curso termine antes de revisar."""
+    await bloquear_caja(conn, caja_id)
+    if await caja_tiene_turno_activo(conn, caja_id):
+        raise _CAJA_CON_TURNO
 
 
 def _branch_id(current_user: TokenData) -> str:
@@ -127,16 +151,21 @@ async def editar(
         raise _NOT_FOUND
 
     try:
-        row = await actualizar_caja_admin(
-            conn,
-            caja_id=caja_id,
-            nombre=payload.nombre,
-            numero=payload.numero,
-            activo=payload.activo,
-            modificado_por=current_user.sub,
-            impresora=payload.impresora,
-            actualizar_impresora="impresora" in payload.model_fields_set,
-        )
+        async with conn.transaction():
+            if payload.activo is False and existing["activo"]:
+                await _asegurar_sin_turno_activo(conn, caja_id)
+            row = await actualizar_caja_admin(
+                conn,
+                caja_id=caja_id,
+                nombre=payload.nombre,
+                numero=payload.numero,
+                activo=payload.activo,
+                modificado_por=current_user.sub,
+                impresora=payload.impresora,
+                actualizar_impresora="impresora" in payload.model_fields_set,
+            )
+    except HTTPException:
+        raise
     except Exception as exc:
         if "unique" in str(exc).lower():
             raise _NUMERO_DUPLICADO from exc
@@ -163,4 +192,6 @@ async def eliminar(
     if existing is None or existing["sucursal_id"] != sucursal_id:
         raise _NOT_FOUND
 
-    await eliminar_caja_admin(conn, caja_id=caja_id, modificado_por=current_user.sub)
+    async with conn.transaction():
+        await _asegurar_sin_turno_activo(conn, caja_id)
+        await eliminar_caja_admin(conn, caja_id=caja_id, modificado_por=current_user.sub)
