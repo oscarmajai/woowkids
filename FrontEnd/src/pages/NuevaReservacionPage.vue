@@ -1032,8 +1032,9 @@ onMounted(() => {
 
   // Horario de operación de la sucursal, para avisar (no bloquear) cuando el
   // evento quede fuera de ese horario.
+  // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
   branchService
-    .getBranch(authStore.currentBranchId)
+    .getHorario(authStore.currentBranchId)
     .then((b) => {
       horarioSucursal.value = {
         apertura: b.horaApertura.slice(0, 5),

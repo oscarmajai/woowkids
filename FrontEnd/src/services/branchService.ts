@@ -3,6 +3,7 @@ import { downloadBlob } from '@/utils/downloadBlob'
 import type {
   Branch,
   CreateBranchPayload,
+  HorarioSucursal,
   IndicadoresSucursal,
   UpdateBranchPayload,
 } from '@/types/branch'
@@ -14,6 +15,12 @@ export const branchService = {
 
   async getBranch(id: string): Promise<Branch> {
     return branchesApi.getById(id)
+  },
+
+  /** Horario de operación de la sucursal de la sesión. A diferencia de
+   * getBranch, no exige `sucursales:ver`: basta con gestionar reservaciones. */
+  async getHorario(id: string): Promise<HorarioSucursal> {
+    return branchesApi.getHorario(id)
   },
 
   async createBranch(payload: CreateBranchPayload): Promise<Branch> {
