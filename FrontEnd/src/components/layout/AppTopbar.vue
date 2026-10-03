@@ -8,9 +8,9 @@ import { useAlertasInventarioStore } from '@/stores/alertasInventario'
 import { useReservacionesStore } from '@/stores/reservaciones'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
-defineProps<{
-  /** Muestra el botón de menú cuando el sidebar está en modo overlay. */
-  showMenuButton: boolean
+const props = defineProps<{
+  /** Estado del sidebar: el botón lo colapsa en escritorio o lo abre en overlay. */
+  sidebarAbierto: boolean
 }>()
 
 const emit = defineEmits<{ 'toggle-menu': [] }>()
@@ -81,15 +81,16 @@ function irACalendario(): void {
 <template>
   <header class="tb">
     <q-btn
-      v-if="showMenuButton"
       flat
       round
       dense
-      icon="menu"
+      :icon="props.sidebarAbierto ? 'menu_open' : 'menu'"
       class="tb__icon-btn"
-      aria-label="Abrir menú"
+      :aria-label="props.sidebarAbierto ? 'Ocultar menú' : 'Mostrar menú'"
       @click="emit('toggle-menu')"
-    />
+    >
+      <q-tooltip>{{ props.sidebarAbierto ? 'Ocultar menú' : 'Mostrar menú' }}</q-tooltip>
+    </q-btn>
 
     <div class="tb-crumbs">
       <template v-if="section && section !== page">
