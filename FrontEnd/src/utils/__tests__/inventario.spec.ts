@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
-import { compraPorRecibir, sumarBadgesGrupo, tituloAlertasStock } from '../inventario'
+import {
+  compraPorRecibir,
+  formatCostoUnitario,
+  sumarBadgesGrupo,
+  tituloAlertasStock,
+} from '../inventario'
+
+// Intl usa espacios especiales en algunos entornos: se comparan sin ellos.
+const limpio = (s: string) => s.replace(/\s/g, '')
+
+describe('formatCostoUnitario (M21)', () => {
+  it('no redondea a centavos el costo por gramo o mililitro', () => {
+    expect(limpio(formatCostoUnitario('0.042692'))).toBe('$0.042692')
+    expect(limpio(formatCostoUnitario(0.12231))).toBe('$0.12231')
+  })
+
+  it('muestra al menos dos decimales', () => {
+    expect(limpio(formatCostoUnitario('12.500000'))).toBe('$12.50')
+    expect(limpio(formatCostoUnitario(null))).toBe('$0.00')
+  })
+})
 
 describe('compraPorRecibir (B6)', () => {
   it('cuenta las pendientes y las parciales', () => {

@@ -84,7 +84,7 @@
         </template>
         <template #body-cell-costo_unitario="props">
           <q-td :props="props" class="text-weight-bold">
-            {{ props.row.costo_unitario ? formatMXN(Number(props.row.costo_unitario)) : '—' }}
+            {{ props.row.costo_unitario ? formatCostoUnitario(props.row.costo_unitario) : '—' }}
           </q-td>
         </template>
         <template #body-cell-proveedor_principal_id="props">
@@ -245,16 +245,29 @@
               step="0.001"
             />
           </div>
-          <div class="col">
-            <div class="field-label">Costo unitario (opcional)</div>
+          <div v-if="!editando" class="col">
+            <div class="field-label">Costo unitario inicial (opcional)</div>
             <q-input
               v-model.number="formDialog.costo_unitario"
               dense
               outlined
               type="number"
               min="0"
-              step="0.01"
+              step="any"
               prefix="$"
+              hint="Por unidad base; es el costo del stock inicial"
+            />
+          </div>
+          <div v-else class="col">
+            <div class="field-label">Costo unitario</div>
+            <q-input
+              :model-value="
+                editando.costo_unitario ? formatCostoUnitario(editando.costo_unitario) : '—'
+              "
+              dense
+              outlined
+              readonly
+              hint="Promedio PEPS de las compras y entradas; se actualiza solo con cada movimiento"
             />
           </div>
         </div>
@@ -545,7 +558,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
-import { formatMXN } from '@/utils/formatoMoneda'
+import { formatCostoUnitario } from '@/utils/inventario'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
@@ -739,8 +752,7 @@ const guardar = async () => {
           formDialog.value.punto_reorden != null ? String(formDialog.value.punto_reorden) : null,
         stock_maximo:
           formDialog.value.stock_maximo != null ? String(formDialog.value.stock_maximo) : null,
-        costo_unitario:
-          formDialog.value.costo_unitario != null ? String(formDialog.value.costo_unitario) : null,
+        // B9: el costo unitario no se manda; lo calcula el backend (PEPS).
         proveedor_principal_id: formDialog.value.proveedor_principal_id,
       })
       $q.notify({ type: 'positive', message: 'Insumo actualizado', position: 'top-right' })

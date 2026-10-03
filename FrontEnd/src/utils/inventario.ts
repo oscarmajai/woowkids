@@ -7,6 +7,24 @@
 import type { EstadoCompra } from '@/types/compra'
 import type { NavBadge } from '@/types/navigation'
 
+const formateadorCostoUnitario = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+})
+
+/**
+ * Costo por unidad base de un insumo (M21). En insumos por gramo o mililitro
+ * el costo es de centavos o fracciones ($0.042692/ml): con 2 decimales se
+ * leía $0.04. Los montos totales siguen con `formatMXN` (2 decimales).
+ * @example formatCostoUnitario(0.042692) → "$0.042692"
+ * @example formatCostoUnitario(12.5) → "$12.50"
+ */
+export function formatCostoUnitario(valor: number | string | null | undefined): string {
+  return formateadorCostoUnitario.format(Number(valor ?? 0))
+}
+
 /** Una compra sigue pendiente de recibir mientras no llegue completa (B6). */
 export function compraPorRecibir(estado: EstadoCompra): boolean {
   return estado === 'P' || estado === 'PARCIAL'

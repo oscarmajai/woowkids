@@ -224,7 +224,7 @@
                 outlined
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
               />
             </div>
             <div class="col-1 flex flex-center">
@@ -257,10 +257,9 @@
                 <q-item-section>
                   <q-item-label class="text-weight-medium">{{ linea.insumo_nombre }}</q-item-label>
                   <q-item-label caption>
-                    {{ linea.cantidad }} {{ linea.unidad_label }} × ${{
-                      linea.costo_unitario.toFixed(2)
-                    }}
-                    = ${{ (linea.cantidad * linea.costo_unitario).toFixed(2) }}
+                    {{ linea.cantidad }} {{ linea.unidad_label }} ×
+                    {{ formatCostoUnitario(linea.costo_unitario) }}
+                    = {{ formatMXN(linea.cantidad * linea.costo_unitario) }}
                   </q-item-label>
                 </q-item-section>
                 <q-item-section side>
@@ -386,9 +385,8 @@
               <q-item-label>{{ l.insumo_nombre }}</q-item-label>
               <q-item-label caption>
                 {{ Number(l.cantidad) }}
-                {{ l.presentacion_nombre ?? l.unidad_medida_codigo ?? '' }} × ${{
-                  Number(l.costo_unitario).toFixed(2)
-                }}
+                {{ l.presentacion_nombre ?? l.unidad_medida_codigo ?? '' }} ×
+                {{ formatCostoUnitario(l.costo_unitario) }}
               </q-item-label>
             </q-item-section>
             <q-item-section side class="text-weight-medium">
@@ -424,6 +422,7 @@ import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { formatCostoUnitario } from '@/utils/inventario'
 import { ref, computed, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import type { QTableColumn } from 'quasar'
@@ -723,8 +722,10 @@ const agregarLinea = () => {
     unidad_medida_id,
     presentacion_id,
     unidad_label,
-    cantidad: lineaTemporal.value.cantidad,
-    costo_unitario: lineaTemporal.value.costo_unitario,
+    // Precisión de las columnas: cantidad con 3 decimales y costo unitario con
+    // 6 (M21: el costo ya no se redondea a centavos).
+    cantidad: Number(Number(lineaTemporal.value.cantidad).toFixed(3)),
+    costo_unitario: Number(Number(lineaTemporal.value.costo_unitario).toFixed(6)),
   })
   lineaTemporal.value = lineaTemporalVacia()
 }
