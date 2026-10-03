@@ -362,6 +362,7 @@ async def get_apertura_activa_por_usuario(
             a.monto_declarado,
             a.conteo_json,
             a.token_admin_jti,
+            a.observaciones_apertura,
             a.creado AS fecha_apertura,
             c.nombre AS caja_nombre,
             c.codigo AS terminal,
@@ -420,6 +421,7 @@ _SELECT_APERTURA_POR_ID = """
         a.monto_declarado,
         a.conteo_json,
         a.token_admin_jti,
+        a.observaciones_apertura,
         a.creado AS fecha_apertura,
         c.nombre AS caja_nombre,
         c.codigo AS terminal,
@@ -510,6 +512,7 @@ async def crear_apertura_caja(
     turno_id: str,
     fondo_inicial: Decimal,
     creado_por: str | None = None,
+    observaciones_apertura: str | None = None,
 ) -> dict[str, Any]:
     apertura_id = uuid.uuid4()
     now = get_mexico_now()
@@ -517,8 +520,9 @@ async def crear_apertura_caja(
     await conn.execute(
         """
         INSERT INTO public.apertura_caja
-            (id, caja_id, cajero_id, turno_id, fondo_inicial, estado, creado, creado_por)
-        VALUES ($1, $2, $3, $4, $5, 'ABIERTA', $6, $7)
+            (id, caja_id, cajero_id, turno_id, fondo_inicial, estado, creado, creado_por,
+             observaciones_apertura)
+        VALUES ($1, $2, $3, $4, $5, 'ABIERTA', $6, $7, $8)
         """,
         apertura_id,
         uuid.UUID(caja_id),
@@ -527,6 +531,7 @@ async def crear_apertura_caja(
         fondo_inicial,
         now,
         uuid.UUID(creado_por) if creado_por else user_uuid,
+        observaciones_apertura,
     )
     res = await get_apertura_por_id(conn, str(apertura_id))
     assert res is not None
@@ -699,7 +704,7 @@ async def listar_ingresos_por_apertura(
 ) -> list[dict[str, Any]]:
     rows = await conn.fetch(
         """
-        SELECT id, monto, creado
+        SELECT id, monto, observaciones, creado
         FROM public.movimientos_caja
         WHERE apertura_caja_id = $1 AND tipo_movimiento = 'I'
         ORDER BY creado DESC
@@ -720,8 +725,11 @@ async def registrar_movimiento_caja(
     metodo_pago_id: str | None,
     monto: Decimal,
     creado_por: str | None = None,
+    observaciones: str | None = None,
 ) -> dict[str, Any]:
     """
+    `observaciones` solo lo usa hoy el ingreso de efectivo (su motivo).
+
     metodo_pago_id es temporalmente opcional: el módulo de ventas/comandas aún no integra
     métodos de pago, así que puede registrar movimientos con metodo_pago_id=NULL mientras
     tanto. Cuando esté integrado, volver a exigirlo (columna ya vuelta NOT NULL en BD).
@@ -731,10 +739,10 @@ async def registrar_movimiento_caja(
         """
         INSERT INTO public.movimientos_caja
             (apertura_caja_id, tipo_movimiento, referencia_id, metodo_pago_id, monto,
-             creado, creado_por)
-        VALUES ($1, $2::tipo_movimiento_caja, $3, $4, $5, $6, $7)
+             creado, creado_por, observaciones)
+        VALUES ($1, $2::tipo_movimiento_caja, $3, $4, $5, $6, $7, $8)
         RETURNING id, apertura_caja_id, tipo_movimiento, referencia_id, metodo_pago_id,
-                  monto, creado
+                  monto, observaciones, creado
         """,
         uuid.UUID(apertura_caja_id),
         tipo_movimiento,
@@ -743,6 +751,7 @@ async def registrar_movimiento_caja(
         monto,
         now,
         uuid.UUID(creado_por) if creado_por else None,
+        observaciones,
     )
     return dict(row)
 
@@ -777,6 +786,7 @@ async def registrar_ingreso_efectivo(
     referencia_id: str,
     monto: Decimal,
     creado_por: str | None = None,
+    observaciones: str | None = None,
 ) -> dict[str, Any]:
     """Registra una entrada de efectivo físico durante el turno que no
     corresponde a una venta (reposición de cambio, fondo adicional, etc.).
@@ -791,6 +801,7 @@ async def registrar_ingreso_efectivo(
         metodo_pago_id=None,
         monto=monto,
         creado_por=creado_por,
+        observaciones=observaciones,
     )
 
 
@@ -857,16 +868,19 @@ async def sumar_total_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id
 
 
 async def contar_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id: str) -> int:
-    """Número de ventas (movimientos de cobro, no retiros/cambio/ingresos) del
-    turno. Pendiente B9 B.4: "vendido en turno" para el cajero -- solo el
-    total y el número de tickets, sin desglose por método ni efectivo
-    esperado (conteo a ciegas)."""
+    """Número de tickets/órdenes cobrados en el turno (M6), no de pagos: un
+    pago mixto (efectivo + tarjeta) registra un movimiento por pago con la
+    misma referencia (la comanda en el POS, el registro en estancias). Los
+    pagos de reservación ('R') referencian el pago, así que se agrupan por su
+    reservación. Retiros, cambio e ingresos no son ventas."""
     val = await conn.fetchval(
         """
-        SELECT COUNT(*)
-        FROM public.movimientos_caja
-        WHERE apertura_caja_id = $1
-          AND tipo_movimiento NOT IN ('RP', 'C', 'I')
+        SELECT COUNT(DISTINCT (m.tipo_movimiento, COALESCE(pr.reservacion_id, m.referencia_id)))
+        FROM public.movimientos_caja m
+        LEFT JOIN public.pagos_reservacion pr
+               ON m.tipo_movimiento = 'R' AND pr.id = m.referencia_id
+        WHERE m.apertura_caja_id = $1
+          AND m.tipo_movimiento NOT IN ('RP', 'C', 'I')
         """,
         uuid.UUID(apertura_caja_id),
     )
@@ -1007,6 +1021,7 @@ async def listar_historial_cierres(
             (cc.monto_cierre - cc.monto_sistema) AS diferencia_neta,
             cc.tipo_cierre,
             c.codigo AS terminal,
+            c.nombre AS caja_nombre,
             COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
             COALESCE(u_cajero.nombre_completo, u_cajero.email, 'Cajero') AS cajero_nombre,
             COALESCE(u_admin.nombre_completo, u_admin.email, 'Administrador') AS admin_nombre,
@@ -1167,11 +1182,13 @@ async def obtener_detalle_cierre(conn: asyncpg.Connection, cierre_id: str) -> di
             (cc.monto_cierre - cc.monto_sistema) AS diferencia_neta,
             cc.tipo_cierre,
             c.codigo AS terminal,
+            c.nombre AS caja_nombre,
             c.sucursal_id,
             COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
             COALESCE(u_cajero.nombre_completo, u_cajero.email, 'Cajero') AS cajero_nombre,
             COALESCE(u_admin.nombre_completo, u_admin.email, 'Administrador') AS admin_nombre,
-            cc.observaciones
+            cc.observaciones,
+            a.observaciones_apertura
         FROM public.cierre_caja cc
         INNER JOIN public.apertura_caja a ON cc.apertura_caja_id = a.id
         INNER JOIN public.cajas c ON a.caja_id = c.id

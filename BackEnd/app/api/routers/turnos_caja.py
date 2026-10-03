@@ -133,14 +133,21 @@ async def abrir_turno(
 
 @router.get(
     "/activo",
-    response_model=TurnoActivoResponse,
+    response_model=TurnoActivoResponse | None,
     summary="Obtiene el turno activo del cajero autenticado",
 )
 async def obtener_activo(
     sucursal_id: str | None = Query(None),
+    opcional: bool = Query(
+        False,
+        description=(
+            "B4: con true, si no hay turno activo responde 200 con null en vez de "
+            "404 (para consultas de fondo que no son un error)."
+        ),
+    ),
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
-) -> TurnoActivoResponse:
+) -> TurnoActivoResponse | None:
     # AdministradorSistema no tiene sucursal propia: la apertura activa debe
     # respetar la sucursal elegida en el selector global, no cualquier turno
     # abierto en otra sucursal. El resto de roles siempre usa su propia
@@ -150,7 +157,14 @@ async def obtener_activo(
         sucursal_efectiva = sucursal_id
     else:
         sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
-    return await turnos_caja_service.obtener_turno_activo(conn, current_user.sub, sucursal_efectiva)
+    try:
+        return await turnos_caja_service.obtener_turno_activo(
+            conn, current_user.sub, sucursal_efectiva
+        )
+    except turnos_caja_service.TurnoNoEncontradoError:
+        if opcional:
+            return None
+        raise
 
 
 @router.get(

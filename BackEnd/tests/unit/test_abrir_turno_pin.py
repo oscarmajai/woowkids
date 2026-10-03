@@ -327,3 +327,17 @@ async def test_abrir_turno_caja_ocupada_por_otro_cajero_responde_409(
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["code"] == "CAJA_OCUPADA"
+
+
+async def test_abrir_turno_guarda_las_notas_de_apertura(entorno: dict[str, AsyncMock]) -> None:
+    """B13: las "Notas" del formulario se descartaban; ahora se guardan."""
+    await _abrir(_payload(observaciones_apertura="  Fondo con monedas de $10  "))
+
+    kwargs = entorno["crear_apertura_caja"].call_args.kwargs
+    assert kwargs["observaciones_apertura"] == "Fondo con monedas de $10"
+
+
+async def test_abrir_turno_sin_notas_guarda_null(entorno: dict[str, AsyncMock]) -> None:
+    await _abrir(_payload(observaciones_apertura="   "))
+
+    assert entorno["crear_apertura_caja"].call_args.kwargs["observaciones_apertura"] is None
