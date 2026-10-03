@@ -13,9 +13,10 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal, resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.proveedor import ProveedorCrear, ProveedorOut, ProveedorUpdate
-from app.services import proveedor_service
+from app.services import alcance_service, proveedor_service
 
 router = APIRouter(prefix="/api/proveedores", tags=["Proveedores"])
 
@@ -24,18 +25,19 @@ router = APIRouter(prefix="/api/proveedores", tags=["Proveedores"])
 async def listar_proveedores(
     sucursal_id: UUID | None = None,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> list[ProveedorOut]:
     """Lista proveedores activos e inactivos, para la pantalla de catálogo."""
-    return await proveedor_service.listar(conn, sucursal_id)
+    return await proveedor_service.listar(conn, resolver_sucursal(current_user, sucursal_id))
 
 
 @router.get("/{proveedor_id}", response_model=ProveedorOut)
 async def obtener_proveedor(
     proveedor_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:ver")),
+    current_user: TokenData = Depends(require_permission("inventario:ver")),
 ) -> ProveedorOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "proveedor", proveedor_id)
     return await proveedor_service.obtener(conn, proveedor_id)
 
 
@@ -45,6 +47,8 @@ async def crear_proveedor(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_proveedores")),
 ) -> ProveedorOut:
+    # C1: el proveedor se crea en la sucursal de la sesión; otra → 403.
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await proveedor_service.crear(conn, body, current_user)
 
 
@@ -55,6 +59,7 @@ async def actualizar_proveedor(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_proveedores")),
 ) -> ProveedorOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "proveedor", proveedor_id)
     return await proveedor_service.actualizar(conn, proveedor_id, body, current_user)
 
 
@@ -62,6 +67,7 @@ async def actualizar_proveedor(
 async def eliminar_proveedor(
     proveedor_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("inventario:eliminar_proveedor")),
+    current_user: TokenData = Depends(require_permission("inventario:eliminar_proveedor")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "proveedor", proveedor_id)
     await proveedor_service.eliminar(conn, proveedor_id)
