@@ -7,10 +7,11 @@ escribe SQL directamente.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import asyncpg
 
@@ -32,6 +33,8 @@ from app.schemas.movimiento_inventario import (
     ResumenCogsOut,
 )
 from app.services import costeo_service
+
+_ZONA_DEFAULT = "America/Mexico_City"
 
 
 async def _consumo_insumos(
@@ -272,6 +275,38 @@ async def listar_movimientos(
 ) -> list[MovimientoInventarioOut]:
     rows = await movimiento_inventario_repository.listar_por_insumo(conn, insumo_id, desde, hasta)
     return [MovimientoInventarioOut.model_validate(r) for r in rows]
+
+
+_FORMATO_FECHA_CSV = "%Y-%m-%d %H:%M:%S"
+
+
+def _fecha_local(creado: datetime, zona: str | None) -> str:
+    """Fecha del movimiento en la zona de su sucursal, como la ve la pantalla."""
+    try:
+        tz = ZoneInfo(zona or _ZONA_DEFAULT)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = ZoneInfo(_ZONA_DEFAULT)
+    if creado.tzinfo is None:
+        creado = creado.replace(tzinfo=UTC)
+    return creado.astimezone(tz).strftime(_FORMATO_FECHA_CSV)
+
+
+async def filas_export_movimientos(
+    conn: asyncpg.Connection,
+    insumo_id: UUID,
+    desde: date | None = None,
+    hasta: date | None = None,
+) -> list[dict[str, Any]]:
+    """Kardex para el CSV: la fecha en la hora local de la sucursal (no UTC) y
+    el nombre de quien registró el movimiento (no su UUID)."""
+    rows = await movimiento_inventario_repository.listar_por_insumo(conn, insumo_id, desde, hasta)
+    filas: list[dict[str, Any]] = []
+    for r in rows:
+        fila = MovimientoInventarioOut.model_validate(r).model_dump()
+        fila["creado"] = _fecha_local(r["creado"], r.get("zona_horaria"))
+        fila["creado_por"] = r.get("creado_por_nombre") or ""
+        filas.append(fila)
+    return filas
 
 
 async def listar_cogs(

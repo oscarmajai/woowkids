@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -226,14 +227,48 @@ async def get_indicadores(
     hasta: date,
     current_user: TokenData,
 ) -> IndicadoresSucursalResponse:
+    _, indicadores = await _sucursal_e_indicadores(conn, branch_id, desde, hasta, current_user)
+    return indicadores
+
+
+async def _sucursal_e_indicadores(
+    conn: asyncpg.Connection,
+    branch_id: UUID,
+    desde: date,
+    hasta: date,
+    current_user: TokenData,
+) -> tuple[SucursalRecord, IndicadoresSucursalResponse]:
     _asegurar_sucursal_propia(current_user, branch_id)
     record = await get_sucursal_by_id(conn, branch_id)
     if record is None:
         raise BranchNotFoundError
     indicadores = await get_indicadores_sucursal(conn, branch_id, desde, hasta)
-    return IndicadoresSucursalResponse(
+    return record, IndicadoresSucursalResponse(
         ventas=indicadores["ventas"],
         ninos_atendidos=indicadores["ninos_atendidos"],
         eventos=indicadores["eventos"],
         cajas_abiertas=indicadores["cajas_abiertas"],
     )
+
+
+async def exportar_indicadores(
+    conn: asyncpg.Connection,
+    branch_id: UUID,
+    desde: date,
+    hasta: date,
+    current_user: TokenData,
+) -> tuple[dict[str, Any], str]:
+    """Fila del CSV de indicadores y nombre del archivo. A diferencia de
+    `/indicadores`, el CSV viaja solo: lleva la sucursal y el periodo para que
+    se sepa de qué es al abrirlo."""
+    record, indicadores = await _sucursal_e_indicadores(conn, branch_id, desde, hasta, current_user)
+    fila = {
+        "sucursal": record["nombre"],
+        "clave": record["clave"] or "",
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        **indicadores.model_dump(),
+    }
+    identificador = record["clave"] or "sucursal"
+    nombre = f"indicadores_{identificador}_{desde.isoformat()}_{hasta.isoformat()}.csv"
+    return fila, nombre
