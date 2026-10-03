@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 
 import asyncpg
@@ -21,6 +21,9 @@ class UsuarioRecord(TypedDict):
     sucursal_id: UUID | None
     activo: bool
     ultimo_acceso: datetime | None
+    # Todas las sucursales activas del usuario (usuarios_sucursal), también
+    # las de un Administrador, que no tiene `sucursal_id` fijo.
+    sucursales_ids: NotRequired[list[UUID]]
 
 
 def _row_to_record(row: asyncpg.Record) -> UsuarioRecord:
@@ -36,6 +39,7 @@ def _row_to_record(row: asyncpg.Record) -> UsuarioRecord:
         sucursal_id=row["sucursal_id"],
         activo=row["activo"],
         ultimo_acceso=row["ultimo_acceso"],
+        sucursales_ids=list(row["sucursales_ids"] or []),
     )
 
 
@@ -57,7 +61,12 @@ _SELECT = f"""
         r.nombre AS rol,
         us.sucursal_id,
         u.activo,
-        u.ultimo_acceso
+        u.ultimo_acceso,
+        ARRAY(
+            SELECT us2.sucursal_id FROM public.usuarios_sucursal us2
+            WHERE us2.usuario_id = u.id AND us2.activo = TRUE
+            ORDER BY us2.sucursal_id
+        ) AS sucursales_ids
     FROM public.usuarios u
     JOIN public.roles r ON r.id = u.rol
     LEFT JOIN public.usuarios_sucursal us

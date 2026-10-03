@@ -72,6 +72,8 @@ class BranchResponse(BaseModel):
     correo: str | None
     administrador_id: UUID | None
     administrador_name: str | None
+    # Correo del administrador (no el de la sucursal, que es `correo`).
+    administrador_email: str | None = None
     clave: str | None
     is_active: bool
     creado: datetime | None = None

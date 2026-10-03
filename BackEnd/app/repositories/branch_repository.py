@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID
 
 import asyncpg
@@ -22,6 +22,7 @@ class SucursalRecord(TypedDict):
     correo: str | None
     administrador_id: UUID | None
     administrador_name: str | None
+    administrador_email: NotRequired[str | None]
     clave: str | None
     activo: bool
     creado: datetime | None
@@ -47,6 +48,7 @@ def _row_to_record(row: asyncpg.Record) -> SucursalRecord:
         correo=row["correo"],
         administrador_id=row["administrador_id"],
         administrador_name=row["administrador_name"],
+        administrador_email=row.get("administrador_email"),
         clave=row["clave"],
         activo=row["activo"],
         creado=row["creado"],
@@ -70,6 +72,7 @@ _SELECT = """
     SELECT s.id, s.nombre, s.direccion, s.ciudad, s.estado, s.codigo_postal,
            s.zona_horaria, s.hora_apertura, s.hora_cierre, s.telefono, s.correo,
            adm.id AS administrador_id, adm.nombre_completo AS administrador_name,
+           adm.email AS administrador_email,
            s.clave, s.activo,
            s.creado, s.creado_por, uc.nombre_completo AS creador_name,
            s.modificado, s.modificado_por, um.nombre_completo AS modificador_name

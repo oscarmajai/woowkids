@@ -66,6 +66,7 @@ def _to_response(record: SucursalRecord) -> BranchResponse:
         correo=record["correo"],
         administrador_id=record["administrador_id"],
         administrador_name=record["administrador_name"],
+        administrador_email=record.get("administrador_email"),
         clave=record["clave"],
         is_active=record["activo"],
         creado=record["creado"],

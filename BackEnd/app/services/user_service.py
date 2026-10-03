@@ -60,6 +60,10 @@ class RolInvalidoError(Exception):
     pass
 
 
+class AutoEliminacionError(Exception):
+    """Un usuario intentó eliminar su propia cuenta."""
+
+
 class CredencialActualInvalidaError(Exception):
     """El PIN actual (o la contraseña, si el usuario aún no tiene PIN) no coincide."""
 
@@ -88,6 +92,7 @@ def _to_response(record: UsuarioRecord) -> UserResponse:
         is_active=record["activo"],
         ultimo_acceso=record["ultimo_acceso"],
         tiene_pin=bool(record["pin_hash"]),
+        sucursales_ids=record.get("sucursales_ids") or [],
     )
 
 
@@ -260,6 +265,10 @@ async def update_user(
 
 
 async def delete_user(conn: asyncpg.Connection, user_id: UUID, current_user: TokenData) -> None:
+    # Nadie se elimina a sí mismo: se quedaría sin sesión a media acción y,
+    # si es el único administrador, sin nadie que lo reactive.
+    if str(user_id) == current_user.sub:
+        raise AutoEliminacionError
     target = await get_usuario_by_id(conn, user_id)
     if target is None:
         raise UserNotFoundError

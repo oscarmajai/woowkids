@@ -77,6 +77,10 @@ class UserResponse(BaseModel):
     is_active: bool
     ultimo_acceso: datetime | None = None
     tiene_pin: bool = False
+    # Sucursales activas del usuario. Para un Administrador (que se asigna
+    # desde la sucursal y no trae `branch_id`) es la única forma de saber
+    # dónde administra; para los demás roles coincide con `branch_id`.
+    sucursales_ids: list[UUID] = Field(default_factory=list)
 
 
 class CambiarMiPinRequest(BaseModel):
