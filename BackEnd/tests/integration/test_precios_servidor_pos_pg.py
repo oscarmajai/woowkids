@@ -339,6 +339,19 @@ async def test_producto_inactivo_409_y_de_otra_sucursal_422(escenario: Escenario
     await _sin_cobro(e)
 
 
+async def test_tarjeta_sin_referencia_422_y_con_referencia_201(escenario: Escenario) -> None:
+    e = escenario
+    detalles = [_renglon(e.productos["agua"], "22.00")]
+    sin = await _cobrar(e, detalles, "22.00", pagos=[_pago(e.tarjeta, "22.00")])
+    assert sin.status_code == 422
+    assert sin.json()["detail"]["code"] == "REFERENCIA_REQUERIDA"
+    await _sin_cobro(e)
+    con = await _cobrar(
+        e, detalles, "22.00", pagos=[_pago(e.tarjeta, "22.00", "CREDITO - Folio: 778899")]
+    )
+    assert con.status_code == 201, con.text
+
+
 async def test_descuento_por_puntos_sigue_funcionando(escenario: Escenario) -> None:
     e = escenario
     detalles = [_renglon(e.productos["pizza"], "95.00", 2)]

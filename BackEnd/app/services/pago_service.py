@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -11,6 +12,7 @@ from app.exceptions import (
     Conflicto,
     DatosInvalidos,
     IdempotenciaConflictoError,
+    PedidoInvalidoError,
 )
 from app.models.comanda import Comanda
 from app.repositories import (
@@ -26,6 +28,7 @@ from app.schemas.pagos import (
     EstadisticasOut,
     HistorialOut,
     PagoCompletoRequest,
+    PaymentItem,
     PaymentOut,
     PaymentRequest,
 )
@@ -38,6 +41,37 @@ def _hash_payload(body: PagoCompletoRequest) -> str:
     Idempotency-Key pero datos distintos (QA #20)."""
     payload_json = json.dumps(body.model_dump(mode="json"), sort_keys=True)
     return hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+
+
+# Lo que arma el POS cuando la tarjeta no trae folio: "CREDITO - Folio: ".
+_PREFIJO_FOLIO_TARJETA = re.compile(r"^\s*(DEBITO|CREDITO)\s*-\s*Folio:\s*", re.IGNORECASE)
+
+
+def _referencia_de_pago(pago: PaymentItem) -> str:
+    return _PREFIJO_FOLIO_TARJETA.sub("", pago.notas_pago or "").strip()
+
+
+async def _validar_metodos_pago(
+    conn: asyncpg.Connection, sucursal_id: UUID, pagos: list[PaymentItem]
+) -> None:
+    """Cada pago debe usar un método que exista y esté activo en la sucursal,
+    y traer referencia (folio, autorización) si el método la exige (M11:
+    antes solo lo validaba la UI)."""
+    for pago in pagos:
+        metodo = await metodos_pago_repository.obtener(conn, pago.metodo_pago_id, sucursal_id)
+        if metodo is None:
+            raise PedidoInvalidoError("El método de pago no existe.", code="METODO_PAGO_INVALIDO")
+        if not metodo["activo"]:
+            raise PedidoInvalidoError(
+                f"El método de pago «{metodo['nombre']}» no está activo en esta sucursal.",
+                code="METODO_PAGO_INVALIDO",
+            )
+        if metodo["requiere_referencia"] and not _referencia_de_pago(pago):
+            raise PedidoInvalidoError(
+                f"El pago con «{metodo['nombre']}» requiere la referencia o el folio "
+                "de autorización.",
+                code="REFERENCIA_REQUERIDA",
+            )
 
 
 async def procesar_pagos(
@@ -103,6 +137,8 @@ async def completar_pago(
                     conn, comanda_original.detalles
                 )
                 return comanda_original
+
+    await _validar_metodos_pago(conn, sucursal_id, body.pagos)
 
     # C2: el precio, el importe y el total salen del catálogo de la sucursal de
     # la sesión, no del request. Si el cliente mandó otra cosa, 409 sin cobrar.

@@ -111,6 +111,7 @@ def mundo(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(repo, "obtener_para_venta", obtener_para_venta)
     monkeypatch.setattr(repo, "obtener_definiciones_combo", obtener_definiciones_combo)
     mp_repo = pago_service.metodos_pago_repository
+    monkeypatch.setattr(mp_repo, "obtener", obtener_metodo)
     monkeypatch.setattr(mp_repo, "obtener_ids_por_tipo", AsyncMock(return_value={EFECTIVO}))
     monkeypatch.setattr(
         pago_service.lealtad_service.lealtad_repository,
@@ -357,6 +358,47 @@ async def test_calcular_venta_rechaza_cantidad_cero_aunque_no_pase_por_el_schema
     with pytest.raises(PedidoInvalidoError) as exc:
         await precios_venta.calcular_venta(_conn(), SUCURSAL, [detalle])
     assert exc.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+# --- tarjeta sin referencia (M11) --------------------------------------------
+
+
+@pytest.mark.parametrize("notas", ["", "   ", "CREDITO - Folio: "])
+async def test_tarjeta_sin_referencia_da_422(mundo: dict[str, Any], notas: str) -> None:
+    body = _request(
+        [_renglon(PIZZA, "95.00")],
+        "95.00",
+        pagos=[{"metodo_pago_id": str(TARJETA), "monto": "95.00", "notas_pago": notas}],
+    )
+    with pytest.raises(PedidoInvalidoError) as exc:
+        await _cobrar(body)
+    assert exc.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert exc.value.detail["code"] == "REFERENCIA_REQUERIDA"
+    assert _nada_escrito(mundo)
+
+
+async def test_tarjeta_con_referencia_se_cobra(mundo: dict[str, Any]) -> None:
+    body = _request(
+        [_renglon(PIZZA, "95.00")],
+        "95.00",
+        pagos=[
+            {
+                "metodo_pago_id": str(TARJETA),
+                "monto": "95.00",
+                "notas_pago": "CREDITO - Folio: 123456",
+            }
+        ],
+    )
+    await _cobrar(body)
+    mundo["crear_pagos"].assert_awaited_once()
+
+
+async def test_metodo_de_pago_inexistente_da_422(mundo: dict[str, Any]) -> None:
+    body = _request(
+        [_renglon(PIZZA, "95.00")], "95.00", pagos=[{"metodo_pago_id": str(uuid4()), "monto": 95}]
+    )
+    with pytest.raises(PedidoInvalidoError):
+        await _cobrar(body)
 
 
 # --- pagos deben cuadrar exactamente -----------------------------------------
