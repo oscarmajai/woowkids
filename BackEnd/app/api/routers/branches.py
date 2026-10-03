@@ -14,6 +14,7 @@ from app.schemas.branch import (
     BranchCreateRequest,
     BranchResponse,
     BranchUpdateRequest,
+    HorarioSucursalResponse,
     IndicadoresSucursalResponse,
 )
 from app.services.branch_service import (
@@ -27,6 +28,7 @@ from app.services.branch_service import (
     deactivate_branch,
     exportar_indicadores,
     get_branch,
+    get_horario,
     get_indicadores,
     list_branches,
     reactivate_branch,
@@ -118,6 +120,26 @@ async def get_branch_endpoint(
         raise _NOT_FOUND from None
     except InsufficientPermissionsError:
         raise _FORBIDDEN from None
+
+
+@router.get(
+    "/{sucursal_id}/horario",
+    response_model=HorarioSucursalResponse,
+    summary="Horario de operación y zona horaria de la sucursal",
+    description=(
+        "Para quien gestiona reservaciones (calendario y Nueva reservación) sin "
+        "`sucursales:ver`. Solo la sucursal de la sesión (403 si es otra)."
+    ),
+)
+async def get_horario_endpoint(
+    sucursal_id: UUID,
+    current_user: TokenData = Depends(require_permission("reservaciones:ver")),
+    conn: asyncpg.Connection = Depends(get_db),
+) -> HorarioSucursalResponse:
+    try:
+        return await get_horario(conn, sucursal_id, current_user)
+    except BranchNotFoundError:
+        raise _NOT_FOUND from None
 
 
 @router.put("/{sucursal_id}", response_model=BranchResponse)

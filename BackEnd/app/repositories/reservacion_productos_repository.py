@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import asyncpg
@@ -85,3 +85,13 @@ async def eliminar(conn: asyncpg.Connection, reservacion_producto_id: UUID) -> b
         "DELETE FROM reservacion_productos WHERE id = $1", reservacion_producto_id
     )
     return bool(result == "DELETE 1")
+
+
+async def total_por_reservacion(conn: asyncpg.Connection, reservacion_id: UUID) -> Decimal:
+    """Suma de los subtotales de los productos de la reservación (su `precio_productos`)."""
+    total = await conn.fetchval(
+        "SELECT COALESCE(SUM(subtotal), 0) FROM public.reservacion_productos "
+        "WHERE reservacion_id = $1",
+        reservacion_id,
+    )
+    return cast(Decimal, total)

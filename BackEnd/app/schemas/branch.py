@@ -84,6 +84,18 @@ class BranchResponse(BaseModel):
     modificador_name: str | None = None
 
 
+class HorarioSucursalResponse(BaseModel):
+    """Datos operativos de una sucursal (B18): los que necesita quien gestiona
+    reservaciones para pintar el calendario y avisar de un evento fuera de
+    horario. No incluye datos administrativos (clave, administrador, etc.)."""
+
+    id: UUID
+    nombre: str
+    zona_horaria: str
+    hora_apertura: time
+    hora_cierre: time
+
+
 class IndicadoresSucursalResponse(BaseModel):
     """Indicadores de solo lectura de una sucursal en un periodo.
 

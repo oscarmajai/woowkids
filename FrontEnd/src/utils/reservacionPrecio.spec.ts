@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest'
 
 import {
   calcularPulseras,
+  cantidadExtra,
   dentroDePlazo,
+  detallePulseras,
   diasParaEvento,
   exigeLiquidacionAlReservar,
+  faltanPulserasHoy,
   fechaLimiteLiquidacion,
   montoPorPorcentaje,
   porcentajeAnticipoMinimo,
   recalcularReservacion,
+  resumenPorCobrar,
   sumarHoras,
+  totalExtras,
 } from './reservacionPrecio'
 import type { Reservaciones } from '@/types/reservaciones'
 
@@ -111,6 +116,85 @@ describe('recalcularReservacion', () => {
     expect(subida.precio_total).toBe('11200')
     const regreso = recalcularReservacion(RESERVACION, 50, { invitados: 10 })
     expect(regreso.precio_total).toBe(RESERVACION.precio_total)
+  })
+
+  it('recalcula los extras por persona y por hora (M15), igual que el servidor', () => {
+    const conExtras = {
+      ...RESERVACION,
+      precio_extras: '1850', // 10 × 35 + 3 × 350 + 450
+      precio_total: '8550',
+    } as Reservaciones
+    const extras = [
+      { unidad: 'persona', precio_unitario: '35', cantidad: 10 },
+      { unidad: 'hora', precio_unitario: '350', cantidad: 3 },
+      { unidad: 'evento', precio_unitario: '450', cantidad: 1 },
+    ]
+    const r = recalcularReservacion(conExtras, 50, { invitados: 15, horas: 4 }, extras)
+    // extras: 15 × 35 + 4 × 350 + 450 = 2375; pulseras 50 × 15 × 4 = 3000
+    expect(r.precio_extras).toBe('2375')
+    expect(r.precio_total).toBe(String(5000 + 3000 + 200 + 2375))
+  })
+
+  it('sin extras guardados conserva el precio_extras de la reservación', () => {
+    const legado = { ...RESERVACION, precio_extras: '485' } as Reservaciones
+    expect(recalcularReservacion(legado, 50, { invitados: 20 }).precio_extras).toBe('485')
+  })
+})
+
+describe('faltanPulserasHoy (UX Nueva reservación)', () => {
+  it('avisa solo si el evento es hoy y no alcanzan las libres', () => {
+    expect(faltanPulserasHoy(14, 20, 0)).toBe(true)
+    expect(faltanPulserasHoy(14, 12, 0)).toBe(false)
+  })
+
+  it('no compara las libres de hoy contra un evento futuro', () => {
+    // E2E: "La sucursal tiene 14 pulseras y el evento pide 20" para un evento en 3 semanas.
+    expect(faltanPulserasHoy(14, 20, 21)).toBe(false)
+  })
+
+  it('sin fecha o sin inventario consultado no avisa', () => {
+    expect(faltanPulserasHoy(14, 20, null)).toBe(false)
+    expect(faltanPulserasHoy(null, 20, 0)).toBe(false)
+  })
+})
+
+describe('resumenPorCobrar (N13)', () => {
+  it('no suma las reservaciones canceladas aunque tengan pagos y saldo', () => {
+    const r = [
+      { id: 'a', estado: 'confirmada', saldo_pendiente: '5330.00' },
+      { id: 'a', estado: 'confirmada', saldo_pendiente: '5330.00' }, // segundo pago
+      { id: 'b', estado: 'cancelada', saldo_pendiente: '1.00' },
+      { id: 'c', estado: 'completada', saldo_pendiente: '0.00' },
+      { id: 'd', estado: 'pendiente', saldo_pendiente: '-40.00' }, // sobrepago
+    ] as Reservaciones[]
+    expect(resumenPorCobrar(r)).toEqual({ eventos: 1, total: 5330 })
+  })
+})
+
+describe('detallePulseras (B19)', () => {
+  it('desglosa el cargo guardado en precio_personas_extra como pulseras', () => {
+    // R-0008: "Personas extra $2,520" era 12 pulseras × 3 h × $70.
+    const r = { numero_personas: 12, horas_reservadas: 3, precio_personas_extra: '2520.00' }
+    expect(detallePulseras(r, 3)).toEqual({ invitados: 12, horas: 3, tarifa: 70 })
+  })
+
+  it('usa las horas del horario si la reservación no las guardó', () => {
+    const r = { numero_personas: 10, horas_reservadas: 0, precio_personas_extra: '2000' }
+    expect(detallePulseras(r, 4)).toEqual({ invitados: 10, horas: 4, tarifa: 50 })
+  })
+})
+
+describe('cantidadExtra (M15)', () => {
+  it('por persona = invitados, por hora = horas, por evento = 1', () => {
+    expect(cantidadExtra('persona', 12, 3)).toBe(12)
+    expect(cantidadExtra('hora', 12, 3)).toBe(3)
+    expect(cantidadExtra('evento', 12, 3)).toBe(1)
+    expect(cantidadExtra(undefined, 12, 3)).toBe(1)
+  })
+
+  it('la bolsita de $35 por persona para 12 niños suma $420, no $35', () => {
+    const extras = [{ unidad: 'persona', precio_unitario: '35', cantidad: 1 }]
+    expect(totalExtras(extras, 12, 3)).toBe(420)
   })
 })
 

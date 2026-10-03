@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import CalendarioPage from '@/pages/CalendarioPage.vue'
 import { reservacionesApi } from '@/api/reservacionesApi'
+import { branchService } from '@/services/branchService'
 import type { Reservaciones } from '@/types/reservaciones'
 
 /**
@@ -18,7 +19,8 @@ vi.mock('@/api/reservacionesApi', () => ({
 }))
 vi.mock('@/services/branchService', () => ({
   branchService: {
-    getBranch: vi.fn().mockResolvedValue({ horaApertura: '10:00', horaCierre: '21:30' }),
+    getBranch: vi.fn().mockRejectedValue({ statusCode: 403 }),
+    getHorario: vi.fn().mockResolvedValue({ horaApertura: '10:00', horaCierre: '21:30' }),
   },
 }))
 vi.mock('@/stores/auth', () => ({
@@ -118,5 +120,13 @@ describe('CalendarioPage (vista Mes)', () => {
 
     expect(listarMock).toHaveBeenCalledTimes(2)
     expect(listarMock.mock.calls[1]![1]).not.toBe(listarMock.mock.calls[0]![1])
+  })
+
+  it('pide el horario por el endpoint que la cajera sí puede leer (B18)', async () => {
+    montar()
+    for (let i = 0; i < 5; i++) await flushPromises()
+    expect(branchService.getHorario).toHaveBeenCalledWith('suc-1')
+    // GET /sucursales/{id} exige sucursales:ver y a la cajera le da 403.
+    expect(branchService.getBranch).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { mensajeDeError } from '@/utils/errorHandler'
 import { paquetesTipoEventoApi } from '@/api/paquetesTipoEventoApi'
+import { diferenciaTipos } from '@/utils/paquetes'
 import type {
   Paquetes_tipo_evento,
   Paquetes_tipo_evento_create,
@@ -41,6 +42,19 @@ export const usePaquetesTipoEventoStore = defineStore('paquetes_tipo_evento', {
       this.paquetes_tipo_evento = this.paquetes_tipo_evento.filter(
         (p) => !(p.paquete_id === paquete_id && p.tipo_evento_id === tipo_evento_id),
       )
+    },
+    /**
+     * Deja al paquete con exactamente los tipos de evento `despues` (M17):
+     * asocia los nuevos y desasocia los que se quitaron, partiendo de `antes`.
+     */
+    async sincronizar(paquete_id: string, antes: string[], despues: string[]) {
+      const { agregar, quitar } = diferenciaTipos(antes, despues)
+      for (const tipo_evento_id of agregar) {
+        await this.crearPaqueteTipoEvento({ paquete_id, tipo_evento_id })
+      }
+      for (const tipo_evento_id of quitar) {
+        await this.eliminarPaqueteTipoEvento(paquete_id, tipo_evento_id)
+      }
     },
   },
 })

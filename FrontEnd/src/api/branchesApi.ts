@@ -2,6 +2,7 @@ import { apiClient } from './axiosClient'
 import type {
   Branch,
   CreateBranchPayload,
+  HorarioSucursal,
   IndicadoresSucursal,
   UpdateBranchPayload,
 } from '@/types/branch'
@@ -66,6 +67,23 @@ export const branchesApi = {
   async getById(id: string): Promise<Branch> {
     const { data } = await apiClient.get<BackendBranchResponse>(`/sucursales/${id}`)
     return mapBranch(data)
+  },
+
+  async getHorario(id: string): Promise<HorarioSucursal> {
+    const { data } = await apiClient.get<{
+      id: string
+      nombre: string
+      zona_horaria: string
+      hora_apertura: string
+      hora_cierre: string
+    }>(`/sucursales/${id}/horario`)
+    return {
+      id: data.id,
+      nombre: data.nombre,
+      zonaHoraria: data.zona_horaria,
+      horaApertura: data.hora_apertura,
+      horaCierre: data.hora_cierre,
+    }
   },
 
   async create(payload: CreateBranchPayload): Promise<Branch> {

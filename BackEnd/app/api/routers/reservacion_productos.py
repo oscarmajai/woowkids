@@ -61,7 +61,7 @@ async def actualizar_reservacion_producto(
     await alcance_service.asegurar_recurso(
         conn, current_user, "reservacion_producto", reservacion_producto_id
     )
-    return await svc.actualizar(conn, reservacion_producto_id, body)
+    return await svc.actualizar(conn, reservacion_producto_id, body, UUID(current_user.sub))
 
 
 @router.delete("/{reservacion_producto_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -73,4 +73,4 @@ async def eliminar_reservacion_producto(
     await alcance_service.asegurar_recurso(
         conn, current_user, "reservacion_producto", reservacion_producto_id
     )
-    await svc.eliminar(conn, reservacion_producto_id)
+    await svc.eliminar(conn, reservacion_producto_id, UUID(current_user.sub))

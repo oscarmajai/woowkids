@@ -129,6 +129,35 @@ async def get_horario_operacion(
     return HorarioOperacion(hora_apertura=row["hora_apertura"], hora_cierre=row["hora_cierre"])
 
 
+class DatosOperativosSucursal(TypedDict):
+    id: UUID
+    nombre: str
+    zona_horaria: str
+    hora_apertura: time
+    hora_cierre: time
+
+
+async def get_datos_operativos(
+    conn: asyncpg.Connection, sucursal_id: UUID
+) -> DatosOperativosSucursal | None:
+    """Nombre, zona horaria y horario de operación de la sucursal: lo que el
+    calendario y Nueva reservación necesitan (B18), sin datos administrativos."""
+    row = await conn.fetchrow(
+        "SELECT id, nombre, zona_horaria, hora_apertura, hora_cierre "
+        "FROM public.sucursales WHERE id = $1",
+        sucursal_id,
+    )
+    if row is None:
+        return None
+    return DatosOperativosSucursal(
+        id=row["id"],
+        nombre=row["nombre"],
+        zona_horaria=row["zona_horaria"],
+        hora_apertura=row["hora_apertura"],
+        hora_cierre=row["hora_cierre"],
+    )
+
+
 async def nombre_exists(conn: asyncpg.Connection, nombre: str) -> bool:
     row = await conn.fetchrow("SELECT id FROM public.sucursales WHERE nombre = $1", nombre)
     return row is not None

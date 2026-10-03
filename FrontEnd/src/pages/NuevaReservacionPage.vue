@@ -56,8 +56,8 @@
                     <div v-if="pulserasInsuficientes" class="aviso-pulseras">
                       <q-icon name="warning" size="16px" />
                       <span>
-                        La sucursal tiene {{ inventarioPulseras }} pulseras y el evento pide
-                        {{ form.ninos }}. Confirma que habrá suficientes.
+                        La sucursal tiene {{ inventarioPulseras }} pulseras libres y el evento de
+                        hoy pide {{ form.ninos }}. Confirma que habrá suficientes.
                       </span>
                     </div>
                   </div>
@@ -170,6 +170,16 @@
                         <q-icon name="event" size="16px" />
                         {{ selectedDateLabel }}
                       </div>
+                      <!-- Se avisa desde aquí, antes de armar el paquete: a 7 días o
+                           menos se cobra el total al reservar (C3, paso 3). -->
+                      <div
+                        v-if="liquidacionObligatoria"
+                        class="text-warning q-mt-xs"
+                        style="font-size: 0.75rem"
+                        data-test="aviso-liquidacion-fecha"
+                      >
+                        {{ avisoLiquidacion }} No se puede dejar solo un anticipo.
+                      </div>
                     </div>
                     <div>
                       <div class="field-label">Horario del evento</div>
@@ -263,8 +273,9 @@
                 </div>
                 <div v-else-if="!paquetesDisponibles.length" class="q-pa-md text-orange-9">
                   <q-icon name="info" size="20px" class="q-mr-xs" />
-                  Ningún paquete cubre {{ form.ninos }} niños. Ajusta el número de niños en el paso
-                  anterior o crea un paquete con ese rango.
+                  Ningún paquete cubre {{ form.ninos }} niños para {{ tipoEventoNombre }}. Ajusta el
+                  número de niños o el tipo de evento en el paso anterior, o crea un paquete con ese
+                  rango.
                 </div>
                 <div v-else class="packages-grid">
                   <div
@@ -347,7 +358,12 @@
                     <div class="service-card__body">
                       <div class="service-card__name">{{ svc.nombre }}</div>
                       <div class="service-card__desc">{{ svc.descripcion }}</div>
-                      <div class="service-card__price">{{ fmt(parseFloat(svc.precio)) }}</div>
+                      <div class="service-card__price">
+                        {{ fmt(parseFloat(svc.precio)) }}
+                        <span class="service-card__unidad">{{
+                          etiquetaUnidadExtra(svc.unidad)
+                        }}</span>
+                      </div>
                       <q-btn
                         :unelevated="selectedExtraIds.includes(svc.id)"
                         :flat="!selectedExtraIds.includes(svc.id)"
@@ -541,11 +557,13 @@
               >
                 <q-icon name="check_circle" color="positive" size="28px" />
                 <div>
-                  <div style="font-weight: 700" class="text-positive">
-                    Anticipo registrado correctamente
-                  </div>
+                  <!-- El cobro todavía no está en el servidor: se registra junto con
+                       la reservación al confirmar (alta atómica). Decir "registrado"
+                       aquí hacía creer que ya había quedado guardado. -->
+                  <div style="font-weight: 700" class="text-positive">Pago capturado</div>
                   <div style="font-size: 0.85rem" class="text-positive">
-                    {{ fmt(montoPagado) }} — {{ metodosPagoResumen }}
+                    {{ fmt(montoPagado) }} — {{ metodosPagoResumen }}. Se registra al confirmar la
+                    reservación en el siguiente paso.
                   </div>
                 </div>
               </div>
@@ -759,9 +777,11 @@
                     }}</span>
                   </div>
                   <template v-if="extrasSeleccionados.length">
-                    <div v-for="e in extrasSeleccionados" :key="e.id" class="resumen-row">
-                      <span>{{ e.nombre }}</span
-                      ><span>{{ fmt(parseFloat(e.precio)) }}</span>
+                    <div v-for="e in extrasCotizados" :key="e.id" class="resumen-row">
+                      <span
+                        >{{ e.nombre
+                        }}<template v-if="e.cantidad > 1"> × {{ e.cantidad }}</template></span
+                      ><span>{{ fmt(e.importe) }}</span>
                     </div>
                   </template>
                   <div v-else class="resumen-row">
@@ -976,13 +996,17 @@ import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import type { AppliedPayment } from '@/types/payments'
 import { horasFacturables } from '@/utils/horario'
 import {
+  cantidadExtra,
   diasParaEvento,
+  etiquetaUnidadExtra,
   exigeLiquidacionAlReservar,
+  faltanPulserasHoy,
   montoPorPorcentaje as montoDePorcentaje,
   porcentajeAnticipoMinimo,
 } from '@/utils/reservacionPrecio'
 import { mensajeDeError } from '@/utils/errorHandler'
 import { resolverMetodoPagoId } from '@/utils/pagos'
+import { paqueteSirveParaTipo } from '@/utils/paquetes'
 import { pulserasApi } from '@/api/pulserasApi'
 import { branchService } from '@/services/branchService'
 
@@ -1023,8 +1047,9 @@ onMounted(() => {
 
   // Horario de operación de la sucursal, para avisar (no bloquear) cuando el
   // evento quede fuera de ese horario.
+  // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
   branchService
-    .getBranch(authStore.currentBranchId)
+    .getHorario(authStore.currentBranchId)
     .then((b) => {
       horarioSucursal.value = {
         apertura: b.horaApertura.slice(0, 5),
@@ -1074,24 +1099,18 @@ const tipoEventoNombre = computed(
 // ── Validación paso 1 ────────────────────────────────────────────────────────
 
 /**
- * Pulseras activas que posee la sucursal. Es el tope físico de niños que puede
- * pulsear un evento.
- *
- * Se compara contra el INVENTARIO, no contra las libres en este momento: un
- * evento ocurre en una fecha futura, y las pulseras puestas hoy ya estarán
- * devueltas para entonces. Validar contra las libres daría falsas alarmas (en La
- * Piedad: 110 en inventario frente a 60 libres una tarde cualquiera).
+ * Pulseras activas y libres que tiene la sucursal HOY. Son de un solo uso: el
+ * número baja con cada niño registrado y sube cuando se reponen.
  *
  * null mientras no se haya podido consultar; en ese caso no se avisa nada, para
  * no acusar un faltante que no se pudo comprobar.
  */
 const inventarioPulseras = ref<number | null>(null)
 
-const pulserasInsuficientes = computed(
-  () =>
-    inventarioPulseras.value !== null &&
-    form.value.ninos > 0 &&
-    form.value.ninos > inventarioPulseras.value,
+/** Solo se avisa si el evento es hoy: para una fecha futura las existencias de
+ * hoy no dicen nada (se reponen antes), y el aviso era una falsa alarma. */
+const pulserasInsuficientes = computed(() =>
+  faltanPulserasHoy(inventarioPulseras.value, form.value.ninos, diasAlEvento.value),
 )
 
 const horarioValido = computed(
@@ -1404,7 +1423,11 @@ const selectedPkg = computed(() =>
  */
 const paquetesDisponibles = computed(() =>
   paquetesStore.activos.filter(
-    (p) => form.value.ninos >= p.min_invitados && form.value.ninos <= p.max_invitados,
+    (p) =>
+      form.value.ninos >= p.min_invitados &&
+      form.value.ninos <= p.max_invitados &&
+      // M17: solo los paquetes del tipo de evento elegido (o sin tipos: todos).
+      paqueteSirveParaTipo(p, form.value.tipoEvento),
   ),
 )
 
@@ -1461,10 +1484,20 @@ const precioPulserasNum = computed(
     horasSeleccionadas.value,
 )
 
+/**
+ * Extras elegidos con la cantidad que les toca por su unidad (M15): por persona
+ * = niños, por hora = horas del evento, por evento = 1. Es solo la vista
+ * previa: el servidor calcula lo mismo y, si no coincide, responde 409.
+ */
+const extrasCotizados = computed(() =>
+  extrasSeleccionados.value.map((e) => {
+    const cantidad = cantidadExtra(e.unidad, form.value.ninos, horasSeleccionadas.value)
+    return { ...e, cantidad, importe: parseFloat(e.precio) * cantidad }
+  }),
+)
+
 const extraServicesNum = computed(() =>
-  extrasStore.activos
-    .filter((e) => selectedExtraIds.value.includes(e.id))
-    .reduce((sum, e) => sum + parseFloat(e.precio), 0),
+  extrasCotizados.value.reduce((sum, e) => sum + e.importe, 0),
 )
 
 const subtotal = computed(
@@ -1620,8 +1653,11 @@ function conceptosTicket(): TicketConcepto[] {
       importe: precioUnitarioProducto(item.producto_id) * item.cantidad,
     })
   }
-  for (const extra of extrasSeleccionados.value) {
-    lineas.push({ descripcion: extra.nombre, importe: parseFloat(extra.precio) })
+  for (const extra of extrasCotizados.value) {
+    lineas.push({
+      descripcion: extra.cantidad > 1 ? `${extra.nombre} × ${extra.cantidad}` : extra.nombre,
+      importe: extra.importe,
+    })
   }
   return lineas
 }
@@ -1761,10 +1797,11 @@ const confirmarReservacion = async () => {
         anticipo: String(montoPagado.value),
         estado: 'confirmada',
       },
-      extras: selectedExtraIds.value
-        .map((extraId) => extrasStore.activos.find((e) => e.id === extraId))
-        .filter((extra): extra is NonNullable<typeof extra> => !!extra)
-        .map((extra) => ({ extra_id: extra.id, cantidad: 1, precio_unitario: extra.precio })),
+      extras: extrasCotizados.value.map((extra) => ({
+        extra_id: extra.id,
+        cantidad: extra.cantidad,
+        precio_unitario: extra.precio,
+      })),
       productos: productosAdicionales.value.map((item) => ({
         producto_id: item.producto_id,
         cantidad: item.cantidad,
@@ -1883,6 +1920,12 @@ const confirmarReservacion = async () => {
   &:last-child {
     border-bottom: none;
   }
+}
+
+.service-card__unidad {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .aviso-pulseras {

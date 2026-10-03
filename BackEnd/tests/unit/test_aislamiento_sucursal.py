@@ -301,6 +301,7 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
         {"json": {"celular": "3312345678", "puntos": 10, "motivo": "x"}},
     ),
     ("GET", f"/api/sucursales/{A}", {}),
+    ("GET", f"/api/sucursales/{A}/horario", {}),
     ("GET", f"/api/sucursales/{A}/indicadores?desde=2026-10-01&hasta=2026-10-03", {}),
 ]
 

@@ -225,7 +225,8 @@ async function cargarHorarioSucursal() {
     return
   }
   try {
-    const branch = await branchService.getBranch(authStore.currentBranchId)
+    // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
+    const branch = await branchService.getHorario(authStore.currentBranchId)
     sucursalHorario.value = { horaApertura: branch.horaApertura, horaCierre: branch.horaCierre }
   } catch {
     sucursalHorario.value = null

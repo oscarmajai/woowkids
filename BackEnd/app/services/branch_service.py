@@ -7,11 +7,13 @@ from uuid import UUID
 import asyncpg
 
 from app.core.roles import ROL_SISTEMA
+from app.core.scope import resolver_sucursal_obligatoria
 from app.repositories.branch_repository import (
     SucursalRecord,
     create_sucursal,
     deactivate_sucursal,
     get_all_sucursales,
+    get_datos_operativos,
     get_indicadores_sucursal,
     get_sucursal_by_id,
     nombre_exists,
@@ -28,6 +30,7 @@ from app.schemas.branch import (
     BranchCreateRequest,
     BranchResponse,
     BranchUpdateRequest,
+    HorarioSucursalResponse,
     IndicadoresSucursalResponse,
 )
 
@@ -108,6 +111,18 @@ async def get_branch(
     if record is None:
         raise BranchNotFoundError
     return _to_response(record)
+
+
+async def get_horario(
+    conn: asyncpg.Connection, branch_id: UUID, current_user: TokenData
+) -> HorarioSucursalResponse:
+    """Horario y zona de la sucursal (B18). Cualquier rol con sucursal fija
+    solo lee la suya (403 si pide otra, C1); AdministradorSistema, cualquiera."""
+    sucursal = resolver_sucursal_obligatoria(current_user, branch_id)
+    datos = await get_datos_operativos(conn, sucursal)
+    if datos is None:
+        raise BranchNotFoundError
+    return HorarioSucursalResponse(**datos)
 
 
 async def create_branch(
