@@ -158,5 +158,12 @@ jobs:
         with:
           context: BackEnd
           push: false
+          load: true
+          tags: woowkids-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
+      # El arranque aplica las migraciones pendientes: se prueba contra un
+      # PostgreSQL real (BD nueva, BD previa al control, migración nueva y una
+      # que falla).
+      - name: Control de migraciones del arranque
+        run: BackEnd/scripts/probar_control_migraciones.sh woowkids-backend:ci
