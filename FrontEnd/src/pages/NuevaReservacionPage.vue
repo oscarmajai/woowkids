@@ -263,8 +263,9 @@
                 </div>
                 <div v-else-if="!paquetesDisponibles.length" class="q-pa-md text-orange-9">
                   <q-icon name="info" size="20px" class="q-mr-xs" />
-                  Ningún paquete cubre {{ form.ninos }} niños. Ajusta el número de niños en el paso
-                  anterior o crea un paquete con ese rango.
+                  Ningún paquete cubre {{ form.ninos }} niños para {{ tipoEventoNombre }}. Ajusta el
+                  número de niños o el tipo de evento en el paso anterior, o crea un paquete con ese
+                  rango.
                 </div>
                 <div v-else class="packages-grid">
                   <div
@@ -992,6 +993,7 @@ import {
 } from '@/utils/reservacionPrecio'
 import { mensajeDeError } from '@/utils/errorHandler'
 import { resolverMetodoPagoId } from '@/utils/pagos'
+import { paqueteSirveParaTipo } from '@/utils/paquetes'
 import { pulserasApi } from '@/api/pulserasApi'
 import { branchService } from '@/services/branchService'
 
@@ -1414,7 +1416,11 @@ const selectedPkg = computed(() =>
  */
 const paquetesDisponibles = computed(() =>
   paquetesStore.activos.filter(
-    (p) => form.value.ninos >= p.min_invitados && form.value.ninos <= p.max_invitados,
+    (p) =>
+      form.value.ninos >= p.min_invitados &&
+      form.value.ninos <= p.max_invitados &&
+      // M17: solo los paquetes del tipo de evento elegido (o sin tipos: todos).
+      paqueteSirveParaTipo(p, form.value.tipoEvento),
   ),
 )
 
