@@ -287,20 +287,22 @@ const notasDialog = ref(false)
 const itemEditando = ref<ItemTicket | null>(null)
 const notasTemp = ref('')
 
-// La caja solo muestra A (Alimento), B (Bebida) y combos.
+// La caja muestra A (Alimento), B (Bebida), S (Servicio, M14) y combos.
 const listaCategorias: { value: TipoProducto | 'Todos'; label: string }[] = [
   { value: 'Todos', label: 'Todos' },
   { value: 'A', label: 'Alimentos' },
   { value: 'B', label: 'Bebidas' },
+  { value: 'S', label: 'Servicios' },
   { value: 'C', label: 'Combos' },
 ]
+const TIPOS_EN_CAJA: ReadonlySet<TipoProducto> = new Set(['A', 'B', 'S'])
 const categoriaSeleccionada = ref<TipoProducto | 'Todos'>('Todos')
 
 const busqueda = ref('')
 
 const productosFiltrados = computed(() => {
   const term = (busqueda.value || props.searchTerm || '').trim().toLowerCase()
-  let base = productos.value.filter((p) => p.tipo === 'A' || p.tipo === 'B' || p.es_combo)
+  let base = productos.value.filter((p) => TIPOS_EN_CAJA.has(p.tipo) || p.es_combo)
   if (categoriaSeleccionada.value !== 'Todos') {
     base = base.filter((p) => p.tipo === categoriaSeleccionada.value)
   }

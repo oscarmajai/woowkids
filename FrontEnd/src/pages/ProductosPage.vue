@@ -704,10 +704,11 @@ const margenDe = (row: ProductoAdmin): number | null => {
   return Math.round(((precio - costo) / precio) * 100)
 }
 
+// M14: un combo puede incluir servicios ('S'); estancias y otros combos no.
 const productosDisponiblesParaCombo = computed(() => {
   const yaAgregados = new Set(formDialog.value.productos_combo.map((i) => i.producto_id))
   return store.productos.filter(
-    (p) => p.tipo !== 'C' && p.tipo !== 'S' && p.tipo !== 'E' && p.activo && !yaAgregados.has(p.id),
+    (p) => p.tipo !== 'C' && p.tipo !== 'E' && p.activo && !yaAgregados.has(p.id),
   )
 })
 
