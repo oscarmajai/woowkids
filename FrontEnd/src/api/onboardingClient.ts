@@ -144,6 +144,27 @@ export async function fetchPulseras(sucursalId: string): Promise<PulseraDto[]> {
   return data
 }
 
+export type EstadoPulsera = 'disponible' | 'usada' | 'inactiva'
+
+export interface PulseraEstadoDto extends PulseraDto {
+  activo: boolean
+  usada: boolean
+  estado: EstadoPulsera
+}
+
+// GET /pulseras/sucursal/{sucursalId}/buscar?rfid=… (B14). Responde 404 si la
+// pulsera no existe en la sucursal; si existe, dice si está libre, usada o inactiva.
+export async function fetchEstadoPulsera(
+  sucursalId: string,
+  rfid: string,
+): Promise<PulseraEstadoDto> {
+  const { data } = await onboardingClient.get<PulseraEstadoDto>(
+    `/pulseras/sucursal/${sucursalId}/buscar`,
+    { params: { rfid } },
+  )
+  return data
+}
+
 // POST /estancias
 export async function postOnboarding(
   payload: OnboardingPayload,
