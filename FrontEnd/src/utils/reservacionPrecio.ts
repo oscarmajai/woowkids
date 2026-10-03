@@ -104,6 +104,26 @@ export function calcularPulseras(
   return num(precioHoraPulsera) * invitados * Math.max(1, horas)
 }
 
+/**
+ * Desglose del cargo de pulseras guardado en `precio_personas_extra` (B19):
+ * "12 × 3 h a $70.00". La columna conserva su nombre por compatibilidad, pero
+ * desde la migración 034 es tarifa por hora × invitados × horas, no un cargo
+ * por "personas extra". La tarifa se deduce del importe para no depender de la
+ * tarifa vigente del paquete, que pudo cambiar después de reservar.
+ */
+export function detallePulseras(
+  reservacion: Pick<
+    Reservaciones,
+    'numero_personas' | 'horas_reservadas' | 'precio_personas_extra'
+  >,
+  horasDelHorario: number,
+): { invitados: number; horas: number; tarifa: number } {
+  const invitados = reservacion.numero_personas
+  const horas = Math.max(1, reservacion.horas_reservadas || horasDelHorario)
+  const tarifa = invitados > 0 ? num(reservacion.precio_personas_extra) / (invitados * horas) : 0
+  return { invitados, horas, tarifa: Math.round(tarifa * 100) / 100 }
+}
+
 export type UnidadExtra = 'evento' | 'persona' | 'hora'
 
 /**

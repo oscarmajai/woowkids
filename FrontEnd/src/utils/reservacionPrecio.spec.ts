@@ -4,6 +4,7 @@ import {
   calcularPulseras,
   cantidadExtra,
   dentroDePlazo,
+  detallePulseras,
   diasParaEvento,
   exigeLiquidacionAlReservar,
   fechaLimiteLiquidacion,
@@ -135,6 +136,19 @@ describe('recalcularReservacion', () => {
   it('sin extras guardados conserva el precio_extras de la reservación', () => {
     const legado = { ...RESERVACION, precio_extras: '485' } as Reservaciones
     expect(recalcularReservacion(legado, 50, { invitados: 20 }).precio_extras).toBe('485')
+  })
+})
+
+describe('detallePulseras (B19)', () => {
+  it('desglosa el cargo guardado en precio_personas_extra como pulseras', () => {
+    // R-0008: "Personas extra $2,520" era 12 pulseras × 3 h × $70.
+    const r = { numero_personas: 12, horas_reservadas: 3, precio_personas_extra: '2520.00' }
+    expect(detallePulseras(r, 3)).toEqual({ invitados: 12, horas: 3, tarifa: 70 })
+  })
+
+  it('usa las horas del horario si la reservación no las guardó', () => {
+    const r = { numero_personas: 10, horas_reservadas: 0, precio_personas_extra: '2000' }
+    expect(detallePulseras(r, 4)).toEqual({ invitados: 10, horas: 4, tarifa: 50 })
   })
 })
 

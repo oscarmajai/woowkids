@@ -61,10 +61,17 @@
                 <span class="charge__amount">{{ fmt(precioHorasNum) }}</span>
               </div>
 
-              <div v-if="precioPersonasExtraNum > 0" class="charge">
-                <span class="charge__tag">Personas</span>
-                <div class="charge__info"><span class="charge__name">Personas extra</span></div>
-                <span class="charge__amount">{{ fmt(precioPersonasExtraNum) }}</span>
+              <!-- `precio_personas_extra` es el cargo de pulseras (B19), no
+                   un cobro por personas adicionales. -->
+              <div v-if="precioPulserasNum > 0 && pulseras" class="charge">
+                <span class="charge__tag">Pulseras</span>
+                <div class="charge__info">
+                  <span class="charge__name">Pulseras</span>
+                  <span class="charge__meta">
+                    {{ pulseras.invitados }} × {{ pulseras.horas }} h a {{ fmt(pulseras.tarifa) }}
+                  </span>
+                </div>
+                <span class="charge__amount">{{ fmt(precioPulserasNum) }}</span>
               </div>
 
               <div v-for="extra in extrasDetallados" :key="extra.id" class="charge">
@@ -124,8 +131,9 @@
             <div v-if="precioHorasNum > 0" class="settle__line">
               <span>Horas del evento</span><span>{{ fmt(precioHorasNum) }}</span>
             </div>
-            <div v-if="precioPersonasExtraNum > 0" class="settle__line">
-              <span>Personas extra</span><span>{{ fmt(precioPersonasExtraNum) }}</span>
+            <div v-if="precioPulserasNum > 0 && pulseras" class="settle__line">
+              <span>Pulseras ({{ pulseras.invitados }} × {{ pulseras.horas }}h)</span
+              ><span>{{ fmt(precioPulserasNum) }}</span>
             </div>
             <div v-if="extrasDetallados.length" class="settle__line">
               <span>Extras</span><span>{{ fmt(extrasTotalNum) }}</span>
@@ -222,6 +230,7 @@ import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
 import { mensajeDeError } from '@/utils/errorHandler'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import { horasFacturables } from '@/utils/horario'
+import { detallePulseras } from '@/utils/reservacionPrecio'
 import { printTicketElement } from '@/utils/ticketPrinting'
 import { descontarCambio } from '@/utils/pagos'
 
@@ -365,8 +374,18 @@ const paquete = computed(() =>
 
 const packagePriceNum = computed(() => parseFloat(reservacion.value?.precio_base ?? '0'))
 const precioHorasNum = computed(() => parseFloat(reservacion.value?.precio_horas ?? '0'))
-const precioPersonasExtraNum = computed(() =>
+// La columna se llama precio_personas_extra por compatibilidad, pero guarda el
+// cargo de pulseras: invitados × horas × tarifa por hora (B19).
+const precioPulserasNum = computed(() =>
   parseFloat(reservacion.value?.precio_personas_extra ?? '0'),
+)
+const pulseras = computed(() =>
+  reservacion.value
+    ? detallePulseras(
+        reservacion.value,
+        horasFacturables(reservacion.value.hora_inicio, reservacion.value.hora_fin),
+      )
+    : null,
 )
 
 const extrasDetallados = computed(() =>
