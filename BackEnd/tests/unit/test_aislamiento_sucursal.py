@@ -214,6 +214,15 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/api/reservaciones/evento-cercano/{A}", {}),
     ("POST", "/api/reservaciones", {"json": _reservacion(A)}),
     ("POST", "/api/reservaciones/completa", {"json": {"reservacion": _reservacion(A)}}),
+    # Paquetes, pulseras, extras y tipos de evento
+    ("GET", f"/api/paquetes?sucursal_id={A}", {}),
+    ("POST", "/api/paquetes", {"json": {"sucursal_id": A, "nombre": "P", "precio_base": 1}}),
+    ("GET", f"/api/pulseras/sucursal/{A}", {}),
+    ("GET", f"/api/pulseras/inventario/{A}", {}),
+    ("GET", f"/api/pulseras/admin/{A}", {}),
+    ("POST", "/api/pulseras", {"json": {"sucursal_id": A, "pulsera_rfid": "WK-0000001"}}),
+    ("POST", "/api/extras", {"json": {"sucursal_id": A, "nombre": "E", "precio": 1}}),
+    ("POST", "/api/tipos-evento", {"json": {"sucursal_id": A, "nombre": "T"}}),
 ]
 
 CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
@@ -295,6 +304,34 @@ CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
     ),
     ("PATCH", f"/api/pagos-reservacion/{RID}", {"json": {"notas": "x"}}),
     ("DELETE", f"/api/pagos-reservacion/{RID}", {}),
+    # Paquetes, pulseras, extras y tipos de evento
+    ("GET", f"/api/paquetes/{RID}", {}),
+    ("PATCH", f"/api/paquetes/{RID}", {"json": {"nombre": "x"}}),
+    ("DELETE", f"/api/paquetes/{RID}", {}),
+    ("POST", f"/api/paquetes/{RID}/duplicar", {}),
+    (
+        "POST",
+        "/api/paquetes",
+        {
+            "json": {
+                "sucursal_id": B,
+                "nombre": "P",
+                "precio_base": 1,
+                "productos_incluidos": [{"producto_id": RID2, "cantidad": 1}],
+            }
+        },
+    ),
+    ("GET", f"/api/paquete-tipos-evento/{RID}", {}),
+    ("POST", "/api/paquete-tipos-evento", {"json": {"paquete_id": RID, "tipo_evento_id": RID2}}),
+    ("DELETE", f"/api/paquete-tipos-evento/{RID}/{RID2}", {}),
+    ("PATCH", f"/api/pulseras/{RID}", {"json": {"activo": False}}),
+    ("DELETE", f"/api/pulseras/{RID}", {}),
+    ("GET", f"/api/extras/{RID}", {}),
+    ("PATCH", f"/api/extras/{RID}", {"json": {"nombre": "x"}}),
+    ("DELETE", f"/api/extras/{RID}", {}),
+    ("GET", f"/api/tipos-evento/{RID}", {}),
+    ("PATCH", f"/api/tipos-evento/{RID}", {"json": {"nombre": "x"}}),
+    ("DELETE", f"/api/tipos-evento/{RID}", {}),
 ]
 
 

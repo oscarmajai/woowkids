@@ -1,15 +1,15 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 import app.services.extras as svc
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.core.roles import ROL_SISTEMA
-from app.core.scope import sucursal_scope
+from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.schemas.auth import TokenData
 from app.schemas.extras import ExtrasCrear, ExtrasOut, ExtrasUpdate
+from app.services import alcance_service
 
 router = APIRouter(prefix="/api/extras", tags=["Extras"])
 
@@ -27,8 +27,9 @@ async def listar_extras(
 async def obtener_extra(
     extra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("extras:ver")),
+    current_user: TokenData = Depends(require_permission("extras:ver")),
 ) -> ExtrasOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "extra", extra_id)
     return await svc.obtener(conn, extra_id)
 
 
@@ -41,14 +42,9 @@ async def crear_extra(
     # sucursal_id siempre se deriva del usuario autenticado, nunca se confía
     # en lo que mande el cliente -- ya no existe el concepto de extra
     # "global" (sucursal_id NULL).
-    if current_user.role == ROL_SISTEMA:
-        if body.sucursal_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Debes indicar sucursal_id (AdministradorSistema ve todas).",
-            )
-    else:
-        body.sucursal_id = current_user.branch_id
+    # C1: roles con sucursal fija → la de la sesión (403 si mandan otra);
+    # AdministradorSistema → la del body o la del selector (422 sin ninguna).
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await svc.crear(conn, body)
 
 
@@ -57,8 +53,9 @@ async def actualizar_extra(
     extra_id: UUID,
     body: ExtrasUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("extras:editar")),
+    current_user: TokenData = Depends(require_permission("extras:editar")),
 ) -> ExtrasOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "extra", extra_id)
     return await svc.actualizar(conn, extra_id, body)
 
 
@@ -66,6 +63,7 @@ async def actualizar_extra(
 async def eliminar_extra(
     extra_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("extras:eliminar")),
+    current_user: TokenData = Depends(require_permission("extras:eliminar")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "extra", extra_id)
     await svc.eliminar(conn, extra_id)

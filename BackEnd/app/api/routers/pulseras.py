@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 
 from app.api.deps import require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal_obligatoria
 from app.schemas.auth import TokenData
 from app.schemas.pulseras import (
     InventarioPulserasOut,
@@ -13,6 +14,7 @@ from app.schemas.pulseras import (
     PulseraResponse,
     PulseraUpdate,
 )
+from app.services import alcance_service
 from app.services import pulseras as pulseras_service
 from app.services.pulseras import get_pulseras_disponibles_by_sucursal_id
 
@@ -28,9 +30,10 @@ router = APIRouter(prefix="/api/pulseras", tags=["Pulseras"])
 async def get_pulseras_disponibles(
     sucursal_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("estancias:checkin")),
+    current_user: TokenData = Depends(require_permission("estancias:checkin")),
 ) -> list[PulseraResponse]:
-    return await get_pulseras_disponibles_by_sucursal_id(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await get_pulseras_disponibles_by_sucursal_id(conn, sucursal)
 
 
 @router.get(
@@ -47,9 +50,10 @@ async def get_pulseras_disponibles(
 async def obtener_inventario_pulseras(
     sucursal_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("reservaciones:crear")),
+    current_user: TokenData = Depends(require_permission("reservaciones:crear")),
 ) -> InventarioPulserasOut:
-    return await pulseras_service.obtener_inventario(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await pulseras_service.obtener_inventario(conn, sucursal)
 
 
 @router.get(
@@ -60,9 +64,10 @@ async def obtener_inventario_pulseras(
 async def listar_pulseras_admin(
     sucursal_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("pulseras:listar")),
+    current_user: TokenData = Depends(require_permission("pulseras:listar")),
 ) -> list[PulseraOut]:
-    return await pulseras_service.listar_todas(conn, sucursal_id)
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await pulseras_service.listar_todas(conn, sucursal)
 
 
 @router.post("", response_model=PulseraOut, status_code=status.HTTP_201_CREATED)
@@ -71,6 +76,7 @@ async def crear_pulsera(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("pulseras:crear")),
 ) -> PulseraOut:
+    body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await pulseras_service.crear(conn, body, UUID(current_user.sub))
 
 
@@ -79,8 +85,9 @@ async def actualizar_pulsera(
     pulsera_id: UUID,
     body: PulseraUpdate,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("pulseras:editar")),
+    current_user: TokenData = Depends(require_permission("pulseras:editar")),
 ) -> PulseraOut:
+    await alcance_service.asegurar_recurso(conn, current_user, "pulsera", pulsera_id)
     return await pulseras_service.actualizar(conn, pulsera_id, body)
 
 
@@ -88,6 +95,7 @@ async def actualizar_pulsera(
 async def eliminar_pulsera(
     pulsera_id: UUID,
     conn: asyncpg.Connection = Depends(get_db),
-    _: TokenData = Depends(require_permission("pulseras:eliminar")),
+    current_user: TokenData = Depends(require_permission("pulseras:eliminar")),
 ) -> None:
+    await alcance_service.asegurar_recurso(conn, current_user, "pulsera", pulsera_id)
     await pulseras_service.eliminar(conn, pulsera_id)
