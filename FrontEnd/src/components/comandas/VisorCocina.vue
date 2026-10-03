@@ -68,6 +68,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { cambiarEstadoComanda, obtenerComandas } from '@/services/comandaService'
 import { useComandasSocket } from '@/composables/useComandasSocket'
+import { mensajeDeError } from '@/utils/errorHandler'
 import type { Comanda, ComandaWsMessage, EstadoActualComanda } from '@/types/comanda'
 import ComandaCard from './ComandaCard.vue'
 import ComandaFullScreen from './ComandaFullScreen.vue'
@@ -184,13 +185,17 @@ const onCambiarEstado = async (
     return true
   } catch (err) {
     console.error('[VisorCocina] onCambiarEstado:', err)
+    // A2: el backend rechaza (409) una transición que ya no aplica, p. ej. si
+    // otra pantalla avanzó o canceló la orden. Se muestra su mensaje y se
+    // recarga el tablero para que refleje el estado real.
     $q.notify({
       type: 'negative',
-      message: 'No se pudo actualizar el estado de la orden.',
-      caption: 'Intenta nuevamente en unos segundos.',
+      message: mensajeDeError(err, 'No se pudo actualizar el estado de la orden.'),
+      caption: 'El tablero se actualizó con el estado actual.',
       position: 'top-right',
-      timeout: 3000,
+      timeout: 4000,
     })
+    void fetchComandas()
     return false
   }
 }
