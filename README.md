@@ -21,8 +21,7 @@ Incluye frontend, API, PostgreSQL y MinIO, con todos los datos en el volumen `/d
 ### Contenedores separados (producción)
 
 ```bash
-docker compose up -d --build                           # desde el código
-WOOWKIDS_TAG=v1.0.0 docker compose up -d --no-build    # imágenes publicadas
+docker compose up -d --build
 ```
 
 | Qué | Dónde |
@@ -35,13 +34,9 @@ En los dos casos se entra con **`admin@woowkids.com` / `admin1234`**. Los valore
 
 La primera vez, el backend crea la base de datos con [`BackEnd/sql/schema_maestro.sql`](BackEnd/sql/schema_maestro.sql), que se genera desde las migraciones de `BackEnd/sql/migrations/`.
 
-## Imágenes publicadas (GHCR)
+## Imagen publicada (GHCR)
 
-Cada release publica, con su tag `vX.Y.Z` y `latest`:
-
-- `ghcr.io/oscarmajai/woowkids`: todo en uno.
-- `ghcr.io/oscarmajai/woowkids-frontend`
-- `ghcr.io/oscarmajai/woowkids-backend`
+Cada release publica solo `ghcr.io/oscarmajai/woowkids` (todo en uno), con su tag `vX.Y.Z` y `latest`. Los contenedores separados se construyen desde el código con `docker compose`.
 
 ## Desarrollo
 
@@ -60,4 +55,4 @@ Cada release publica, con su tag `vX.Y.Z` y `latest`:
 - **`release.yml`:** al llegar commits a `main`:
   1. Corre el CI completo.
   2. Calcula la versión con Conventional Commits.
-  3. Crea el tag, publica las tres imágenes y crea el GitHub Release.
+  3. Crea el tag, construye frontend y backend en el runner, publica la imagen todo en uno y crea el GitHub Release.

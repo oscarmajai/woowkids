@@ -2,18 +2,17 @@
 # contenedor, con todos los datos en el volumen /data.
 #
 # No recompila nada: parte de las imágenes woowkids-frontend y woowkids-backend
-# (las publica el release del monorepo, o construye las locales con
-# `docker compose build`).
+# que construye `docker compose build` (el release las construye igual en el
+# runner y solo publica esta).
 #
 #   docker run -d -p 8080:80 -v woowkids_data:/data ghcr.io/oscarmajai/woowkids:latest
 #
 # Local:  docker compose build && docker build -f Dockerfile.allinone \
-#           --build-arg FRONTEND_IMAGE=ghcr.io/oscarmajai/woowkids-frontend:local \
-#           --build-arg BACKEND_IMAGE=ghcr.io/oscarmajai/woowkids-backend:local -t woowkids .
+#           -t woowkids .
 #
 # Para producción a escala se recomiendan las imágenes separadas (docker-compose.yml).
-ARG FRONTEND_IMAGE=ghcr.io/oscarmajai/woowkids-frontend:latest
-ARG BACKEND_IMAGE=ghcr.io/oscarmajai/woowkids-backend:latest
+ARG FRONTEND_IMAGE=woowkids-frontend:local
+ARG BACKEND_IMAGE=woowkids-backend:local
 # MinIO: dl.min.io ya no distribuye binarios (410) y Docker Hub y quay.io dejaron
 # de servir la imagen, así que se toma la de Chainguard (mismo binario AGPL).
 # RELEASE.2026-09-22T19-25-18Z, fijada por digest (Chainguard solo publica latest).
