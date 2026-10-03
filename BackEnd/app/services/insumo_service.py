@@ -13,6 +13,7 @@ from uuid import UUID
 import asyncpg
 
 from app.exceptions import DatosInvalidos, NoEncontrado
+from app.exceptions.inventario import RecursoInactivoError
 from app.repositories import (
     insumo_repository,
     movimiento_inventario_repository,
@@ -53,6 +54,11 @@ async def _validar_proveedor(
     proveedor = await proveedor_repository.obtener(conn, proveedor_id)
     if not proveedor or proveedor["sucursal_id"] != sucursal_id:
         raise DatosInvalidos("El proveedor indicado no pertenece a esta sucursal.")
+    # M22: no se asigna como proveedor principal uno eliminado.
+    if not proveedor["activo"]:
+        raise RecursoInactivoError(
+            f"El proveedor «{proveedor['nombre']}» está eliminado; elige otro proveedor principal."
+        )
 
 
 async def listar(conn: asyncpg.Connection, sucursal_id: UUID | None = None) -> list[InsumoOut]:
@@ -152,8 +158,11 @@ async def actualizar(
 ) -> InsumoOut:
     actual = await obtener(conn, insumo_id)
     updates = body.model_dump(exclude_unset=True)
-    if updates.get("proveedor_principal_id") is not None:
-        await _validar_proveedor(conn, updates["proveedor_principal_id"], actual.sucursal_id)
+    # Solo se valida un proveedor nuevo: si el actual se eliminó después, el
+    # insumo se puede seguir editando sin cambiarlo.
+    nuevo_proveedor = updates.get("proveedor_principal_id")
+    if nuevo_proveedor is not None and nuevo_proveedor != actual.proveedor_principal_id:
+        await _validar_proveedor(conn, nuevo_proveedor, actual.sucursal_id)
     updates["modificado_por"] = UUID(current_user.sub)
     row = await insumo_repository.actualizar(conn, insumo_id, updates)
     if not row:

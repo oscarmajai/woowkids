@@ -15,7 +15,7 @@ from uuid import UUID
 import asyncpg
 
 from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado, RecepcionInvalidaError
-from app.exceptions.inventario import CantidadFueraDeRangoError
+from app.exceptions.inventario import CantidadFueraDeRangoError, RecursoInactivoError
 from app.repositories import (
     compra_repository,
     insumo_repository,
@@ -39,6 +39,23 @@ from app.services import costeo_service
 async def _construir_out(conn: asyncpg.Connection, compra: dict[str, Any]) -> CompraOut:
     detalles = await compra_repository.listar_detalles(conn, compra["id"])
     return CompraOut.model_validate({**compra, "detalles": detalles})
+
+
+def _validar_proveedor_activo(proveedor: dict[str, Any]) -> None:
+    """M22: un proveedor eliminado (borrado lógico) no admite compras nuevas."""
+    if not proveedor["activo"]:
+        raise RecursoInactivoError(
+            f"El proveedor «{proveedor['nombre']}» está eliminado; no se le pueden "
+            "registrar compras."
+        )
+
+
+def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
+    """M22: un insumo eliminado (borrado lógico) no se puede comprar."""
+    if not insumo["activo"]:
+        raise RecursoInactivoError(
+            f"El insumo «{insumo['nombre']}» está eliminado; no se puede agregar a una compra."
+        )
 
 
 def _validar_cantidad_base(cantidad_base: Decimal, insumo: dict[str, Any]) -> None:
@@ -107,6 +124,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
         raise NoEncontrado("Proveedor")
     if proveedor["sucursal_id"] != body.sucursal_id:
         raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
+    _validar_proveedor_activo(proveedor)
 
     for detalle in body.detalles:
         insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
@@ -114,6 +132,7 @@ async def crear(conn: asyncpg.Connection, body: CompraCrear, creado_por: UUID) -
             raise NoEncontrado("Insumo")
         if insumo["sucursal_id"] != body.sucursal_id:
             raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
+        _validar_insumo_activo(insumo)
         await _validar_y_calcular_base(
             conn,
             insumo,
@@ -170,12 +189,14 @@ async def editar(conn: asyncpg.Connection, compra_id: UUID, body: CompraEditar) 
         proveedor = await proveedor_repository.obtener(conn, body.proveedor_id)
         if not proveedor or proveedor["sucursal_id"] != compra["sucursal_id"]:
             raise DatosInvalidos("El proveedor no pertenece a esta sucursal.")
+        _validar_proveedor_activo(proveedor)
         for detalle in body.detalles:
             insumo = await insumo_repository.obtener(conn, detalle.insumo_id)
             if not insumo:
                 raise NoEncontrado("Insumo")
             if insumo["sucursal_id"] != compra["sucursal_id"]:
                 raise DatosInvalidos("El insumo no pertenece a esta sucursal.")
+            _validar_insumo_activo(insumo)
             await _validar_y_calcular_base(
                 conn,
                 insumo,
