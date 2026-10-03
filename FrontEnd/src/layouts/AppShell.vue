@@ -23,8 +23,29 @@ const reservacionesStore = useReservacionesStore()
 
 // Debajo de este ancho el sidebar pasa a overlay y se abre desde el Topbar.
 const DRAWER_BREAKPOINT = 1024
-const drawerOpen = ref(window.innerWidth >= DRAWER_BREAKPOINT)
 const isOverlay = computed(() => $q.screen.width < DRAWER_BREAKPOINT)
+
+// En escritorio el sidebar se puede colapsar desde el Topbar; la preferencia
+// se recuerda por navegador. En overlay siempre arranca cerrado.
+const CLAVE_SIDEBAR = 'woowkids:sidebar-colapsado'
+const leerColapsado = (): boolean => {
+  try {
+    return localStorage.getItem(CLAVE_SIDEBAR) === '1'
+  } catch {
+    return false
+  }
+}
+const drawerOpen = ref(window.innerWidth >= DRAWER_BREAKPOINT && !leerColapsado())
+
+const alternarSidebar = () => {
+  drawerOpen.value = !drawerOpen.value
+  if (isOverlay.value) return
+  try {
+    localStorage.setItem(CLAVE_SIDEBAR, drawerOpen.value ? '0' : '1')
+  } catch {
+    // Sin almacenamiento (modo privado): solo se pierde la preferencia.
+  }
+}
 
 // En modo overlay, cerrar el menú al navegar.
 watch(
@@ -118,7 +139,6 @@ watch(
       side="left"
       :width="248"
       :breakpoint="DRAWER_BREAKPOINT"
-      show-if-above
       bordered
       class="app-drawer"
     >
@@ -126,7 +146,7 @@ watch(
     </q-drawer>
 
     <q-header class="app-header">
-      <AppTopbar :show-menu-button="isOverlay" @toggle-menu="drawerOpen = !drawerOpen" />
+      <AppTopbar :sidebar-abierto="drawerOpen" @toggle-menu="alternarSidebar" />
     </q-header>
 
     <q-page-container class="page-bg">

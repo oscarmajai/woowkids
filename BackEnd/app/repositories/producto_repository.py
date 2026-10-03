@@ -6,6 +6,7 @@ Regla 11.1 y 11.4 SAD.
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -120,7 +121,9 @@ async def crear(
             descripcion,
             imagen,
             es_combo,
-            config_estancia,
+            # Columna JSONB: asyncpg no serializa listas; sin json.dumps el alta
+            # de un producto de estancia respondía 500 (la edición ya lo hacía).
+            json.dumps(config_estancia) if config_estancia is not None else None,
             usuario_id,
             codigo,
         )

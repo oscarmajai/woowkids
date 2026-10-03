@@ -1,2 +1,15 @@
-npx lint-staged
-npm run type-check
+# Monorepo: el hook corre desde la raíz. Solo verifica la parte que tiene
+# archivos en stage.
+staged=$(git diff --cached --name-only)
+
+if printf '%s\n' "$staged" | grep -q '^FrontEnd/'; then
+  (cd FrontEnd && npx lint-staged && npm run type-check) || exit 1
+fi
+
+if printf '%s\n' "$staged" | grep -q '^BackEnd/'; then
+  if [ -x BackEnd/.venv/bin/ruff ]; then
+    (cd BackEnd && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/mypy app) || exit 1
+  else
+    echo "Aviso: BackEnd/.venv no existe; se omiten ruff y mypy (el CI los corre)." >&2
+  fi
+fi

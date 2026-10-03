@@ -1,0 +1,162 @@
+name: CI
+
+# Corre en cada push y PR. Cada parte se verifica solo si cambió (o siempre,
+# cuando lo llama release.yml con completo=true).
+on:
+  push:
+    # main lo cubre release.yml, que llama a este mismo workflow.
+    branches-ignore: [main]
+    tags-ignore: ["**"]
+  pull_request:
+  workflow_call:
+    inputs:
+      completo:
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ inputs.completo }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # dorny/paths-filter consulta los archivos del PR por la API.
+  pull-requests: read
+
+jobs:
+  cambios:
+    name: Detectar cambios
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ inputs.completo || steps.filtro.outputs.frontend }}
+      backend: ${{ inputs.completo || steps.filtro.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filtro
+        with:
+          filters: |
+            frontend:
+              - 'FrontEnd/**'
+              - '.github/**'
+            backend:
+              - 'BackEnd/**'
+              - '.github/**'
+
+  frontend:
+    name: Frontend · lint, tipos, tests y build
+    needs: cambios
+    if: needs.cambios.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FrontEnd
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FrontEnd/package-lock.json
+      - run: npm ci
+      - name: ESLint
+        run: npx eslint src
+      - name: Tipos (vue-tsc)
+        run: npm run type-check
+      - name: Tests (Vitest)
+        run: npx vitest run --dir src
+      - name: Build de producción
+        run: npx vite build
+
+  frontend-imagen:
+    name: Frontend · imagen
+    needs: cambios
+    if: needs.cambios.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: FrontEnd
+          push: false
+          build-args: |
+            VITE_API_BASE_URL=/api
+            VITE_APP_TITLE=Woow Kids
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  backend:
+    name: Backend · lint, tipos y tests
+    needs: cambios
+    if: needs.cambios.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BackEnd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            BackEnd/requirements.txt
+            BackEnd/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check . --output-format=github
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Mypy
+        run: mypy app
+      - name: Pytest (unitarios)
+        run: pytest tests/unit -q
+
+  backend-migraciones:
+    name: Backend · migraciones y schema maestro
+    needs: cambios
+    if: needs.cambios.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BackEnd
+    steps:
+      - uses: actions/checkout@v4
+      # Aplica TODAS las migraciones sobre un PostgreSQL vacío, regenera el
+      # maestro y valida que reproduce el mismo esquema y datos.
+      - run: ./scripts/generar_schema_maestro.sh
+      # El maestro versionado debe estar al día con las migraciones. Las fechas
+      # y los UUID de los datos de catálogo (gen_random_uuid()) cambian en cada
+      # generación: se normalizan antes de comparar.
+      - name: El schema maestro está actualizado
+        run: |
+          norm() {
+            sed -E \
+              -e "s/'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+\+00'/'FECHA'/g" \
+              -e "s/'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'/'UUID'/g" \
+              "$1"
+          }
+          git show HEAD:BackEnd/sql/schema_maestro.sql > /tmp/versionado.sql
+          if ! diff -q <(norm /tmp/versionado.sql) <(norm sql/schema_maestro.sql) >/dev/null; then
+            echo "::error::BackEnd/sql/schema_maestro.sql está desactualizado. Corre BackEnd/scripts/generar_schema_maestro.sh y commitea el resultado."
+            diff <(norm /tmp/versionado.sql) <(norm sql/schema_maestro.sql) | head -40
+            exit 1
+          fi
+
+  backend-imagen:
+    name: Backend · imagen
+    needs: cambios
+    if: needs.cambios.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: BackEnd
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend

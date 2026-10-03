@@ -234,23 +234,24 @@ async function handleLogout(): Promise<void> {
       </router-link>
 
       <div class="sb-user">
-        <div class="sb-user__avatar" :style="{ background: userColor }">{{ userInitials }}</div>
-        <div class="sb-user__text">
-          <span class="sb-user__name">{{ userName }}</span>
-          <span class="sb-user__role">{{ userRole }}</span>
-        </div>
-        <q-btn
-          flat
-          round
-          dense
-          icon="password"
-          size="13px"
-          class="sb-user__logout"
-          aria-label="Cambiar mi PIN"
-          @click="showCambiarPin = true"
-        >
-          <q-tooltip>Cambiar mi PIN</q-tooltip>
-        </q-btn>
+        <!-- El nombre abre el menú de la cuenta (acciones personales como el PIN). -->
+        <button type="button" class="sb-user__account" aria-label="Mi cuenta">
+          <div class="sb-user__avatar" :style="{ background: userColor }">{{ userInitials }}</div>
+          <div class="sb-user__text">
+            <span class="sb-user__name">{{ userName }}</span>
+            <span class="sb-user__role">{{ userRole }}</span>
+          </div>
+          <q-icon name="unfold_more" size="16px" class="sb-user__chevron" />
+          <q-menu anchor="top left" self="bottom left" :offset="[0, 6]" class="sb-account-menu">
+            <q-list dense style="min-width: 200px">
+              <q-item-label header>Mi cuenta</q-item-label>
+              <q-item v-close-popup clickable @click="showCambiarPin = true">
+                <q-item-section avatar><q-icon name="password" size="18px" /></q-item-section>
+                <q-item-section>Cambiar mi PIN de caja</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </button>
         <q-btn
           flat
           round
@@ -638,6 +639,33 @@ async function handleLogout(): Promise<void> {
 
   &__role {
     font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  &__account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    margin: -4px -6px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--bg-muted);
+    }
+  }
+
+  &__chevron {
+    margin-left: auto;
     color: var(--text-secondary);
   }
 

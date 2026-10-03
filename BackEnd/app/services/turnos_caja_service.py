@@ -35,6 +35,7 @@ from app.repositories.caja_repository import (
     get_apertura_activa_por_usuario,
     get_apertura_por_id,
     get_caja_por_codigo,
+    get_caja_por_id,
     listar_cajas_por_sucursal,
     listar_cambios_por_apertura,
     listar_historial_cierres,
@@ -216,7 +217,7 @@ async def abrir_turno(
                 "message": "Debes especificar la sucursal en la que se abrirá la caja.",
             },
         )
-    if not payload.terminal:
+    if not payload.caja_id and not payload.terminal:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -225,7 +226,12 @@ async def abrir_turno(
             },
         )
 
-    caja = await get_caja_por_codigo(conn, sucursal, payload.terminal)
+    # caja_id, si viene, manda sobre terminal (antes se ignoraba y dos cajeros que
+    # dejaban el terminal por defecto terminaban en la misma caja física).
+    if payload.caja_id:
+        caja = await get_caja_por_id(conn, sucursal, payload.caja_id)
+    else:
+        caja = await get_caja_por_codigo(conn, sucursal, payload.terminal or "")
     if not caja:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

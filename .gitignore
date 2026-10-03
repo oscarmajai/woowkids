@@ -1,0 +1,15 @@
+# Variables locales con secretos (usa .env.example como plantilla)
+.env
+.env.docker
+
+# Configuración local de Claude Code
+.claude/settings.local.json
+.claude/worktrees/
+
+# Respaldos de los repos separados anteriores
+.git-anteriores/
+
+# Editor / SO
+.idea/
+.vscode/
+.DS_Store
