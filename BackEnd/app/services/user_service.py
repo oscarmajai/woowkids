@@ -48,6 +48,18 @@ class BranchRequiredError(Exception):
     pass
 
 
+class SucursalNoEncontradaError(Exception):
+    """M3: la sucursal indicada no existe (antes: 500 por la FK)."""
+
+
+# FK de usuarios_sucursal.sucursal_id: la sucursal asignada no existe.
+_FK_SUCURSAL = "usuarios_sucursal_sucursal_id_fkey"
+
+
+def _es_sucursal_inexistente(exc: asyncpg.ForeignKeyViolationError) -> bool:
+    return getattr(exc, "constraint_name", None) == _FK_SUCURSAL
+
+
 class InsufficientPermissionsError(Exception):
     pass
 
@@ -178,6 +190,11 @@ async def create_user(
         if _es_email_duplicado(exc):
             raise EmailAlreadyExistsError from exc
         raise
+    except asyncpg.ForeignKeyViolationError as exc:
+        # M3: la transacción ya se revirtió (no queda el usuario a medias).
+        if _es_sucursal_inexistente(exc):
+            raise SucursalNoEncontradaError from exc
+        raise
 
     record = await get_usuario_by_id(conn, user_id)
     if record is None:
@@ -251,6 +268,10 @@ async def update_user(
     except asyncpg.UniqueViolationError as exc:
         if _es_email_duplicado(exc):
             raise EmailAlreadyExistsError from exc
+        raise
+    except asyncpg.ForeignKeyViolationError as exc:
+        if _es_sucursal_inexistente(exc):
+            raise SucursalNoEncontradaError from exc
         raise
 
     record = await get_usuario_by_id(conn, user_id)

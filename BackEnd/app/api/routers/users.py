@@ -22,6 +22,7 @@ from app.services.user_service import (
     EstadoUsuarios,
     InsufficientPermissionsError,
     RolInvalidoError,
+    SucursalNoEncontradaError,
     UserNotFoundError,
     cambiar_mi_pin,
     create_user,
@@ -59,6 +60,14 @@ def _handle_write_errors(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, InsufficientPermissionsError):
         raise _FORBIDDEN from exc
+    if isinstance(exc, SucursalNoEncontradaError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "SUCURSAL_NO_ENCONTRADA",
+                "message": "La sucursal indicada no existe.",
+            },
+        ) from exc
     if isinstance(exc, RolInvalidoError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -92,6 +101,7 @@ async def post_user(
         BranchRequiredError,
         InsufficientPermissionsError,
         RolInvalidoError,
+        SucursalNoEncontradaError,
     ) as exc:
         _handle_write_errors(exc)
         raise  # unreachable, satisfies mypy
@@ -127,6 +137,7 @@ async def put_user(
         BranchRequiredError,
         InsufficientPermissionsError,
         RolInvalidoError,
+        SucursalNoEncontradaError,
     ) as exc:
         _handle_write_errors(exc)
         raise  # unreachable, satisfies mypy

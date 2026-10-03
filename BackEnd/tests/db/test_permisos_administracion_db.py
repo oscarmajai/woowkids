@@ -356,3 +356,50 @@ async def test_con_permiso_de_eliminar_si_se_desactiva_por_patch(entorno: Any) -
     # Reactivar no es eliminar: basta con gestionar.
     resp = await client.patch(url, json={"activo": True}, headers=_h("inventario_a"))
     assert resp.status_code == 200, resp.text
+
+
+# ── M3: sucursal inexistente al dar de alta/editar un usuario ──────────────
+
+_SUCURSAL_INEXISTENTE = "00000000-0000-0000-0000-000000000000"
+
+
+async def test_alta_de_usuario_con_sucursal_inexistente_da_422(entorno: Any) -> None:
+    client, conn = entorno
+    resp = await client.post(
+        "/api/usuarios",
+        json={
+            "email": "q5.nuevo@woowkids.dev",
+            "full_name": "Q5 Nuevo",
+            "password": PASSWORD,
+            "role": "Cajero",
+            "branch_id": _SUCURSAL_INEXISTENTE,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
+    assert not await conn.fetchval(
+        "SELECT count(*) FROM public.usuarios WHERE email = 'q5.nuevo@woowkids.dev'"
+    )
+
+
+async def test_editar_usuario_a_una_sucursal_inexistente_da_422(entorno: Any) -> None:
+    client, conn = entorno
+    uid, email, _rol, _suc = USUARIOS["cajero_a"]
+    resp = await client.put(
+        f"/api/usuarios/{uid}",
+        json={
+            "email": email,
+            "full_name": "Q5 Cajero A",
+            "role": "Cajero",
+            "branch_id": _SUCURSAL_INEXISTENTE,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
+    sucursal = await conn.fetchval(
+        "SELECT sucursal_id FROM public.usuarios_sucursal WHERE usuario_id = $1 AND activo",
+        UUID(uid),
+    )
+    assert str(sucursal) == SUC_A
