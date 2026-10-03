@@ -82,8 +82,8 @@
           El monto final se calcula al confirmar la salida, considerando recargos por tiempo
           excedente.
         </div>
-        <p v-if="mostrarModalPagoExtra" class="charges__hint">
-          El niño ya realizó checkout. Falta cobrar el cargo extra para cerrar la operación.
+        <p v-if="hayCargoExtra" class="charges__hint charges__hint--strong">
+          Primero se cobra el tiempo excedente; la salida se registra al completar el cobro.
         </p>
 
         <footer class="charges__actions">
@@ -96,7 +96,7 @@
           <q-btn
             unelevated
             color="primary"
-            label="Confirmar salida"
+            :label="etiquetaConfirmar"
             class="charges__confirm"
             :loading="isLoading"
             :disable="mostrarModalPagoExtra || !identidadVerificada"
@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import FotosRegistroDialog from '@/components/control-acceso/FotosRegistroDialog.vue'
 import { useRouter } from 'vue-router'
@@ -169,9 +169,30 @@ const metodosPagoDisponibles = ref<MetodosPago[]>([])
 const cotizacion = ref<CotizacionCheckoutResponse | null>(null)
 const mostrarModalPagoExtra = ref(false)
 
+// UX (ola 4): el cargo extra se cobra ANTES de dar la salida. El botón lo dice
+// con el monto de la cotización vigente, y la cotización se refresca cada
+// minuto mientras el cajero está en la pantalla (el excedente crece con el
+// tiempo). El backend registra salida y cargo juntos al recibir el pago.
+const hayCargoExtra = computed(() => (cotizacion.value?.totalExtra ?? 0) > 0)
+const etiquetaConfirmar = computed(() =>
+  hayCargoExtra.value
+    ? `Cobrar $${cotizacion.value!.totalExtra.toFixed(2)} y dar salida`
+    : 'Confirmar salida',
+)
+
+const REFRESCO_COTIZACION_MS = 60_000
+let refrescoTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   void cargarMetodosPago()
   void cargarCotizacionInicial()
+  refrescoTimer = setInterval(() => {
+    if (!mostrarModalPagoExtra.value && !isLoading.value) void cargarCotizacionInicial()
+  }, REFRESCO_COTIZACION_MS)
+})
+
+onBeforeUnmount(() => {
+  if (refrescoTimer) clearInterval(refrescoTimer)
 })
 
 async function cargarCotizacionInicial() {
@@ -245,8 +266,9 @@ async function confirmarSalida() {
 
   isLoading.value = true
   try {
-    // Única llamada GET del flujo: cotiza justo antes de cobrar, para que el
-    // monto que ve el cajero esté lo más fresco posible.
+    // Cotiza justo antes de cobrar, para que el monto que ve el cajero esté lo
+    // más fresco posible. Si hay cargo extra se cobra primero: la salida se
+    // registra hasta que el pago se completa (onPagoExtraExitoso).
     const cotizacionActual = await cotizarCheckout(child.value.detalleId)
     cotizacion.value = cotizacionActual
 
@@ -574,6 +596,11 @@ function cancelar() {
     margin: 0;
     font-size: 12.5px;
     color: var(--text-secondary);
+
+    &--strong {
+      font-weight: 700;
+      color: var(--tone-warn-fg);
+    }
   }
 
   &__actions {
