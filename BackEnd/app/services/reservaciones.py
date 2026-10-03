@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -31,7 +31,7 @@ from app.schemas.reservaciones_completa import (
     ReservacionCompletaRequest,
     ReservacionCompletaResponse,
 )
-from app.services import reservacion_precio
+from app.services import reservacion_estados, reservacion_precio
 
 
 async def listar(
@@ -192,16 +192,35 @@ async def crear(
 # recalcula pulseras y total desde el paquete.
 _CAMPOS_DE_PRECIO = {"numero_personas", "horas_reservadas", "precio_personas_extra", "precio_total"}
 
+# Campos que cambian el alcance del evento (invitados, horas, fecha u horario):
+# solo se editan dentro del plazo, hasta una semana antes del evento, igual que
+# en la pantalla de Reservaciones (N12). Los datos de contacto y las notas se
+# pueden corregir mientras la reservación no esté cerrada ni cancelada.
+_CAMPOS_DE_ALCANCE = _CAMPOS_DE_PRECIO | {"fecha_evento", "hora_inicio", "hora_fin"}
+
 
 async def actualizar(
     conn: asyncpg.Connection, reservacion_id: UUID, body: ReservacionesUpdate
 ) -> ReservacionesOut:
+    """Edición parcial. Una reservación cancelada o completada no se edita
+    (409), el alcance solo cambia dentro del plazo y `estado` solo cambia por
+    la máquina de estados (A8/N12)."""
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     async with conn.transaction():
         # Bloqueo: un cobro simultáneo no debe validar contra un total viejo.
         actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
         if not actual or not actual["activo"]:
             raise NoEncontrado("Reservación")
+        reservacion_estados.asegurar_editable(actual["estado"])
+
+        if updates.get("estado") == actual["estado"]:
+            updates.pop("estado")
+        if "estado" in updates:
+            await _validar_cambio_estado(conn, actual, updates["estado"])
+
+        if _CAMPOS_DE_ALCANCE & updates.keys():
+            await _asegurar_dentro_de_plazo(conn, actual, updates.get("fecha_evento"))
+
         hora_inicio = updates.get("hora_inicio", actual["hora_inicio"])
         hora_fin = updates.get("hora_fin", actual["hora_fin"])
         if hora_fin <= hora_inicio:
@@ -214,6 +233,89 @@ async def actualizar(
     if not row:
         raise NoEncontrado("Reservación")
     return ReservacionesOut.model_validate(row)
+
+
+async def cerrar(
+    conn: asyncpg.Connection,
+    reservacion_id: UUID,
+    notas_cierre: str | None,
+    usuario_id: UUID,
+) -> ReservacionesOut:
+    """Cierre del evento (POST /reservaciones/{id}/cerrar): pasa a 'completada'
+    por la máquina de estados (evento ya iniciado y sin saldo) y AGREGA las
+    notas del cierre a las existentes; antes se sobrescribían y se perdía, por
+    ejemplo, el motivo de una cancelación (A8)."""
+    async with conn.transaction():
+        actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
+        if not actual or not actual["activo"]:
+            raise NoEncontrado("Reservación")
+        await _validar_cambio_estado(conn, actual, reservacion_estados.COMPLETADA)
+        row = await reservaciones_repository.actualizar(
+            conn,
+            reservacion_id,
+            {
+                "estado": reservacion_estados.COMPLETADA,
+                "notas": reservacion_estados.anexar_nota(
+                    actual["notas"], notas_cierre, "Cierre del evento"
+                ),
+                "modificado_por": usuario_id,
+            },
+        )
+    if not row:
+        raise NoEncontrado("Reservación")
+    return ReservacionesOut.model_validate(row)
+
+
+async def _validar_cambio_estado(
+    conn: asyncpg.Connection, actual: dict[str, Any], nuevo: str
+) -> None:
+    """Carga la hora local de la sucursal y, si hace falta, el anticipo mínimo
+    del paquete, y aplica la máquina de estados (409 si no procede)."""
+    ahora = await reservaciones_repository.ahora_en_sucursal(conn, actual["sucursal_id"])
+    if ahora is None:
+        raise _invalido("SUCURSAL_INVALIDA", "La sucursal no existe.")
+    anticipo_minimo = Decimal(0)
+    if nuevo == reservacion_estados.CONFIRMADA:
+        paquete = await paquetes_repository.obtener(conn, actual["paquete_id"])
+        porcentaje = reservacion_precio.porcentaje_anticipo(
+            paquete["anticipo_porcentaje"] if paquete else None
+        )
+        total = Decimal(actual["precio_total"])
+        anticipo_minimo = min(total, reservacion_precio.monto_por_porcentaje(total, porcentaje))
+    reservacion_estados.validar_transicion(
+        actual["estado"],
+        nuevo,
+        fecha_evento=actual["fecha_evento"],
+        hora_inicio=actual["hora_inicio"],
+        ahora_local=ahora,
+        saldo_pendiente=Decimal(actual["saldo_pendiente"]),
+        monto_pagado=Decimal(actual["monto_pagado"]),
+        anticipo_minimo=anticipo_minimo,
+    )
+
+
+async def _asegurar_dentro_de_plazo(
+    conn: asyncpg.Connection, actual: dict[str, Any], nueva_fecha: date | None
+) -> None:
+    """El alcance solo se modifica hasta una semana antes del evento (el mismo
+    plazo de liquidación que usa el scheduler). Si se cambia la fecha, la nueva
+    también debe quedar fuera de esa semana."""
+    for fecha in {actual["fecha_evento"], nueva_fecha or actual["fecha_evento"]}:
+        dias = await _dias_para_evento(conn, actual["sucursal_id"], fecha)
+        if reservacion_precio.exige_liquidacion(dias):
+            # Último día editable: dias_para_evento > DIAS_LIMITE_LIQUIDACION.
+            limite = fecha - timedelta(days=reservacion_precio.DIAS_LIMITE_LIQUIDACION + 1)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "FUERA_DE_PLAZO",
+                    "message": (
+                        "Fuera de plazo: invitados, horas, fecha y horario solo se pueden "
+                        f"modificar hasta el {limite.strftime('%d/%m/%Y')} (el evento es el "
+                        f"{fecha.strftime('%d/%m/%Y')})."
+                    ),
+                },
+            )
 
 
 async def _recalcular_precio_edicion(

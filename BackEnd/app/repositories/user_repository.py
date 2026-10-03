@@ -66,11 +66,17 @@ _SELECT = f"""
 """
 
 
+def normalizar_email(email: str) -> str:
+    """M1: los correos no distinguen mayúsculas ni espacios alrededor. Se
+    guardan y se buscan siempre así (índice único sobre lower(email), 089)."""
+    return email.strip().lower()
+
+
 async def get_usuario_by_email(conn: asyncpg.Connection, email: str) -> UsuarioRecord | None:
     """Devuelve el usuario activo por email para el flujo de login."""
     row = await conn.fetchrow(
-        _SELECT + "WHERE u.email = $1 AND u.activo = TRUE LIMIT 1",
-        email,
+        _SELECT + "WHERE lower(u.email) = $1 AND u.activo = TRUE LIMIT 1",
+        normalizar_email(email),
     )
     return _row_to_record(row) if row else None
 
@@ -83,21 +89,45 @@ async def get_usuario_by_id(conn: asyncpg.Connection, user_id: UUID) -> UsuarioR
     return _row_to_record(row) if row else None
 
 
-async def get_all_usuarios(conn: asyncpg.Connection) -> list[UsuarioRecord]:
-    rows = await conn.fetch(_SELECT + "WHERE u.activo = TRUE ORDER BY u.creado DESC")
+# A10: filtro de estado del listado. None = todos (activos e inactivos).
+_FILTRO_ACTIVO_SQL = "($1::boolean IS NULL OR u.activo = $1)"
+
+
+async def get_all_usuarios(
+    conn: asyncpg.Connection, activo: bool | None = True
+) -> list[UsuarioRecord]:
+    rows = await conn.fetch(
+        _SELECT + f"WHERE {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
+    )
     return [_row_to_record(r) for r in rows]
 
 
-async def get_usuarios_by_branch(conn: asyncpg.Connection, branch_id: UUID) -> list[UsuarioRecord]:
+async def get_usuarios_by_branch(
+    conn: asyncpg.Connection, branch_id: UUID, activo: bool | None = True
+) -> list[UsuarioRecord]:
     rows = await conn.fetch(
-        _SELECT + "WHERE us.sucursal_id = $1 AND u.activo = TRUE ORDER BY u.creado DESC",
+        _SELECT + f"WHERE us.sucursal_id = $2 AND {_FILTRO_ACTIVO_SQL} ORDER BY u.creado DESC",
+        activo,
         branch_id,
     )
     return [_row_to_record(r) for r in rows]
 
 
-async def email_exists(conn: asyncpg.Connection, email: str) -> bool:
-    row = await conn.fetchrow("SELECT id FROM public.usuarios WHERE email = $1", email)
+async def email_exists(
+    conn: asyncpg.Connection, email: str, excluir_id: UUID | None = None
+) -> bool:
+    """M1: compara sin distinguir mayúsculas e incluye usuarios inactivos (el
+    correo sigue siendo de esa cuenta, que se puede reactivar)."""
+    row = await conn.fetchrow(
+        """
+        SELECT id FROM public.usuarios
+        WHERE lower(email) = $1 AND ($2::uuid IS NULL OR id <> $2)
+        LIMIT 1
+        """,
+        normalizar_email(email),
+        excluir_id,
+    )
     return row is not None
 
 
@@ -119,7 +149,7 @@ async def create_usuario(
         VALUES ($1, $2, $3, $4, $5, (SELECT id FROM public.roles WHERE nombre = $6), $7, $8)
         RETURNING id
         """,
-        email,
+        normalizar_email(email),
         password_hash,
         nombre_completo,
         apellidos,
@@ -157,7 +187,7 @@ async def update_usuario(
             modificado      = NOW(),
             modificado_por  = $8,
             pin_hash        = COALESCE($10, pin_hash)
-        WHERE id = $9 AND activo = TRUE
+        WHERE id = $9
         """,
         email,
         nombre_completo,
@@ -351,7 +381,7 @@ async def get_autorizador_por_email(
             ) AS en_sucursal
         FROM public.usuarios u
         JOIN public.roles r ON r.id = u.rol
-        WHERE u.email = $1 AND u.activo = TRUE
+        WHERE lower(u.email) = lower(btrim($1)) AND u.activo = TRUE
         LIMIT 1
         """,
         email,

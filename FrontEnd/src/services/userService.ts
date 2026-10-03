@@ -1,9 +1,14 @@
 import { usersApi } from '@/api/usersApi'
-import type { CreateUserPayload, UpdateUserPayload, UserListItem } from '@/types/user'
+import type {
+  CreateUserPayload,
+  EstadoUsuarios,
+  UpdateUserPayload,
+  UserListItem,
+} from '@/types/user'
 
 export const userService = {
-  async listUsers(): Promise<UserListItem[]> {
-    return usersApi.list()
+  async listUsers(estado?: EstadoUsuarios): Promise<UserListItem[]> {
+    return usersApi.list(estado)
   },
 
   async getUser(id: string): Promise<UserListItem> {

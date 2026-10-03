@@ -16,9 +16,18 @@ _INSERT = """
         sucursal_id, creado, creado_por
 """
 
+# Una fila por pago (o por método, si una orden se pagó con varios). Los
+# totales por orden (`total_real`) se repiten en cada fila de su orden: quien
+# agregue sobre este UNION debe agrupar por orden antes de sumarlos (A1). Los
+# montos por método (`monto`) sí salen uno por pago.
+#
+# Una comanda cuenta como cancelada con `estado_actual = 'C'` o con
+# `activo = FALSE`: la cancelación de cocina desactiva la comanda y su estado
+# puede quedar en otro valor (A3).
 _UNION_VENTAS = """
     SELECT
         v.referencia_id,
+        v.pago_id,
         v.tipo_origen,
         v.titulo,
         v.estado_actual,
@@ -35,11 +44,14 @@ _UNION_VENTAS = """
         -- Ventas POS (comandas)
         SELECT
             c.id                               AS referencia_id,
+            po.id                              AS pago_id,
             'comanda'                          AS tipo_origen,
             c.ticket_numero                    AS titulo,
-            c.estado_actual::text              AS estado_actual,
+            -- Una comanda desactivada se muestra como cancelada aunque su
+            -- estado_actual se haya quedado en otro valor (A3).
+            CASE WHEN c.activo THEN c.estado_actual::text ELSE 'C' END AS estado_actual,
             po.sucursal_id                     AS sucursal_id,
-            (c.estado_actual = 'C')            AS es_cancelado,
+            (c.estado_actual = 'C' OR NOT c.activo) AS es_cancelado,
             po.monto                           AS monto,
             c.total_final                      AS total_real,
             po.metodo_pago_id                  AS metodo_pago_id,
@@ -56,6 +68,7 @@ _UNION_VENTAS = """
         -- Estancias / entradas de niños
         SELECT
             r.id                               AS referencia_id,
+            pe.id                              AS pago_id,
             'estancia'                         AS tipo_origen,
             t.nombre_completo                  AS titulo,
             r.estado::text                     AS estado_actual,
@@ -78,6 +91,7 @@ _UNION_VENTAS = """
         -- Reservaciones / eventos
         SELECT
             r.id                               AS referencia_id,
+            pr.id                              AS pago_id,
             'reservacion'                      AS tipo_origen,
             CONCAT_WS(' ', r.nombre_cliente, r.apellidos_cliente) AS titulo,
             r.estado::text                         AS estado_actual,
@@ -96,12 +110,24 @@ _UNION_VENTAS = """
     ) v
 """
 
+# Límites del periodo: `$2` (inclusivo) y `$3` (exclusivo) llegan como hora
+# local de la sucursal, sin zona, y se convierten con su `zona_horaria` (M4).
+_ZONA_SUCURSAL = "(SELECT s.zona_horaria FROM public.sucursales s WHERE s.id = $1)"
+
+_FILTRO_PERIODO = f"""
+    v.sucursal_id = $1
+      AND v.creado >= ($2::timestamp AT TIME ZONE {_ZONA_SUCURSAL})
+      AND ($3::timestamp IS NULL OR v.creado < ($3::timestamp AT TIME ZONE {_ZONA_SUCURSAL}))
+"""
+
 _SELECT_HISTORIAL = f"""
     SELECT
         v.referencia_id,
         v.tipo_origen,
         v.titulo,
-        SUM(v.total_real)                    AS total_final,
+        -- El total de la orden se repite en cada uno de sus pagos: se toma una
+        -- sola vez (A1). Lo cobrado por método va en metodos_pago.
+        MAX(v.total_real)                    AS total_final,
         v.estado_actual,
         v.sucursal_id,
         MAX(v.creado)                        AS creado,
@@ -118,16 +144,16 @@ _SELECT_HISTORIAL = f"""
             ORDER BY v.creado
         ) AS metodos_pago
     FROM ({_UNION_VENTAS}) v
-    WHERE v.sucursal_id = $1
-      AND v.creado >= $2::timestamptz
-      AND ($3::timestamptz IS NULL OR v.creado <= $3::timestamptz)
+    WHERE {_FILTRO_PERIODO}
       AND (
           $5::uuid IS NULL
           OR EXISTS (
               SELECT 1
               FROM public.movimientos_caja mc
               JOIN public.apertura_caja ac ON ac.id = mc.apertura_caja_id
-              WHERE mc.referencia_id = v.referencia_id
+              -- Comandas y estancias registran el movimiento con el id de la
+              -- orden; los pagos de reservación, con el id del pago.
+              WHERE mc.referencia_id IN (v.referencia_id, v.pago_id)
                 AND ac.caja_id = $5::uuid
           )
       )
@@ -138,6 +164,8 @@ _SELECT_HISTORIAL = f"""
         OR ($4 = 'pagado' AND NOT bool_or(v.es_cancelado))
         OR ($4 = 'cancelado' AND bool_or(v.es_cancelado))
     )
+    -- Órdenes con al menos un pago de ese método en el periodo; la orden se
+    -- muestra completa (todos sus pagos del periodo y su total una vez).
     AND ($6::uuid IS NULL OR bool_or(v.metodo_pago_id = $6::uuid))
     ORDER BY MAX(v.creado) DESC
 """
@@ -210,6 +238,8 @@ async def historial(
     caja_id: UUID | None = None,
     metodo_pago_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
+    """Una fila por orden con pagos en [desde, hasta). `desde`/`hasta` son
+    hora local de la sucursal sin zona (ver pago_service._periodo)."""
     rows = await conn.fetch(
         _SELECT_HISTORIAL, sucursal_id, desde, hasta, estado, caja_id, metodo_pago_id
     )
@@ -522,13 +552,17 @@ async def detalle_por_referencia(
 
 _SELECT_ESTADISTICAS = f"""
     SELECT
-        COALESCE(SUM(v.total_real), 0)::float AS total_ventas,
-        COUNT(DISTINCT v.referencia_id)::int  AS total_ordenes
-    FROM ({_UNION_VENTAS}) v
-    WHERE v.sucursal_id = $1
-      AND v.creado >= $2::timestamptz
-      AND ($3::timestamptz IS NULL OR v.creado <= $3::timestamptz)
-      AND NOT v.es_cancelado
+        COALESCE(SUM(o.total_real), 0)::float AS total_ventas,
+        COUNT(*)::int                         AS total_ordenes
+    FROM (
+        -- Una fila por orden: su total cuenta una vez aunque tenga varios
+        -- pagos en el periodo (A1).
+        SELECT v.tipo_origen, v.referencia_id, MAX(v.total_real) AS total_real
+        FROM ({_UNION_VENTAS}) v
+        WHERE {_FILTRO_PERIODO}
+        GROUP BY v.tipo_origen, v.referencia_id
+        HAVING NOT bool_or(v.es_cancelado)
+    ) o
 """
 
 
@@ -538,5 +572,7 @@ async def estadisticas(
     desde: datetime,
     hasta: datetime | None = None,
 ) -> dict[str, Any]:
+    """Suma de los totales de las órdenes no canceladas con pagos en
+    [desde, hasta) (hora local de la sucursal, sin zona), cada orden una vez."""
     row = await conn.fetchrow(_SELECT_ESTADISTICAS, sucursal_id, desde, hasta)
     return dict(row) if row else {"total_ventas": 0.0, "total_ordenes": 0}

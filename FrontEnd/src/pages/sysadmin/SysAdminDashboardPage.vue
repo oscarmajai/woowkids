@@ -13,18 +13,12 @@ import { branchService } from '@/services/branchService'
 import type { UserListItem } from '@/types/user'
 import type { Branch } from '@/types/branch'
 import type { FilterChip } from '@/types/ui'
+import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 
 const router = useRouter()
 
 // Exportar indicadores (C2): mismo rango por defecto que DetailBranchPage.vue
-// (el mes en curso).
-function primerDiaDelMes(): string {
-  const hoy = new Date()
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-}
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
+// (el mes en curso, en la zona horaria de la sucursal: M4).
 const exportandoId = ref<string | null>(null)
 
 async function exportarIndicadores(branch: Branch) {
@@ -32,8 +26,8 @@ async function exportarIndicadores(branch: Branch) {
   try {
     await branchService.exportarIndicadores(
       branch.id,
-      primerDiaDelMes(),
-      hoyIso(),
+      primerDiaDelMesEnZona(branch.zonaHoraria),
+      fechaEnZona(branch.zonaHoraria),
       `indicadores_${branch.clave ?? branch.id}.csv`,
     )
   } catch {

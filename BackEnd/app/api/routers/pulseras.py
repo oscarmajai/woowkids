@@ -1,7 +1,7 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import require_permission
 from app.core.database import get_db
@@ -10,6 +10,7 @@ from app.schemas.auth import TokenData
 from app.schemas.pulseras import (
     InventarioPulserasOut,
     PulseraCrear,
+    PulseraEstadoOut,
     PulseraOut,
     PulseraResponse,
     PulseraUpdate,
@@ -34,6 +35,26 @@ async def get_pulseras_disponibles(
 ) -> list[PulseraResponse]:
     sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
     return await get_pulseras_disponibles_by_sucursal_id(conn, sucursal)
+
+
+@router.get(
+    "/sucursal/{sucursal_id}/buscar",
+    response_model=PulseraEstadoOut,
+    summary="Consultar el estado de una pulsera por RFID",
+    description=(
+        "Busca una pulsera de la sucursal por su RFID aunque ya esté usada o "
+        "desactivada, para que el check-in distinga una pulsera inexistente (404) "
+        "de una que ya está asignada a otro niño. No expone a quién está asignada."
+    ),
+)
+async def buscar_pulsera_por_rfid(
+    sucursal_id: UUID,
+    rfid: str = Query(..., min_length=1, max_length=50),
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("estancias:checkin")),
+) -> PulseraEstadoOut:
+    sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
+    return await pulseras_service.buscar_por_rfid(conn, sucursal, rfid)
 
 
 @router.get(

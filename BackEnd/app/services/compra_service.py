@@ -14,7 +14,7 @@ from uuid import UUID
 
 import asyncpg
 
-from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado
+from app.exceptions import Conflicto, DatosInvalidos, NoEncontrado, RecepcionInvalidaError
 from app.repositories import (
     compra_repository,
     insumo_repository,
@@ -28,6 +28,7 @@ from app.schemas.compra import (
     CompraEditar,
     CompraOut,
     CompraUpdate,
+    LineaRecepcion,
     RecibirCompraRequest,
 )
 from app.services import costeo_service
@@ -179,15 +180,73 @@ def _conflicto_por_estado(estado: str) -> Conflicto:
     return Conflicto("La compra ya fue recibida o está cancelada.")
 
 
+def _fmt(cantidad: Decimal) -> str:
+    return f"{cantidad.normalize():f}"
+
+
+def cantidades_a_recibir(
+    detalles: list[dict[str, Any]], lineas: list[LineaRecepcion] | None
+) -> dict[UUID, Decimal]:
+    """Cuánto recibir de cada línea en esta vuelta, ya validado. Solo devuelve
+    las líneas con cantidad > 0.
+
+    - `lineas is None`: todo lo pendiente de cada línea (recibir completa).
+    - Con `lineas`: lo que diga cada una; una línea de la compra que no venga
+      cuenta como 0 (A12: antes se recibía completa). Pedir más de lo pendiente
+      (M23: antes se recortaba en silencio), un detalle ajeno a la compra o
+      repetido responde 422 sin tocar nada.
+
+    Lanza Conflicto si la compra ya no tiene nada pendiente."""
+    pendientes = {d["id"]: d["cantidad"] - d["cantidad_recibida"] for d in detalles}
+    if not any(p > 0 for p in pendientes.values()):
+        raise Conflicto("No hay nada pendiente por recibir en esta compra.")
+
+    if lineas is None:
+        return {detalle_id: p for detalle_id, p in pendientes.items() if p > 0}
+
+    por_id = {d["id"]: d for d in detalles}
+    resultado: dict[UUID, Decimal] = {}
+    vistos: set[UUID] = set()
+    for linea in lineas:
+        detalle = por_id.get(linea.detalle_id)
+        if detalle is None:
+            raise RecepcionInvalidaError(
+                "Una de las líneas a recibir no pertenece a esta compra.",
+                {"detalle_id": str(linea.detalle_id)},
+            )
+        if linea.detalle_id in vistos:
+            raise RecepcionInvalidaError(
+                f"La línea de «{detalle['insumo_nombre']}» viene repetida en la recepción.",
+                {"detalle_id": str(linea.detalle_id), "insumo_nombre": detalle["insumo_nombre"]},
+            )
+        vistos.add(linea.detalle_id)
+        pendiente = max(pendientes[linea.detalle_id], Decimal("0"))
+        if linea.cantidad > pendiente:
+            raise RecepcionInvalidaError(
+                f"La cantidad a recibir de «{detalle['insumo_nombre']}» "
+                f"({_fmt(linea.cantidad)}) excede lo pendiente ({_fmt(pendiente)}).",
+                {
+                    "detalle_id": str(linea.detalle_id),
+                    "insumo_nombre": detalle["insumo_nombre"],
+                    "solicitado": _fmt(linea.cantidad),
+                    "pendiente": _fmt(pendiente),
+                },
+            )
+        if linea.cantidad > 0:
+            resultado[linea.detalle_id] = linea.cantidad
+
+    if not resultado:
+        raise RecepcionInvalidaError("Indica al menos una cantidad mayor a 0 para recibir.")
+    return resultado
+
+
 async def recibir(
     conn: asyncpg.Connection,
     compra_id: UUID,
     creado_por: UUID,
     body: RecibirCompraRequest | None = None,
 ) -> CompraOut:
-    solicitado: dict[str, Decimal] = {}
-    if body and body.lineas:
-        solicitado = {str(linea.detalle_id): linea.cantidad for linea in body.lineas}
+    lineas = body.lineas if body else None
 
     async with conn.transaction():
         # C5: bloquear la compra y releer estado, detalles y pendientes DENTRO de
@@ -202,16 +261,13 @@ async def recibir(
             raise _conflicto_por_estado(compra["estado"])
 
         detalles = await compra_repository.listar_detalles(conn, compra_id)
-        algo_recibido = False
+        # Se valida TODA la recepción antes de mover stock: una línea inválida
+        # no deja aplicadas a medias las anteriores.
+        a_recibir = cantidades_a_recibir(detalles, lineas)
         for detalle in detalles:
-            pendiente = detalle["cantidad"] - detalle["cantidad_recibida"]
-            if pendiente <= 0:
+            recibir_ahora = a_recibir.get(detalle["id"])
+            if recibir_ahora is None:
                 continue
-            cantidad = solicitado.get(str(detalle["id"]), pendiente) if solicitado else pendiente
-            recibir_ahora = min(cantidad, pendiente)
-            if recibir_ahora <= 0:
-                continue
-            algo_recibido = True
 
             insumo = await insumo_repository.obtener(conn, detalle["insumo_id"])
             if not insumo:
@@ -246,9 +302,6 @@ async def recibir(
                 costo_total=cantidad_base * costo_base,
             )
             await compra_repository.sumar_recepcion_linea(conn, detalle["id"], recibir_ahora)
-
-        if not algo_recibido:
-            raise Conflicto("No hay nada pendiente por recibir en esta compra.")
 
         detalles = await compra_repository.listar_detalles(conn, compra_id)
         completa = all(d["cantidad_recibida"] >= d["cantidad"] for d in detalles)

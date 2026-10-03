@@ -4,33 +4,64 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, BeforeValidator, EmailStr, Field, StringConstraints
+from pydantic_core import PydanticCustomError
 
 NombreRequerido = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+# M2: la regla de la UI (mínimo 8) también se valida en el servidor. Solo al
+# fijar una contraseña (alta/edición): el login no la exige, para no dejar
+# fuera a cuentas viejas con contraseñas más cortas.
+PASSWORD_MIN_LENGTH = 8
+
+
+def _validar_password(v: str) -> str:
+    if len(v) < PASSWORD_MIN_LENGTH:
+        raise PydanticCustomError(
+            "password_corta",
+            "La contraseña debe tener al menos {min} caracteres.",
+            {"min": PASSWORD_MIN_LENGTH},
+        )
+    return v
+
+
+def _normalizar_email(v: str) -> str:
+    # M1: EmailStr solo pasa a minúsculas el dominio; el correo se guarda
+    # completo en minúsculas para que no se dupliquen cuentas por mayúsculas.
+    return v.strip().lower()
+
+
+def _vacio_a_none(v: object) -> object:
+    return None if v == "" else v
+
+
+EmailUsuario = Annotated[EmailStr, AfterValidator(_normalizar_email)]
+PasswordNueva = Annotated[str, AfterValidator(_validar_password)]
 
 # PIN de caja (C1): 4 dígitos numéricos, igual que valida el front.
 PinCaja = Annotated[str, StringConstraints(pattern=r"^\d{4}$")]
 
 
 class UserCreateRequest(BaseModel):
-    email: EmailStr
+    email: EmailUsuario
     full_name: NombreRequerido
     apellidos: str | None = None
     telefono: str | None = Field(default=None, max_length=20)
-    password: str = Field(..., min_length=1)
+    password: PasswordNueva
     role: str
     branch_id: UUID | None = None
     pin: PinCaja | None = None
 
 
 class UserUpdateRequest(BaseModel):
-    email: EmailStr
+    email: EmailUsuario
     full_name: NombreRequerido
     apellidos: str | None = None
     telefono: str | None = Field(default=None, max_length=20)
     role: str
     branch_id: UUID | None = None
-    password: str | None = None  # None = no cambiar
+    # None (o "") = no cambiar; si viene, mínimo PASSWORD_MIN_LENGTH (M2).
+    password: Annotated[PasswordNueva | None, BeforeValidator(_vacio_a_none)] = None
     is_active: bool | None = None  # None = no cambiar
     pin: PinCaja | None = None  # None = no cambiar
 

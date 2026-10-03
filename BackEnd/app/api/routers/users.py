@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
@@ -19,6 +19,7 @@ from app.services.user_service import (
     BranchRequiredError,
     CredencialActualInvalidaError,
     EmailAlreadyExistsError,
+    EstadoUsuarios,
     InsufficientPermissionsError,
     RolInvalidoError,
     UserNotFoundError,
@@ -70,10 +71,12 @@ def _handle_write_errors(exc: Exception) -> None:
 
 @router.get("", response_model=list[UserResponse])
 async def get_users(
+    estado: EstadoUsuarios = Query("activos"),
     current_user: TokenData = Depends(require_permission("usuarios:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[UserResponse]:
-    return await list_users(conn, current_user)
+    """`estado`: activos (por defecto), inactivos o todos (A10)."""
+    return await list_users(conn, current_user, estado)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
