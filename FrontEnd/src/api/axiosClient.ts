@@ -159,6 +159,13 @@ function extractCodeAndMessage(data: BackendErrorBody | undefined): {
   return { code: data?.code ?? '', message: data?.message ?? '' }
 }
 
+const ENDPOINTS_CON_PIN = [
+  '/turnos-caja/abrir',
+  '/turnos-caja/revision-admin',
+  '/turnos-caja/validar-pin-admin',
+  '/turnos-caja/validar-pin-cajero',
+]
+
 function createAxiosClient(): AxiosInstance {
   const client = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -202,12 +209,12 @@ function createAxiosClient(): AxiosInstance {
 
       if (status === 401) {
         const url = error.config?.url ?? ''
-        // Si es la verificación de credenciales del admin durante el cierre de caja, retornar el error directamente
-        if (
-          url.includes('/turnos-caja/revision-admin') ||
-          url.includes('/turnos-caja/validar-pin-admin') ||
-          url.includes('/turnos-caja/validar-pin-cajero')
-        ) {
+        // Endpoints que validan un PIN o contraseña de caja: un 401 ahí es un
+        // PIN mal escrito, no una sesión vencida. Nunca refrescar, reenviar
+        // el PIN (contaría doble en el límite de intentos) ni cerrar sesión
+        // (A5). El backend ya responde 403 PIN_INVALIDO; esto cubre un
+        // backend viejo que todavía mande 401.
+        if (ENDPOINTS_CON_PIN.some((endpoint) => url.includes(endpoint))) {
           return Promise.reject(
             buildApiError(
               status,

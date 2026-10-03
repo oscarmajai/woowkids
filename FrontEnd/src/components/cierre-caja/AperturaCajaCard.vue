@@ -312,7 +312,14 @@ async function realizarApertura() {
     pin.value,
   )
 
-  if (!turno.error && turno.estaOperando) {
+  // A5: un PIN incorrecto (403) o bloqueado (429) deja al cajero en el
+  // formulario con el mensaje del backend; se limpia el PIN para reintentar.
+  if (turno.error) {
+    pin.value = ''
+    return
+  }
+
+  if (turno.estaOperando) {
     $q.notify({
       type: 'positive',
       icon: 'check_circle',
