@@ -6,6 +6,8 @@ SAD §3.2: el service orquesta repositorios, nunca escribe SQL directamente.
 
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -13,6 +15,7 @@ import asyncpg
 from app.exceptions import DatosInvalidos, NoEncontrado
 from app.repositories import (
     insumo_repository,
+    movimiento_inventario_repository,
     producto_insumo_repository,
     proveedor_repository,
     unidad_medida_repository,
@@ -25,6 +28,7 @@ from app.schemas.insumo import (
     InsumoRecetaInversaOut,
     InsumoUpdate,
 )
+from app.services import costeo_service
 
 
 async def _validar_unidades(
@@ -83,22 +87,61 @@ async def obtener(conn: asyncpg.Connection, insumo_id: UUID) -> InsumoOut:
 async def crear(conn: asyncpg.Connection, body: InsumoCrear, current_user: TokenData) -> InsumoOut:
     await _validar_unidades(conn, body.unidad_base_id, body.unidad_compra_id)
     await _validar_proveedor(conn, body.proveedor_principal_id, body.sucursal_id)
-    row = await insumo_repository.crear(
+    creado_por = UUID(current_user.sub)
+    async with conn.transaction():
+        row = await insumo_repository.crear(
+            conn,
+            sucursal_id=body.sucursal_id,
+            nombre=body.nombre,
+            descripcion=body.descripcion,
+            unidad_base_id=body.unidad_base_id,
+            unidad_compra_id=body.unidad_compra_id,
+            stock_inicial=body.stock_inicial,
+            stock_minimo=body.stock_minimo,
+            costo_unitario=body.costo_unitario,
+            proveedor_principal_id=body.proveedor_principal_id,
+            creado_por=creado_por,
+            punto_reorden=body.punto_reorden,
+            stock_maximo=body.stock_maximo,
+        )
+        if body.stock_inicial > 0:
+            row = await _registrar_stock_inicial(conn, row, body, creado_por)
+    return InsumoOut.model_validate(row)
+
+
+async def _registrar_stock_inicial(
+    conn: asyncpg.Connection, row: dict[str, Any], body: InsumoCrear, creado_por: UUID
+) -> dict[str, Any]:
+    """A13: el stock con el que nace el insumo entra como cualquier otra entrada:
+    capa de costo PEPS (origen 'inicial', igual que el backfill de la 043) y
+    movimiento 'E/inventario_inicial' en el kardex, en la misma transacción que
+    el alta. Antes stock_actual nacía sin capa ni movimiento: el kardex no
+    cuadraba y esas unidades se consumían "al promedio" con drift.
+
+    Ambos están en unidad base. Sin costo capturado la capa queda a 0, igual
+    que el backfill de la 043."""
+    costo_unitario = body.costo_unitario if body.costo_unitario is not None else Decimal("0")
+    await costeo_service.registrar_entrada(
+        conn, row["id"], body.stock_inicial, costo_unitario, "inicial", None
+    )
+    await movimiento_inventario_repository.registrar(
         conn,
         sucursal_id=body.sucursal_id,
-        nombre=body.nombre,
-        descripcion=body.descripcion,
-        unidad_base_id=body.unidad_base_id,
-        unidad_compra_id=body.unidad_compra_id,
-        stock_inicial=body.stock_inicial,
-        stock_minimo=body.stock_minimo,
-        costo_unitario=body.costo_unitario,
-        proveedor_principal_id=body.proveedor_principal_id,
-        creado_por=UUID(current_user.sub),
-        punto_reorden=body.punto_reorden,
-        stock_maximo=body.stock_maximo,
+        insumo_id=row["id"],
+        tipo="E",
+        cantidad=body.stock_inicial,
+        stock_resultante=body.stock_inicial,
+        motivo="inventario_inicial",
+        referencia_id=None,
+        notas="Stock inicial al dar de alta el insumo",
+        creado_por=creado_por,
+        costo_total=body.stock_inicial * costo_unitario,
     )
-    return InsumoOut.model_validate(row)
+    # registrar_entrada recalculó costo_unitario desde las capas: releer.
+    actualizado = await insumo_repository.obtener(conn, row["id"])
+    if not actualizado:
+        raise RuntimeError("Error al recuperar el insumo recién creado")
+    return actualizado
 
 
 async def actualizar(
