@@ -36,6 +36,15 @@ _HISTORIAL_CSV_CAMPOS = [
 ]
 
 
+def _sucursal_del_reporte(current_user: TokenData, sucursal_id: UUID | None) -> UUID:
+    """N17: misma regla que el resto de reportes (COGS, stock, arqueos): roles
+    con sucursal fija, la suya (403 si piden otra); AdministradorSistema, la
+    del parámetro o la del selector; sin ninguna, 422 SUCURSAL_REQUERIDA (los
+    periodos se calculan en la zona horaria de cada sucursal, M4, así que no
+    hay un agregado global). Antes respondía 403 al AdministradorSistema."""
+    return resolver_sucursal_obligatoria(current_user, sucursal_id)
+
+
 def _get_active_branch(current_user: TokenData) -> UUID:
     if current_user.branch_id is None:
         raise HTTPException(
@@ -112,11 +121,12 @@ async def listar_estadisticas(
     filtro: str = Query("hoy", regex="^(hoy|semana|mes)$"),
     fecha_inicio: str | None = Query(None),
     fecha_fin: str | None = Query(None),
+    sucursal_id: UUID | None = Query(None),
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> EstadisticasOut:
-    sucursal_id = _get_active_branch(current_user)
-    return await svc.obtener_estadisticas(conn, sucursal_id, filtro, fecha_inicio, fecha_fin)
+    sucursal = _sucursal_del_reporte(current_user, sucursal_id)
+    return await svc.obtener_estadisticas(conn, sucursal, filtro, fecha_inicio, fecha_fin)
 
 
 @router.get(
@@ -169,12 +179,13 @@ async def listar_historial(
     fecha_fin: str | None = Query(None),
     caja_id: UUID | None = Query(None),
     metodo_pago_id: UUID | None = Query(None),
+    sucursal_id: UUID | None = Query(None),
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> list[HistorialOut]:
-    sucursal_id = _get_active_branch(current_user)
+    sucursal = _sucursal_del_reporte(current_user, sucursal_id)
     return await svc.obtener_historial(
-        conn, sucursal_id, filtro, estado, fecha_inicio, fecha_fin, caja_id, metodo_pago_id
+        conn, sucursal, filtro, estado, fecha_inicio, fecha_fin, caja_id, metodo_pago_id
     )
 
 
@@ -190,12 +201,13 @@ async def exportar_historial(
     fecha_fin: str | None = Query(None),
     caja_id: UUID | None = Query(None),
     metodo_pago_id: UUID | None = Query(None),
+    sucursal_id: UUID | None = Query(None),
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> StreamingResponse:
-    sucursal_id = _get_active_branch(current_user)
+    sucursal = _sucursal_del_reporte(current_user, sucursal_id)
     historial = await svc.obtener_historial(
-        conn, sucursal_id, filtro, estado, fecha_inicio, fecha_fin, caja_id, metodo_pago_id
+        conn, sucursal, filtro, estado, fecha_inicio, fecha_fin, caja_id, metodo_pago_id
     )
     filas = (h.model_dump() for h in historial)
     return csv_streaming_response(_HISTORIAL_CSV_CAMPOS, filas, "historial_ventas.csv")

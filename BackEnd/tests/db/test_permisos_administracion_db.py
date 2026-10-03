@@ -520,3 +520,37 @@ async def test_admin_sigue_sin_editar_cajas_de_otra_sucursal(entorno: Any) -> No
     assert await conn.fetchval(
         "SELECT nombre FROM public.cajas WHERE id = $1", UUID(IDS["caja_b"])
     ) == ("Q5 Caja B")
+
+
+# ── N17: Historial de ventas del AdministradorSistema ──────────────────────
+
+_REPORTES_VENTAS = (
+    "/api/pagos/historial",
+    "/api/pagos/estadisticas",
+    "/api/pagos/historial/export",
+)
+
+
+async def test_historial_de_ventas_pide_sucursal_al_sistema_sin_selector(entorno: Any) -> None:
+    """Antes: 403 al AdministradorSistema en "Todas las sucursales". Ahora 422
+    SUCURSAL_REQUERIDA, como el resto de reportes por sucursal."""
+    client, _conn = entorno
+    for ruta in _REPORTES_VENTAS:
+        resp = await client.get(ruta, headers=_h("sistema"))
+        assert resp.status_code == 422, (ruta, resp.text)
+        assert resp.json()["detail"]["code"] == "SUCURSAL_REQUERIDA"
+
+
+async def test_historial_de_ventas_con_sucursal_elegida_o_propia(entorno: Any) -> None:
+    client, _conn = entorno
+    for ruta in _REPORTES_VENTAS:
+        for headers, query in (
+            (_h("sistema", vista=SUC_A), ""),
+            (_h("sistema"), f"?sucursal_id={SUC_B}"),
+            (_h("admin_a"), ""),
+            (_h("cajero_a"), f"?sucursal_id={SUC_A}"),
+        ):
+            resp = await client.get(f"{ruta}{query}", headers=headers)
+            assert resp.status_code == 200, (ruta, query, resp.text)
+        otra = await client.get(f"{ruta}?sucursal_id={SUC_B}", headers=_h("admin_a"))
+        assert otra.status_code == 403, (ruta, otra.text)
