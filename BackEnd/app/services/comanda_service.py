@@ -7,6 +7,7 @@ SAD §3.2: el service orquesta repositorios, nunca escribe SQL directamente.
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -17,6 +18,7 @@ from app.core.ws_manager import manager
 from app.exceptions.comandas import (
     AutorizacionAdminRequeridaError,
     ComandaCanceladaError,
+    ComandaModificadaError,
     ComandaPagadaRequiereCancelacionError,
     TransicionComandaInvalidaError,
 )
@@ -352,6 +354,7 @@ async def modificar_comanda_parcial(
     detalles_ids_a_eliminar: list[str],
     usuario_id: str | None = None,
     motivo_cancelacion: str | None = None,
+    modificado_esperado: datetime | None = None,
 ) -> Comanda | None:
     """Elimina productos de una comanda en estado 'P' y recalcula el total.
 
@@ -368,7 +371,16 @@ async def modificar_comanda_parcial(
     M13: quitar el renglón de un combo quita también sus productos (los hijos
     con detalle_padre_id = ese renglón).
 
+    B5: `modificado_esperado` (opcional) es el `modificado` de la comanda que
+    vio el cliente; si cambió, 409 COMANDA_MODIFICADA sin tocar nada.
     """
+    if modificado_esperado is not None:
+        # Antes que cualquier otra regla: lo que el cliente decidió quitar se
+        # basa en una versión que ya no existe. Se repite bajo el bloqueo.
+        estado = await comanda_repository.get_estado_comanda(conn, comanda_id)
+        if estado is not None and estado["modificado"] != modificado_esperado:
+            raise ComandaModificadaError()
+
     actual = await comanda_repository.get_comanda_por_id(conn, comanda_id)
     if actual is not None:
         detalles = cast(list[DetalleComanda], actual.detalles)
@@ -383,6 +395,7 @@ async def modificar_comanda_parcial(
         detalles_ids_a_eliminar,
         usuario_id,
         motivo_cancelacion,
+        modificado_esperado=modificado_esperado,
     )
     if comanda is not None:
         comanda.detalles = await expandir_detalles_comanda(conn, comanda.detalles)

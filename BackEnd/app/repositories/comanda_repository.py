@@ -7,12 +7,14 @@ Regla 11.1 y 11.4 SAD: solo SQL parametrizado aquí, nada de lógica de negocio.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
 
 from app.core.utils import get_mexico_now
+from app.exceptions.comandas import ComandaModificadaError
 from app.models.comanda import Comanda, DetalleComanda, indices_renglon_padre
 
 if TYPE_CHECKING:
@@ -187,7 +189,7 @@ async def crear_comanda_con_detalles(
 
 
 _SELECT_ESTADO = """
-    SELECT id, estado_actual, activo, sucursal_id
+    SELECT id, estado_actual, activo, sucursal_id, modificado
     FROM public.comandas
     WHERE id = $1
 """
@@ -257,8 +259,12 @@ async def modificar_comanda_parcial(
     detalles_a_eliminar: list[str],
     usuario_id: str | None = None,
     motivo_cancelacion: str | None = None,
+    modificado_esperado: datetime | None = None,
 ) -> Comanda | None:
     """Elimina productos específicos de una comanda en estado 'P'.
+
+    B5: si viene `modificado_esperado` y la comanda (ya bloqueada) tiene otro
+    `modificado`, lanza ComandaModificadaError sin tocar nada.
 
     Si tras eliminar los productos seleccionados no quedan detalles activos,
     cancela automáticamente la comanda (estado 'C', activo=False) en vez de
@@ -281,6 +287,8 @@ async def modificar_comanda_parcial(
         fila = await bloquear_comanda(conn, comanda_id)
         if fila is None or fila["estado_actual"] != "P" or not fila["activo"]:
             return None
+        if modificado_esperado is not None and fila["modificado"] != modificado_esperado:
+            raise ComandaModificadaError()
 
         # 1) Eliminar físicamente los detalles seleccionados
         ids_validos: list[uuid.UUID] = []

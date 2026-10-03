@@ -274,6 +274,7 @@ _SELECT_DETALLE_COMANDA = """
         c.motivo_cancelacion,
         c.nombre_cliente,
         c.mesa,
+        c.modificado,
         c.sucursal_id,
         -- M12: cambio entregado al cliente (movimiento de caja 'C' de la comanda).
         (
@@ -398,6 +399,7 @@ async def detalle_por_comanda(
         "detalles": detalles,
         "puntos_ganados": int(puntos_ganados) if puntos_ganados is not None else None,
         "cambio": float(c["cambio"]) if c.get("cambio") is not None else 0.0,
+        "modificado": c["modificado"].isoformat() if c.get("modificado") else None,
         "sucursal": await _sucursal_ticket(conn, c.get("sucursal_id")),
     }
 

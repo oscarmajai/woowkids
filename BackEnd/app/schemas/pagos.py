@@ -222,6 +222,10 @@ class DetalleOrdenOut(BaseModel):
     nombre_cliente: str | None = None
     cambio: float = 0.0
     sucursal: SucursalTicketOut | None = None
+    # B5: marca de la última modificación de la comanda. PATCH
+    # /comandas/{id}/detalles la recibe como modificado_esperado y responde
+    # 409 si la orden cambió desde que se leyó.
+    modificado: str | None = None
 
 
 # ---------------------------------------------------------------------------

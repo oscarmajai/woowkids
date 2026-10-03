@@ -102,3 +102,20 @@ class ComandaPagadaRequiereCancelacionError(HTTPException):
                 ),
             },
         )
+
+
+class ComandaModificadaError(HTTPException):
+    """B5: la comanda cambió (otra pestaña, otra caja o cocina) desde que el
+    cliente la leyó. No se aplica nada; el cliente debe recargarla."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "COMANDA_MODIFICADA",
+                "message": (
+                    "La orden cambió mientras la editabas (en otra pestaña o dispositivo). "
+                    "Revisa la versión actual y vuelve a intentarlo."
+                ),
+            },
+        )

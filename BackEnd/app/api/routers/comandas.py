@@ -144,7 +144,8 @@ async def modificar_detalles(
     """Elimina productos de una comanda en estado Pendiente y recalcula el total.
 
     Si se eliminan todos los productos, cancela automáticamente la comanda
-    y requiere motivo_cancelacion en el body.
+    y requiere motivo_cancelacion en el body. Con `modificado_esperado` (B5),
+    409 COMANDA_MODIFICADA si la orden cambió desde que se leyó.
     """
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
     usuario_id = str(UUID(current_user.sub))
@@ -155,6 +156,7 @@ async def modificar_detalles(
             data.detalles_ids_a_eliminar,
             usuario_id,
             data.motivo_cancelacion,
+            modificado_esperado=data.modificado_esperado,
         )
     except ValueError as exc:
         raise HTTPException(
