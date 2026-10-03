@@ -45,7 +45,8 @@ async def revisar_reservaciones_vencidas(conn: asyncpg.Connection) -> int:
 
     canceladas = 0
     for reservacion in vencidas:
-        adeudo = reservacion["precio_total"] - reservacion["anticipo"]
+        # Saldo real: descuenta todos los pagos, no solo el anticipo (C3).
+        adeudo = reservacion["saldo_pendiente"]
         try:
             await reservaciones_repository.cancelar_por_falta_de_pago(
                 conn, reservacion["id"], MOTIVO

@@ -81,6 +81,9 @@ class ReservacionesUpdate(BaseModel):
 class ReservacionesOut(ReservacionesBase):
     id: UUID
     folio: str | None = None
+    # Neto cobrado (todos los pagos menos el cambio); saldo_pendiente =
+    # precio_total - monto_pagado (migración 075).
+    monto_pagado: Decimal = Decimal(0)
     saldo_pendiente: Decimal
     comanda_enviada: bool
     activo: bool
