@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ActiveChildCard from './ActiveChildCard.vue'
 import type { ActiveChild } from '@/stores/accessControl'
+import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
@@ -52,5 +53,46 @@ describe('ActiveChildCard: notas / alergias (M26)', () => {
         .find('.stay__notes')
         .exists(),
     ).toBe(false)
+  })
+})
+
+describe('ActiveChildCard: reimprimir comprobante (N5)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  const conPermisos = (permissions: string[]) => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = {
+      id: 'u1',
+      name: 'Cajero',
+      email: 'c@test.com',
+      roles: ['Cajero'],
+      branchId: 's1',
+      branchName: 'Zapopan',
+      permissions,
+    }
+    return mount(ActiveChildCard, {
+      props: { child: NINO },
+      global: {
+        plugins: [pinia],
+        stubs: {
+          BaseDialog: { template: '<div><slot /><slot name="footer-extra" /></div>' },
+          FotosRegistroDialog: true,
+          ReimprimirComprobanteDialog: true,
+        },
+      },
+    })
+  }
+
+  it('el detalle ofrece reimprimir con el permiso de check-in', () => {
+    const wrapper = conPermisos(['estancias:checkin'])
+    expect(wrapper.text()).toContain('Reimprimir comprobante')
+  })
+
+  it('sin el permiso de check-in no aparece', () => {
+    const wrapper = conPermisos(['estancias:ver_activos'])
+    expect(wrapper.text()).not.toContain('Reimprimir comprobante')
   })
 })

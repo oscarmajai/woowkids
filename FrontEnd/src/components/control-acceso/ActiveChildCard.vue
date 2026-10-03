@@ -61,6 +61,17 @@
       primary-label="Ir a checkout"
       @confirm="irACheckoutDesdeDetalle"
     >
+      <template v-if="puedeReimprimir" #footer-extra>
+        <q-btn
+          flat
+          no-caps
+          color="primary"
+          icon="print"
+          label="Reimprimir comprobante"
+          class="detail__reprint"
+          @click="abrirReimpresion"
+        />
+      </template>
       <section class="detail">
         <span class="detail__title">Tutores</span>
         <div class="detail__grid">
@@ -113,6 +124,13 @@
       :titulo="child.nino"
       :subtitulo="`Registro ${horaEntrada} · ${child.tutor} (${child.parentesco})`"
     />
+
+    <ReimprimirComprobanteDialog
+      v-if="puedeReimprimir"
+      v-model="showReimpresion"
+      :registro-id="child.registroId"
+      :subtitulo="`${child.tutor} · registro de las ${horaEntrada}`"
+    />
   </article>
 </template>
 
@@ -124,6 +142,8 @@ import { useAccessControlStore } from '@/stores/accessControl'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FotosRegistroDialog from './FotosRegistroDialog.vue'
+import ReimprimirComprobanteDialog from './ReimprimirComprobanteDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 import { notaVisible } from '@/utils/notasNino'
 
 const props = defineProps<{ child: ActiveChild }>()
@@ -133,6 +153,16 @@ const router = useRouter()
 
 const showDetails = ref(false)
 const showFotos = ref(false)
+const showReimpresion = ref(false)
+
+// N5: reimprimir el comprobante (con un QR nuevo) pide el mismo permiso que el check-in.
+const auth = useAuthStore()
+const puedeReimprimir = computed(() => auth.hasPermission('estancias:checkin'))
+
+function abrirReimpresion() {
+  showDetails.value = false
+  showReimpresion.value = true
+}
 
 const STATUS = {
   activo: { label: 'Activo', tone: 'ok' },

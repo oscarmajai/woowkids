@@ -57,65 +57,7 @@
     </div>
 
     <div class="voucher-wrapper">
-      <div id="printable-voucher" ref="voucherRef" class="voucher">
-        <!-- Encabezado -->
-        <div class="text-center">
-          <div class="ticket-brand">Woow Kids</div>
-          <div class="ticket-sub">{{ branchName }}</div>
-          <div class="ticket-sub">Cajero: {{ cashierName }}</div>
-        </div>
-
-        <div class="ticket-divider">--------------------------------</div>
-
-        <!-- Fecha y Tutor Compactos -->
-        <div class="ticket-row">
-          <span>Fecha:</span>
-          <span class="text-weight-bold">{{ formatDate() }}</span>
-        </div>
-        <div class="ticket-row">
-          <span>Tutor:</span>
-          <span class="text-ellipsis">{{ store.tutor.fullName }}</span>
-        </div>
-        <div v-if="store.tutor.phone" class="ticket-row">
-          <span>Tel:</span>
-          <span>{{ store.tutor.phone }}</span>
-        </div>
-
-        <div class="ticket-divider">--------------------------------</div>
-
-        <!-- Niños Registrados -->
-        <div class="ticket-section-title">NIÑOS REGISTRADOS</div>
-        <template v-for="child in store.savedChildren" :key="child.id">
-          <div class="ticket-row items-center q-my-xs">
-            <span class="text-weight-bold text-ellipsis">{{ child.name }}</span>
-            <span>{{ child.age }} años</span>
-          </div>
-          <!-- M26: las notas / alergias salen en el comprobante. -->
-          <div v-if="notaVisible(child.notes)" class="ticket-notes">
-            * Notas / alergias: {{ notaVisible(child.notes) }}
-          </div>
-        </template>
-
-        <div class="ticket-divider">--------------------------------</div>
-
-        <!-- Salida y Pago -->
-        <div class="ticket-box q-my-xs text-center">
-          Salida Estimada: <strong>{{ maxScheduledExit() }}</strong>
-        </div>
-
-        <div class="ticket-row text-weight-bold q-mt-xs" style="font-size: 13px">
-          <span>TOTAL:</span>
-          <span>${{ Number(store.totalFromServer ?? store.total).toFixed(2) }}</span>
-        </div>
-
-        <!-- QR -->
-        <div v-if="qrCodeUrl" class="text-center q-mt-sm">
-          <img :src="qrCodeUrl" alt="QR" class="qr-code" />
-          <div class="ticket-caption">Escanea para ver tu registro</div>
-        </div>
-
-        <div class="text-center ticket-footer q-mt-xs">¡Gracias por visitarnos!</div>
-      </div>
+      <ComprobanteEstancia ref="voucherRef" :datos="datosComprobante" />
       <q-btn
         outline
         icon="print"
@@ -136,15 +78,17 @@ import { printTicketElement } from '@/utils/ticketPrinting'
 import { useRegistrationStore } from '@/stores/registration'
 import type { Child } from '@/stores/registration'
 import { useAuthStore } from '@/stores/auth'
-import QRCode from 'qrcode'
 import { notaVisible } from '@/utils/notasNino'
+import { horaComprobante, qrPortalPadres } from '@/utils/portalPadres'
+import type { DatosComprobanteEstancia } from '@/types/comprobanteEstancia'
+import ComprobanteEstancia from './ComprobanteEstancia.vue'
 
 defineEmits<{ (e: 'nuevo'): void }>()
 
 const store = useRegistrationStore()
 const authStore = useAuthStore()
 const qrCodeUrl = ref('')
-const voucherRef = ref<HTMLElement | null>(null)
+const voucherRef = ref<InstanceType<typeof ComprobanteEstancia> | null>(null)
 const isPrinting = ref(false)
 const $q = useQuasar()
 const issuedAt = new Date()
@@ -156,30 +100,23 @@ async function generarQR() {
   // El QR lleva el código opaco del portal de padres (A17), nunca el
   // registroId: el UUID del registro ya no da acceso.
   if (store.codigoAccesoPadres) {
-    const code = encodeURIComponent(store.codigoAccesoPadres)
-    const url = `${window.location.origin}/padres/access?code=${code}`
-    qrCodeUrl.value = await QRCode.toDataURL(url, {
-      width: 100,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-    })
+    qrCodeUrl.value = await qrPortalPadres(store.codigoAccesoPadres)
   }
 }
 
 onMounted(generarQR)
 
-function formatDate() {
-  const now = issuedAt
-  return (
-    now.toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-    }) +
-    ' ' +
-    now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-  )
-}
+const datosComprobante = computed<DatosComprobanteEstancia>(() => ({
+  sucursal: branchName.value,
+  cajero: cashierName.value,
+  fecha: issuedAt,
+  tutor: store.tutor.fullName,
+  telefono: store.tutor.phone,
+  ninos: store.savedChildren.map((c) => ({ nombre: c.name, edad: c.age, notas: c.notes })),
+  salidaEstimada: maxScheduledExit(),
+  total: Number(store.totalFromServer ?? store.total),
+  qrCodeUrl: qrCodeUrl.value,
+}))
 
 function scheduledExitDate(child: Child): Date {
   const time = store.isEventoMode ? store.horasEvento : child.estimatedTime
@@ -190,10 +127,7 @@ function scheduledExitDate(child: Child): Date {
 }
 
 function scheduledExit(child: Child) {
-  return scheduledExitDate(child).toLocaleTimeString('es-MX', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return horaComprobante(scheduledExitDate(child))
 }
 
 // Si los niños tienen tiempos distintos, el ticket impreso (uno por
@@ -202,8 +136,7 @@ function scheduledExit(child: Child) {
 function maxScheduledExit() {
   const fechas = store.savedChildren.map((c) => scheduledExitDate(c).getTime())
   if (fechas.length === 0) return '—'
-  const maxFecha = new Date(Math.max(...fechas))
-  return maxFecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  return horaComprobante(new Date(Math.max(...fechas)))
 }
 
 const nombres = computed(() => {
@@ -217,7 +150,7 @@ async function printVoucher() {
   try {
     await generarQR()
     await nextTick()
-    await printTicketElement(voucherRef.value)
+    await printTicketElement(voucherRef.value?.raiz ?? null)
   } catch (error) {
     $q.notify({ type: 'negative', message: (error as Error).message })
   } finally {
@@ -373,89 +306,6 @@ function getBraceletLabel(braceletId: string) {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-}
-
-.voucher {
-  background: #fff;
-  border-radius: 8px;
-  padding: 14px 10px;
-  width: 80mm;
-  max-width: none;
-  flex: none;
-  box-sizing: border-box;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  font-family: 'Courier New', Courier, monospace;
-  color: #000;
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.ticket-brand {
-  font-size: 16px;
-  font-weight: bold;
-  letter-spacing: 0.5px;
-}
-
-.ticket-sub {
-  font-size: 10px;
-  color: #444;
-}
-
-.ticket-divider {
-  text-align: center;
-  overflow: hidden;
-  white-space: nowrap;
-  letter-spacing: -1px;
-  color: #666;
-  margin: 4px 0;
-}
-
-.ticket-section-title {
-  font-size: 10px;
-  font-weight: bold;
-  text-align: center;
-  margin-bottom: 2px;
-}
-
-.ticket-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ticket-notes {
-  font-size: 10px;
-  font-weight: bold;
-  margin: -2px 0 4px;
-  word-break: break-word;
-}
-
-.ticket-box {
-  border: 1px dashed #000;
-  padding: 4px;
-  font-size: 11px;
-}
-
-.qr-code {
-  width: 95px;
-  height: 95px;
-  display: inline-block;
-}
-
-.ticket-caption {
-  font-size: 9px;
-  color: #555;
-  margin-top: 2px;
-}
-
-.ticket-footer {
-  font-size: 10px;
 }
 
 .voucher__print {
