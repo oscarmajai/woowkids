@@ -84,7 +84,8 @@ def checkin(monkeypatch: pytest.MonkeyPatch, metodos: None) -> dict[str, Any]:
         "emitir": registra("emitir", "codigo-prueba"),
     }
     monkeypatch.setattr(m, "esta_disponible_para_asignar", AsyncMock(return_value=True))
-    monkeypatch.setattr(m, "get_tutor_by_phone", AsyncMock(return_value={"id": uuid4()}))
+    monkeypatch.setattr(m, "get_tutores_by_phone", AsyncMock(return_value=[]))
+    monkeypatch.setattr(m, "tutor_create", AsyncMock(return_value=uuid4()))
     monkeypatch.setattr(m, "validar_y_leer", AsyncMock(return_value=b"jpg"))
     monkeypatch.setattr(m, "upload_bytes", mocks["upload"])
     monkeypatch.setattr(m, "delete_objects", mocks["delete"])

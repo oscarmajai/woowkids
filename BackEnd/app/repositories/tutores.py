@@ -34,20 +34,22 @@ async def get_tutor_by_id(conn: asyncpg.Connection, tutor_id: UUID) -> TutorReco
     return _tutor_row(row) if row else None
 
 
-async def get_tutor_by_phone(
+async def get_tutores_by_phone(
     conn: asyncpg.Connection, telefono: str, sucursal_id: UUID
-) -> TutorRecord | None:
-    row = await conn.fetchrow(
+) -> list[TutorRecord]:
+    """Tutores activos de la sucursal con ese teléfono. Puede haber varios: un
+    mismo teléfono lo comparten, por ejemplo, dos familiares distintos."""
+    rows = await conn.fetch(
         """
        SELECT id, nombre_completo AS "nombreCompleto", telefono, sucursal_id
        FROM tutores
        WHERE telefono = $1 AND sucursal_id = $2 AND activo = TRUE
+       ORDER BY creado
    """,
         telefono,
         sucursal_id,
     )
-
-    return _tutor_row(row) if row else None
+    return [_tutor_row(r) for r in rows]
 
 
 async def tutor_create(
