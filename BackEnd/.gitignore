@@ -1,0 +1,35 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+.env
+.venv/
+venv/
+env/
+
+
+*.log
+.DS_Store
+
+# Respaldos de BD tomados antes de migrar: contienen datos reales
+backups/
+
+CLAUDE.md
+
+.ruff_cache/
+
+.idea
+
+# Archivos para almacenar fotos
+uploads/identificaciones/*
+!uploads/identificaciones/.gitignore
+uploads/llegadas/*
+!uploads/llegadas/.gitignore
+uploads/productos/*
+!uploads/productos/.gitignore
+docs/superpowers/
+.env.docker
