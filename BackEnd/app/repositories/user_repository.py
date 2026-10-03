@@ -66,11 +66,17 @@ _SELECT = f"""
 """
 
 
+def normalizar_email(email: str) -> str:
+    """M1: los correos no distinguen mayúsculas ni espacios alrededor. Se
+    guardan y se buscan siempre así (índice único sobre lower(email), 089)."""
+    return email.strip().lower()
+
+
 async def get_usuario_by_email(conn: asyncpg.Connection, email: str) -> UsuarioRecord | None:
     """Devuelve el usuario activo por email para el flujo de login."""
     row = await conn.fetchrow(
-        _SELECT + "WHERE u.email = $1 AND u.activo = TRUE LIMIT 1",
-        email,
+        _SELECT + "WHERE lower(u.email) = $1 AND u.activo = TRUE LIMIT 1",
+        normalizar_email(email),
     )
     return _row_to_record(row) if row else None
 
@@ -108,8 +114,20 @@ async def get_usuarios_by_branch(
     return [_row_to_record(r) for r in rows]
 
 
-async def email_exists(conn: asyncpg.Connection, email: str) -> bool:
-    row = await conn.fetchrow("SELECT id FROM public.usuarios WHERE email = $1", email)
+async def email_exists(
+    conn: asyncpg.Connection, email: str, excluir_id: UUID | None = None
+) -> bool:
+    """M1: compara sin distinguir mayúsculas e incluye usuarios inactivos (el
+    correo sigue siendo de esa cuenta, que se puede reactivar)."""
+    row = await conn.fetchrow(
+        """
+        SELECT id FROM public.usuarios
+        WHERE lower(email) = $1 AND ($2::uuid IS NULL OR id <> $2)
+        LIMIT 1
+        """,
+        normalizar_email(email),
+        excluir_id,
+    )
     return row is not None
 
 
@@ -131,7 +149,7 @@ async def create_usuario(
         VALUES ($1, $2, $3, $4, $5, (SELECT id FROM public.roles WHERE nombre = $6), $7, $8)
         RETURNING id
         """,
-        email,
+        normalizar_email(email),
         password_hash,
         nombre_completo,
         apellidos,

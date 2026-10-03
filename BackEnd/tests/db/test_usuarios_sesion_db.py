@@ -284,3 +284,111 @@ async def test_refresh_de_usuario_desactivado_no_renueva(entorno: Any) -> None:
     assert resp.status_code == 200
     resp = await client.post("/api/auth/refresh", cookies={"refresh_token": cookie})
     assert resp.status_code == 401
+
+
+# ── M1 ──────────────────────────────────────────────────────────────────────
+
+
+async def test_alta_con_otra_capitalizacion_es_409(entorno: Any) -> None:
+    client, _conn = entorno
+    resp = await client.post(
+        "/api/usuarios",
+        json={
+            "email": "  P8.Cajero.A@WoowKids.dev ",
+            "full_name": "Duplicado",
+            "password": PASSWORD,
+            "role": "Cajero",
+            "branch_id": SUC_A,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["code"] == "EMAIL_ALREADY_EXISTS"
+
+
+async def test_alta_guarda_el_correo_en_minusculas(entorno: Any) -> None:
+    client, conn = entorno
+    resp = await client.post(
+        "/api/usuarios",
+        json={
+            "email": "Nuevo.P8@WoowKids.dev",
+            "full_name": "Nuevo",
+            "password": PASSWORD,
+            "role": "Cajero",
+            "branch_id": SUC_A,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["email"] == "nuevo.p8@woowkids.dev"
+    assert await conn.fetchval(
+        "SELECT email FROM public.usuarios WHERE id = $1", UUID(resp.json()["id"])
+    ) == ("nuevo.p8@woowkids.dev")
+
+
+async def test_correo_de_usuario_inactivo_sigue_ocupado(entorno: Any) -> None:
+    client, _conn = entorno
+    await _desactivar_cajero(client)
+    resp = await client.post(
+        "/api/usuarios",
+        json={
+            "email": USUARIOS["cajero_a"][1].upper(),
+            "full_name": "Otro",
+            "password": PASSWORD,
+            "role": "Cajero",
+            "branch_id": SUC_A,
+        },
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 409
+
+
+async def test_editar_a_correo_ajeno_con_otra_capitalizacion_es_409(entorno: Any) -> None:
+    client, _conn = entorno
+    resp = await client.put(
+        f"/api/usuarios/{USUARIOS['cajero_a'][0]}",
+        json=_cuerpo_cajero_a(email="P8.ADMIN.B@woowkids.dev"),
+        headers=_h("sistema"),
+    )
+    assert resp.status_code == 409
+
+
+async def test_login_con_otra_capitalizacion(entorno: Any) -> None:
+    client, _conn = entorno
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": "P8.Cajero.A@WOOWKIDS.dev", "password": PASSWORD},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user"]["id"] == USUARIOS["cajero_a"][0]
+
+
+async def test_cuenta_vieja_con_mayusculas_entra_y_se_puede_editar(entorno: Any) -> None:
+    """Un correo guardado con mayúsculas antes de 089 (p. ej. porque chocaba)
+    sigue funcionando: login con cualquier capitalización y edición sin 409."""
+    client, conn = entorno
+    await conn.execute(
+        "UPDATE public.usuarios SET email = 'P8.Cajero.A@WoowKids.dev' WHERE id = $1",
+        UUID(USUARIOS["cajero_a"][0]),
+    )
+    resp = await client.post(
+        "/api/auth/login", json={"email": "p8.cajero.a@woowkids.dev", "password": PASSWORD}
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.put(
+        f"/api/usuarios/{USUARIOS['cajero_a'][0]}",
+        json=_cuerpo_cajero_a(),
+        headers=_h("admin_a"),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["email"] == "p8.cajero.a@woowkids.dev"
+
+
+async def test_indice_unico_sin_distinguir_mayusculas(entorno: Any) -> None:
+    _client, conn = entorno
+    with pytest.raises(asyncpg.UniqueViolationError):
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
+                "VALUES ('P8.CAJERO.A@woowkids.dev', 'x', 'dup', 3)"
+            )

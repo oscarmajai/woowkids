@@ -4,16 +4,25 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints
 
 NombreRequerido = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def _normalizar_email(v: str) -> str:
+    # M1: EmailStr solo pasa a minúsculas el dominio; el correo se guarda
+    # completo en minúsculas para que no se dupliquen cuentas por mayúsculas.
+    return v.strip().lower()
+
+
+EmailUsuario = Annotated[EmailStr, AfterValidator(_normalizar_email)]
 
 # PIN de caja (C1): 4 dígitos numéricos, igual que valida el front.
 PinCaja = Annotated[str, StringConstraints(pattern=r"^\d{4}$")]
 
 
 class UserCreateRequest(BaseModel):
-    email: EmailStr
+    email: EmailUsuario
     full_name: NombreRequerido
     apellidos: str | None = None
     telefono: str | None = Field(default=None, max_length=20)
@@ -24,7 +33,7 @@ class UserCreateRequest(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
-    email: EmailStr
+    email: EmailUsuario
     full_name: NombreRequerido
     apellidos: str | None = None
     telefono: str | None = Field(default=None, max_length=20)
