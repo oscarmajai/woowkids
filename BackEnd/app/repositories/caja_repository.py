@@ -44,6 +44,26 @@ async def get_caja_por_codigo(
     return dict(row) if row else None
 
 
+async def get_caja_por_id(
+    conn: asyncpg.Connection, sucursal_id: str, caja_id: str
+) -> dict[str, Any] | None:
+    """Caja por id, solo si pertenece a la sucursal indicada."""
+    try:
+        caja_uuid = uuid.UUID(caja_id)
+    except ValueError:
+        return None
+    row = await conn.fetchrow(
+        """
+        SELECT id, sucursal_id, codigo, nombre, creado
+        FROM public.cajas
+        WHERE sucursal_id = $1 AND id = $2
+        """,
+        uuid.UUID(sucursal_id),
+        caja_uuid,
+    )
+    return dict(row) if row else None
+
+
 async def crear_caja(
     conn: asyncpg.Connection,
     sucursal_id: str,
