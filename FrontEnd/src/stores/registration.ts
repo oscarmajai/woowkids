@@ -73,6 +73,8 @@ export const useRegistrationStore = defineStore('registration', () => {
 
   const productoBase = ref<PrecioEstancia | null>(null)
   const pulseras = computed(() => accessControlStore.pulserasDisponibles)
+  const isLoadingPulseras = computed(() => accessControlStore.isLoadingPulseras)
+  const errorPulseras = computed(() => accessControlStore.errorPulseras)
   const pagosFromModal = ref<OnboardingPago[]>([])
   const cambioFromModal = ref(0)
   const puntosARedimirValue = ref(0)
@@ -149,6 +151,20 @@ export const useRegistrationStore = defineStore('registration', () => {
       isLoadingCatalog.value = false
     }
   }
+
+  // A14: la página de registro carga por sí misma lo que necesita (tarifas y
+  // pulseras libres de la sucursal), aunque se abra por URL o tras F5. Si
+  // Control de Acceso acaba de traer las pulseras, no se vuelven a pedir.
+  // El turno lo garantiza el guard de ruta (`requiresTurno`).
+  async function cargarDatosIniciales() {
+    if (!authStore.currentBranchId) {
+      submitError.value = 'No hay una sucursal activa en la sesión.'
+      return
+    }
+    await Promise.all([loadProductos(), accessControlStore.asegurarPulserasCargadas()])
+  }
+
+  const isLoadingInicial = computed(() => isLoadingCatalog.value || isLoadingPulseras.value)
 
   async function cargarEventoProximo() {
     if (!authStore.currentBranchId) return
@@ -445,6 +461,9 @@ export const useRegistrationStore = defineStore('registration', () => {
       pagadoFromServer.value = response.pagado
       estadoFromServer.value = response.estado
       advertenciaEfectivoFromServer.value = response.advertenciaEfectivo ?? null
+      // Las pulseras recién asignadas ya no están libres: el siguiente registro
+      // no debe ofrecerlas aunque reutilice la lista ya cargada.
+      accessControlStore.descartarPulseras(detalles.map((d) => d.pulseraId))
       step.value = 'complete'
     } catch (err: any) {
       if (err?.statusCode === 409) {
@@ -504,6 +523,9 @@ export const useRegistrationStore = defineStore('registration', () => {
     currentChildIndex,
     productoBase,
     pulseras,
+    isLoadingPulseras,
+    errorPulseras,
+    isLoadingInicial,
     isLoadingCatalog,
     isSubmitting,
     submitError,
@@ -537,6 +559,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     completeRegistration,
     reset,
     loadProductos,
+    cargarDatosIniciales,
     cargarEventoProximo,
     cambiarModo,
     seleccionarEvento,
