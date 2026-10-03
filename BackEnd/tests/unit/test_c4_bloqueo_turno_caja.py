@@ -233,6 +233,12 @@ async def test_transiciones_del_turno_validan_y_escriben_bajo_el_bloqueo(
         f"{SVC}._verificar_credenciales_usuario",
         AsyncMock(return_value={"id": uuid4(), "sucursal_id": None, "nombre_completo": "A"}),
     )
+    # A15/A16: lectura previa (sin bloqueo) solo del dueño y la sucursal, para
+    # decidir quién puede pedir la revisión antes de validar credenciales.
+    monkeypatch.setattr(
+        f"{SVC}.get_dueno_y_sucursal_apertura",
+        AsyncMock(return_value={"id": APERTURA_ID, "cajero_id": USER_ID, "sucursal_id": None}),
+    )
     monkeypatch.setattr(f"{SVC}.obtener_turno_activo", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(
         f"{SVC}.get_apertura_por_id",

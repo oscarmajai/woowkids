@@ -46,6 +46,10 @@ export class CredencialesAdminInvalidasError extends Error {
   }
 }
 
+// A5: el backend responde 403 con estos códigos cuando el PIN/contraseña de
+// caja no coincide (antes 401, que el interceptor confundía con sesión vencida).
+const CODIGOS_CREDENCIAL_INVALIDA = new Set(['CREDENCIALES_INVALIDAS', 'PIN_INVALIDO'])
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper interno — convierte cualquier error a mensaje de usuario
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,14 +165,17 @@ export const turnoCajaService = {
   /**
    * Valida las credenciales del administrador y revela el balance.
    * Transición: ESPERANDO_REVISION → BALANCE_REVELADO
-   * Lanza CredencialesAdminInvalidasError en caso de 401/403 del backend.
+   * Lanza CredencialesAdminInvalidasError si la contraseña/PIN no coincide
+   * (403 CREDENCIALES_INVALIDAS, o 401 de un backend viejo). Los demás
+   * rechazos (administrador de otra sucursal o sin permiso, demasiados
+   * intentos, turno ajeno) muestran el mensaje del backend.
    */
   async autenticarAdmin(payload: RevisionAdminPayload): Promise<RevisionAdminResponse> {
     try {
       return await turnoCajaApi.autenticarRevisionAdmin(payload)
     } catch (err) {
       const apiErr = err as ApiError
-      if (apiErr.statusCode === 401 || apiErr.statusCode === 403) {
+      if (apiErr.statusCode === 401 || CODIGOS_CREDENCIAL_INVALIDA.has(apiErr.code)) {
         throw new CredencialesAdminInvalidasError()
       }
       throw new Error(toMensajeError(err), { cause: err })

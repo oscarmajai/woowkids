@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import UUID
 
 import asyncpg
@@ -350,3 +350,42 @@ async def get_usuario_administrador_by_id(
         usuario_id,
     )
     return UUID(str(row["id"])) if row else None
+
+
+async def get_autorizador_por_email(
+    conn: asyncpg.Connection, email: str, sucursal_id: UUID | str | None, permiso: str
+) -> dict[str, Any] | None:
+    """Usuario activo por correo con lo necesario para decidir si puede
+    autorizar en una sucursal (A16): si su rol tiene ``permiso`` y si está
+    asignado (activo) a ``sucursal_id``."""
+    sucursal_uuid = UUID(str(sucursal_id)) if sucursal_id else None
+    row = await conn.fetchrow(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.pin_hash,
+            u.password_hash,
+            u.nombre_completo,
+            r.nombre AS rol,
+            EXISTS (
+                SELECT 1
+                FROM public.rol_permisos rp
+                JOIN public.permisos p ON p.id = rp.permiso_id
+                WHERE rp.rol_id = u.rol AND p.codigo = $3
+            ) AS tiene_permiso,
+            EXISTS (
+                SELECT 1
+                FROM public.usuarios_sucursal us
+                WHERE us.usuario_id = u.id AND us.activo = TRUE AND us.sucursal_id = $2
+            ) AS en_sucursal
+        FROM public.usuarios u
+        JOIN public.roles r ON r.id = u.rol
+        WHERE lower(u.email) = lower(btrim($1)) AND u.activo = TRUE
+        LIMIT 1
+        """,
+        email,
+        sucursal_uuid,
+        permiso,
+    )
+    return dict(row) if row else None
