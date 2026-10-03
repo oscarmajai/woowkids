@@ -552,13 +552,35 @@
 
               <!-- Formulario de pago (oculto tras registrar) -->
               <template v-if="!pagoRegistrado">
+                <!-- A 7 días o menos del evento no se acepta solo anticipo: el
+                     servidor exige liquidar y, si no, el scheduler la cancelaría. -->
+                <div
+                  v-if="liquidacionObligatoria"
+                  class="aviso-liquidacion q-mb-md"
+                  role="alert"
+                  data-test="aviso-liquidacion"
+                >
+                  <q-icon name="event_busy" size="22px" />
+                  <div>
+                    <div class="aviso-liquidacion__titulo">{{ avisoLiquidacion }}</div>
+                    <div>
+                      Faltan 7 días o menos, así que no se puede dejar solo un anticipo: cobra el
+                      total ({{ totalAmount }}).
+                    </div>
+                  </div>
+                </div>
+
                 <div class="res-block">
                   <div class="row justify-between q-mb-xs">
                     <span class="text-grey-7">Total de la reservación</span>
                     <span style="font-weight: 700">{{ totalAmount }}</span>
                   </div>
                   <div class="row justify-between">
-                    <span class="text-grey-7">Anticipo requerido (30%)</span>
+                    <span class="text-grey-7">{{
+                      liquidacionObligatoria
+                        ? 'Liquidación requerida (100%)'
+                        : `Anticipo requerido (${porcentajeMinimo}%)`
+                    }}</span>
                     <span style="font-weight: 700; color: var(--q-primary)">{{
                       advanceAmount
                     }}</span>
@@ -581,10 +603,7 @@
                         fmt(montoPorPorcentaje(opcion))
                       }}</span>
                       <span v-if="opcion === 100" class="anticipo-chip__nota">Liquida todo</span>
-                      <span v-else-if="opcion === porcentajePaquete" class="anticipo-chip__nota">
-                        Sugerido
-                      </span>
-                      <span v-else-if="opcion === PORCENTAJE_MINIMO" class="anticipo-chip__nota">
+                      <span v-else-if="opcion === porcentajeMinimo" class="anticipo-chip__nota">
                         Mínimo
                       </span>
                     </button>
@@ -599,21 +618,26 @@
                     outlined
                     type="number"
                     prefix="$"
-                    :error="anticipoInsuficiente"
-                    :error-message="`El anticipo mínimo es ${PORCENTAJE_MINIMO}% (${advanceAmount})`"
-                    :hint="`Puedes capturar otra cantidad, desde ${advanceAmount}`"
+                    :readonly="liquidacionObligatoria"
+                    :error="anticipoInsuficiente || anticipoExcedeTotal"
+                    :error-message="errorAnticipo"
+                    :hint="
+                      liquidacionObligatoria
+                        ? 'Se cobra el total de la reservación'
+                        : `Puedes capturar otra cantidad, desde ${advanceAmount}`
+                    "
                   />
                 </div>
 
                 <q-btn
                   unelevated
                   color="primary"
-                  label="Pagar Anticipo"
                   icon="payments"
                   style="border-radius: 8px; font-weight: 700; height: 44px"
                   class="q-px-lg"
                   no-caps
-                  :disable="anticipoIngresado <= 0 || anticipoInsuficiente"
+                  :label="liquidacionObligatoria ? 'Liquidar reservación' : 'Pagar Anticipo'"
+                  :disable="anticipoIngresado <= 0 || anticipoInsuficiente || anticipoExcedeTotal"
                   @click="abrirModalPago"
                 />
               </template>
@@ -951,6 +975,12 @@ import { useAuthStore } from '@/stores/auth'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import type { AppliedPayment } from '@/types/payments'
 import { horasFacturables } from '@/utils/horario'
+import {
+  diasParaEvento,
+  exigeLiquidacionAlReservar,
+  montoPorPorcentaje as montoDePorcentaje,
+  porcentajeAnticipoMinimo,
+} from '@/utils/reservacionPrecio'
 import { mensajeDeError } from '@/utils/errorHandler'
 import { resolverMetodoPagoId } from '@/utils/pagos'
 import { pulserasApi } from '@/api/pulserasApi'
@@ -1333,13 +1363,11 @@ const metodosPagoResumen = computed(() => {
   return nombres.length ? [...new Set(nombres)].join(', ') : '—'
 })
 
-// Pre-rellena el anticipo al llegar al step 3
+// Pre-rellena el anticipo al llegar al step 3 con el mínimo que acepta el
+// servidor (o el total, si el evento es en 7 días o menos).
 watch(step, (s) => {
   if (s === 3 && !pagoRegistrado.value) {
-    anticipoIngresado.value =
-      porcentajePaquete.value !== null
-        ? montoPorPorcentaje(porcentajePaquete.value)
-        : advanceNum.value
+    anticipoIngresado.value = advanceNum.value
   }
 })
 
@@ -1448,14 +1476,46 @@ const subtotal = computed(
 )
 const totalNum = computed(() => subtotal.value)
 
-/** Piso de anticipo que acepta el negocio. */
-const PORCENTAJE_MINIMO = 30
 /** Atajos ofrecidos al cliente. El 100% equivale a liquidar el evento por adelantado. */
 const OPCIONES_ANTICIPO = [30, 50, 75, 100] as const
 
-const montoPorPorcentaje = (porcentaje: number) => Math.round((totalNum.value * porcentaje) / 100)
+// Mismo redondeo que el servidor (en centavos enteros, mitades hacia arriba). El
+// redondeo a pesos nunca debe pasar del total: con centavos, el 100 % es el total
+// exacto (el servidor rechaza cobrar de más).
+const montoPorPorcentaje = (porcentaje: number) =>
+  Math.min(totalNum.value, montoDePorcentaje(totalNum.value, porcentaje))
 
-const advanceNum = computed(() => montoPorPorcentaje(PORCENTAJE_MINIMO))
+/**
+ * Piso de anticipo: 30 % del negocio o el `anticipo_porcentaje` del paquete si
+ * es mayor (M16). El servidor rechaza cualquier cobro por debajo.
+ */
+const porcentajeMinimo = computed(() =>
+  porcentajeAnticipoMinimo(selectedPkg.value?.anticipo_porcentaje),
+)
+
+/** Días que faltan para el evento elegido (null mientras no haya fecha). */
+const diasAlEvento = computed(() =>
+  form.value.selectedDate ? diasParaEvento(form.value.selectedDate) : null,
+)
+
+/**
+ * A 7 días o menos del evento se cobra el 100 % al reservar: ya no hay plazo
+ * para liquidar después y la reservación se cancelaría sola por falta de pago.
+ */
+const liquidacionObligatoria = computed(
+  () => diasAlEvento.value !== null && exigeLiquidacionAlReservar(diasAlEvento.value),
+)
+
+const avisoLiquidacion = computed(() => {
+  const dias = diasAlEvento.value ?? 0
+  const cuando = dias <= 0 ? 'es hoy' : dias === 1 ? 'es mañana' : `es en ${dias} días`
+  return `El evento ${cuando}: se debe liquidar al reservar.`
+})
+
+/** Lo mínimo que se puede cobrar al reservar. */
+const advanceNum = computed(() =>
+  liquidacionObligatoria.value ? totalNum.value : montoPorPorcentaje(porcentajeMinimo.value),
+)
 
 /**
  * Porcentaje que corresponde al monto capturado, o null si el cajero escribió una
@@ -1464,17 +1524,13 @@ const advanceNum = computed(() => montoPorPorcentaje(PORCENTAJE_MINIMO))
  * ya no refleja lo que se va a cobrar.
  */
 /**
- * Anticipo sugerido del paquete elegido (`anticipo_porcentaje`). Solo cuenta si
- * respeta el piso del negocio; uno menor no se ofrece ni se pre-rellena.
+ * Atajos de porcentaje: solo los que alcanzan el mínimo, más el mínimo mismo
+ * (p. ej. el 40 % de un paquete Premium). Si hay que liquidar, solo el 100 %.
  */
-const porcentajePaquete = computed(() => {
-  const pct = Math.round(Number(selectedPkg.value?.anticipo_porcentaje ?? NaN))
-  return Number.isFinite(pct) && pct >= PORCENTAJE_MINIMO && pct <= 100 ? pct : null
-})
-
 const opcionesAnticipo = computed<number[]>(() => {
-  const opciones = new Set<number>(OPCIONES_ANTICIPO)
-  if (porcentajePaquete.value !== null) opciones.add(porcentajePaquete.value)
+  if (liquidacionObligatoria.value) return [100]
+  const opciones = new Set<number>(OPCIONES_ANTICIPO.filter((p) => p >= porcentajeMinimo.value))
+  opciones.add(porcentajeMinimo.value)
   return [...opciones].sort((a, b) => a - b)
 })
 
@@ -1491,6 +1547,17 @@ const anticipoInsuficiente = computed(
   () => anticipoIngresado.value > 0 && anticipoIngresado.value < advanceNum.value,
 )
 
+/** El servidor rechaza cobrar más que el total de la reservación. */
+const anticipoExcedeTotal = computed(
+  () => Math.round(anticipoIngresado.value * 100) > Math.round(totalNum.value * 100),
+)
+
+const errorAnticipo = computed(() => {
+  if (anticipoExcedeTotal.value) return `El monto no puede rebasar el total (${totalAmount.value})`
+  if (liquidacionObligatoria.value) return `${avisoLiquidacion.value} Total: ${totalAmount.value}`
+  return `El anticipo mínimo es ${porcentajeMinimo.value}% (${advanceAmount.value})`
+})
+
 // ── Reflejo del anticipo en el desglose lateral ──────────────────────────────
 // El panel mostraba "Anticipo Requerido (30%)" fijo, así que elegir 75% o liquidar
 // todo no cambiaba nada de lo que el cliente veía. Estos derivados hacen que el
@@ -1502,7 +1569,7 @@ const anticipoAplicado = computed(() =>
 )
 
 const porcentajeAnticipo = computed(() => {
-  if (totalNum.value <= 0) return PORCENTAJE_MINIMO
+  if (totalNum.value <= 0) return porcentajeMinimo.value
   // Se topa en 100 porque el cajero puede capturar libremente un monto mayor al
   // total y la barra de progreso no debe desbordarse.
   return Math.min(100, Math.round((anticipoAplicado.value / totalNum.value) * 100))
@@ -1560,6 +1627,36 @@ function conceptosTicket(): TicketConcepto[] {
 }
 
 const irAListaReservaciones = () => router.push({ name: 'eventos-reservaciones' })
+
+/** Rechazos del servidor que obligan a capturar el cobro de nuevo. */
+const CODIGOS_COBRO_INVALIDO = new Set([
+  'ANTICIPO_INSUFICIENTE',
+  'LIQUIDACION_REQUERIDA',
+  'PAGO_EXCEDE_TOTAL',
+])
+
+async function recargarCatalogos(): Promise<void> {
+  const sucursalId = authStore.currentBranchId
+  if (!sucursalId) return
+  await Promise.all([
+    paquetesStore.cargar(sucursalId),
+    extrasStore.cargar(sucursalId),
+    productosStore.cargarCatalogo(),
+  ])
+}
+
+/**
+ * Descarta el cobro capturado (no se registró: el alta es atómica) y regresa al
+ * paso del anticipo para cobrar sobre el total vigente.
+ */
+function reiniciarCobro(): void {
+  pagoRegistrado.value = false
+  pagosAplicados.value = []
+  montoPagado.value = 0
+  cambioDevuelto.value = 0
+  step.value = 3
+  anticipoIngresado.value = advanceNum.value
+}
 
 const confirmarReservacion = async () => {
   // Único bloqueo de doble clic: ya no hace falta recordar si una reservación
@@ -1723,12 +1820,21 @@ const confirmarReservacion = async () => {
       position: 'top-right',
     })
   } catch (err: unknown) {
-    const apiErr = err as { message?: string; statusCode?: number }
+    const apiErr = err as { message?: string; statusCode?: number; code?: string }
     const msg = apiErr?.message || 'Error al guardar la reservación'
     console.error('[confirmarReservacion]', err)
     // Nada quedó persistido (transacción atómica): no hay a dónde redirigir,
     // solo reintentar.
-    $q.notify({ type: 'negative', message: msg, position: 'top-right', timeout: 6000 })
+    $q.notify({ type: 'negative', message: msg, position: 'top-right', timeout: 8000 })
+    if (apiErr?.statusCode === 409) {
+      // El precio (o el catálogo) cambió en el servidor: se recargan paquetes,
+      // extras y productos para que el desglose muestre el precio real, y el
+      // cobro se vuelve a capturar sobre ese total.
+      await recargarCatalogos()
+      reiniciarCobro()
+    } else if (apiErr?.code && CODIGOS_COBRO_INVALIDO.has(apiErr.code)) {
+      reiniciarCobro()
+    }
   } finally {
     confirmando.value = false
   }
@@ -1841,6 +1947,24 @@ const confirmarReservacion = async () => {
 .ticket-exito__nota {
   font-size: 0.85rem;
   color: var(--tone-ok-fg);
+}
+
+/* ── Aviso de liquidación obligatoria (≤ 7 días) ───────────────────────────── */
+.aviso-liquidacion {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tone-warn-dot);
+  background: var(--tone-warn-bg);
+  color: var(--tone-warn-fg);
+  font-size: 0.875rem;
+}
+
+.aviso-liquidacion__titulo {
+  font-weight: 700;
+  margin-bottom: 2px;
 }
 
 /* ── Opciones de anticipo ──────────────────────────────────────────────────

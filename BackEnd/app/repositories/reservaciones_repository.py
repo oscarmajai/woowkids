@@ -13,8 +13,9 @@ _COLUMNS = """
     nombre_festejado, edad_festejado,
     fecha_evento, hora_inicio, hora_fin,
     numero_personas, precio_base, precio_personas_extra, horas_reservadas, precio_horas,
-    precio_productos, precio_extras, descuento, precio_total, anticipo, saldo_pendiente,
-    estado, notas, activo, comanda_enviada, folio, creado, creado_por, modificado, modificado_por
+    precio_productos, precio_extras, descuento, precio_total, anticipo, monto_pagado,
+    saldo_pendiente, estado, notas, activo, comanda_enviada, folio, creado, creado_por,
+    modificado, modificado_por
 """
 
 _COLUMNAS_NECESARIAS_PARA_ESTANCIA = """
@@ -31,7 +32,9 @@ _SELECT_ESTANCIA = (
     "AND hora_inicio < ((CURRENT_TIME AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::time "
     f"+ INTERVAL '{TIME_FOR_CHECK_RESERVATIONS}') "
     "AND hora_fin > (CURRENT_TIME AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::time "
-    "AND saldo_pendiente = 0 "
+    # saldo_pendiente ya descuenta todos los pagos (migración 075); <= 0 cubre
+    # un sobrepago, que también es un evento liquidado.
+    "AND saldo_pendiente <= 0 "
     "AND activo = TRUE"
 )
 
@@ -165,24 +168,88 @@ async def listar_vencidas_sin_liquidar(
 ) -> list[dict[str, Any]]:
     """Reservaciones que ya pasaron su fecha límite de liquidación y siguen debiendo.
 
-    Se excluyen los eventos que ya ocurrieron (`fecha_evento >= CURRENT_DATE`):
+    "Siguen debiendo" es el saldo real (`saldo_pendiente`, que desde la
+    migración 075 descuenta todos los pagos), no `anticipo < precio_total`:
+    con eso se cancelaban eventos ya liquidados después del anticipo (C3).
+
+    El "hoy" es la fecha local de la sucursal (`zona_horaria`), la misma que
+    usa el alta para exigir la liquidación a 7 días o menos
+    (`hoy_en_sucursal`): con la fecha UTC del servidor, una reservación
+    levantada de noche quedaba un día "más cerca" y se cancelaba al instante.
+
+    Se excluyen los eventos que ya ocurrieron (`fecha_evento >= hoy`):
     cancelar una fiesta que ya se celebró no tiene sentido —se dio el servicio y
     el adeudo sigue siendo real—, y hacerlo destruiría el histórico. El plazo
     sólo tiene efecto sobre eventos que todavía no suceden.
     """
     rows = await conn.fetch(
-        _SELECT
-        + """
+        f"""
+        SELECT {_COLUMNS}
+        FROM reservaciones
+        JOIN LATERAL (
+            SELECT (NOW() AT TIME ZONE s.zona_horaria)::date AS hoy
+            FROM sucursales s
+            WHERE s.id = reservaciones.sucursal_id
+        ) local ON TRUE
         WHERE activo = TRUE
           AND estado IN ('pendiente', 'confirmada')
-          AND anticipo < precio_total
-          AND fecha_evento >= CURRENT_DATE
-          AND fecha_evento - make_interval(days => $1) <= CURRENT_DATE
+          AND saldo_pendiente > 0
+          AND fecha_evento >= local.hoy
+          AND fecha_evento - $1::int <= local.hoy
         ORDER BY fecha_evento
         """,
         dias_limite,
     )
     return [dict(r) for r in rows]
+
+
+async def obtener_para_actualizar(
+    conn: asyncpg.Connection, reservacion_id: UUID
+) -> dict[str, Any] | None:
+    """Como obtener(), pero bloquea la fila hasta el fin de la transacción.
+
+    Lo usan los cobros y las ediciones de precio: dos operaciones simultáneas
+    sobre la misma reservación se ejecutan una tras otra, así la segunda ve el
+    `monto_pagado` que dejó la primera en vez de pisarlo con un total viejo.
+    Debe llamarse dentro de `conn.transaction()`.
+    """
+    row = await conn.fetchrow(_SELECT + " WHERE id = $1 FOR UPDATE", reservacion_id)
+    return dict(row) if row else None
+
+
+async def recalcular_monto_pagado(conn: asyncpg.Connection, reservacion_id: UUID) -> None:
+    """Recalcula `monto_pagado` desde los pagos registrados.
+
+    Neto cobrado = pagos de la reservación - cambio entregado en caja por ella
+    (movimiento 'C' con referencia_id = reservación, ver
+    pagos_reservacion.completar). Se reconstruye desde la fuente en vez de
+    sumar/restar diferencias para que ningún camino de escritura lo deje
+    desfasado. `saldo_pendiente` (columna generada) se actualiza solo.
+    """
+    await conn.execute(
+        """
+        UPDATE reservaciones r
+        SET monto_pagado =
+              COALESCE((SELECT SUM(pr.monto)
+                          FROM pagos_reservacion pr
+                         WHERE pr.reservacion_id = r.id), 0)
+            - COALESCE((SELECT SUM(mc.monto)
+                          FROM movimientos_caja mc
+                         WHERE mc.tipo_movimiento = 'C'
+                           AND mc.referencia_id = r.id), 0)
+        WHERE r.id = $1
+        """,
+        reservacion_id,
+    )
+
+
+async def hoy_en_sucursal(conn: asyncpg.Connection, sucursal_id: UUID) -> date | None:
+    """Fecha de hoy en la zona horaria de la sucursal (None si no existe)."""
+    hoy = await conn.fetchval(
+        "SELECT (NOW() AT TIME ZONE zona_horaria)::date FROM sucursales WHERE id = $1",
+        sucursal_id,
+    )
+    return cast(date | None, hoy)
 
 
 async def cancelar_por_falta_de_pago(

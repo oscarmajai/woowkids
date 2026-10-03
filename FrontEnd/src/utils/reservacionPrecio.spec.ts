@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   calcularPulseras,
   dentroDePlazo,
+  diasParaEvento,
+  exigeLiquidacionAlReservar,
   fechaLimiteLiquidacion,
+  montoPorPorcentaje,
+  porcentajeAnticipoMinimo,
   recalcularReservacion,
   sumarHoras,
 } from './reservacionPrecio'
@@ -33,6 +37,7 @@ const RESERVACION = {
   descuento: '0',
   precio_total: '6700',
   anticipo: '2010',
+  monto_pagado: '2010',
   saldo_pendiente: '4690',
   estado: 'confirmada',
   comanda_enviada: false,
@@ -74,9 +79,15 @@ describe('recalcularReservacion', () => {
   it('avisa cuando el total nuevo quedaría por debajo de lo ya pagado', () => {
     // Con un anticipo de 2010, bajar a 1 invitado deja el total en 5250...
     expect(recalcularReservacion(RESERVACION, 50, { invitados: 1 }).anticipoExcede).toBe(false)
-    // ...pero con un evento casi liquidado sí se rompe la restricción de la BD.
-    const casiLiquidada = { ...RESERVACION, anticipo: '6600' } as Reservaciones
+    // ...pero con un evento casi liquidado el servidor rechaza la edición.
+    const casiLiquidada = { ...RESERVACION, monto_pagado: '6600' } as Reservaciones
     expect(recalcularReservacion(casiLiquidada, 50, { invitados: 1 }).anticipoExcede).toBe(true)
+  })
+
+  it('compara contra todo lo pagado, no solo contra el anticipo (C3)', () => {
+    // Anticipo de 2010 + abonos: ya se pagaron 6600 aunque `anticipo` no cambie.
+    const conAbonos = { ...RESERVACION, anticipo: '2010', monto_pagado: '6600' } as Reservaciones
+    expect(recalcularReservacion(conAbonos, 50, { invitados: 1 }).anticipoExcede).toBe(true)
   })
 
   it('reevalúa las pulseras con la tarifa vigente del paquete', () => {
@@ -127,5 +138,33 @@ describe('plazo de liquidación', () => {
   it('bloquea el mismo día del límite y después', () => {
     expect(dentroDePlazo('2027-02-25', new Date(2027, 1, 18))).toBe(false)
     expect(dentroDePlazo('2027-02-25', new Date(2027, 1, 24))).toBe(false)
+  })
+})
+
+describe('reglas de anticipo (iguales a las del servidor)', () => {
+  it('el mínimo es 30 % o el del paquete si es mayor', () => {
+    expect(porcentajeAnticipoMinimo(null)).toBe(30)
+    expect(porcentajeAnticipoMinimo('40.00')).toBe(40)
+    expect(porcentajeAnticipoMinimo('20.00')).toBe(30)
+  })
+
+  it('redondea a pesos con mitades hacia arriba, sin ruido de flotante', () => {
+    // R-0008: 30 % de 7615 = 2284.5 -> 2285, como el servidor.
+    expect(montoPorPorcentaje(7615, 30)).toBe(2285)
+    expect(montoPorPorcentaje(13815, 40)).toBe(5526)
+    expect(montoPorPorcentaje(1234.5, 50)).toBe(617)
+  })
+
+  it('cuenta los días al evento en fecha local', () => {
+    const hoy = new Date(2026, 9, 3, 23, 30)
+    expect(diasParaEvento('2026-10-03', hoy)).toBe(0)
+    expect(diasParaEvento('2026-10-10', hoy)).toBe(7)
+    expect(diasParaEvento('2026-10-11', hoy)).toBe(8)
+  })
+
+  it('a 7 días o menos se liquida al reservar', () => {
+    expect(exigeLiquidacionAlReservar(0)).toBe(true)
+    expect(exigeLiquidacionAlReservar(7)).toBe(true)
+    expect(exigeLiquidacionAlReservar(8)).toBe(false)
   })
 })

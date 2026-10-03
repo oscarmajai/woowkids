@@ -2,8 +2,10 @@
 anticipo / pago / liquidación (pendiente "Distinguir anticipo de
 liquidación", migración 054)."""
 
+from contextlib import asynccontextmanager
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -21,6 +23,18 @@ RESERVACION_ID = uuid4()
 
 def _reservacion(precio_total: str) -> dict:
     return {"id": RESERVACION_ID, "precio_total": Decimal(precio_total)}
+
+
+def _conn() -> MagicMock:
+    """Conexión simulada con `transaction()` usable como `async with`."""
+    conn = MagicMock()
+
+    @asynccontextmanager
+    async def transaccion() -> Any:
+        yield
+
+    conn.transaction = transaccion
+    return conn
 
 
 @pytest.mark.asyncio
@@ -108,7 +122,9 @@ async def test_crear_rechaza_metodo_de_pago_inexistente(monkeypatch):
     """Antes llegaba al INSERT y la llave foránea respondía 500."""
 
     monkeypatch.setattr(
-        reservaciones_repository, "obtener", AsyncMock(return_value=_reservacion("1000.00"))
+        reservaciones_repository,
+        "obtener_para_actualizar",
+        AsyncMock(return_value=_reservacion("1000.00")),
     )
     monkeypatch.setattr(metodos_pago_repository, "existe", AsyncMock(return_value=False))
     insertar = AsyncMock()
@@ -118,7 +134,7 @@ async def test_crear_rechaza_metodo_de_pago_inexistente(monkeypatch):
         reservacion_id=RESERVACION_ID, metodo_pago_id=uuid4(), monto=Decimal("100.00")
     )
     with pytest.raises(HTTPException) as exc:
-        await pagos_reservacion.crear(AsyncMock(), body, uuid4(), str(uuid4()))
+        await pagos_reservacion.crear(_conn(), body, uuid4(), str(uuid4()))
 
     assert exc.value.status_code == 422
     insertar.assert_not_awaited()
@@ -126,7 +142,9 @@ async def test_crear_rechaza_metodo_de_pago_inexistente(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_crear_rechaza_reservacion_inexistente(monkeypatch):
-    monkeypatch.setattr(reservaciones_repository, "obtener", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        reservaciones_repository, "obtener_para_actualizar", AsyncMock(return_value=None)
+    )
     insertar = AsyncMock()
     monkeypatch.setattr(pagos_reservacion_repository, "crear", insertar)
 
@@ -134,7 +152,7 @@ async def test_crear_rechaza_reservacion_inexistente(monkeypatch):
         reservacion_id=RESERVACION_ID, metodo_pago_id=uuid4(), monto=Decimal("100.00")
     )
     with pytest.raises(HTTPException) as exc:
-        await pagos_reservacion.crear(AsyncMock(), body, uuid4(), str(uuid4()))
+        await pagos_reservacion.crear(_conn(), body, uuid4(), str(uuid4()))
 
     assert exc.value.status_code == 404
     insertar.assert_not_awaited()
