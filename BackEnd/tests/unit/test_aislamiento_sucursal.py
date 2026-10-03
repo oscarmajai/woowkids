@@ -191,6 +191,18 @@ def _pago_comanda(sucursal_id: str) -> dict[str, Any]:
     }
 
 
+def _comanda() -> dict[str, Any]:
+    """Comanda/venta con un producto de la sucursal A."""
+    detalle = {
+        "producto_id": RID2,
+        "nombre": "Pizza",
+        "cantidad": 1,
+        "precio_unitario": 95,
+        "subtotal": 95,
+    }
+    return {"detalles_comanda": [detalle], "ticket_numero": "A1", "total_final": 95}
+
+
 def _reservacion(sucursal_id: str) -> dict[str, Any]:
     return {
         "sucursal_id": sucursal_id,
@@ -436,6 +448,8 @@ CASOS_404: list[tuple[str, str, dict[str, Any]]] = [
     ("PATCH", f"/api/comandas/{RID}/estado", {"json": {"estado_actual": "E"}}),
     ("PATCH", f"/api/comandas/{RID}/detalles", {"json": {"detalles_ids_a_eliminar": [RID2]}}),
     ("POST", "/api/pagos", {"json": _pago_comanda(B)}),
+    ("POST", "/api/comandas", {"json": _comanda()}),
+    ("POST", "/api/pagos/completar", {"json": {**_comanda(), "pagos": _pago_comanda(B)["pagos"]}}),
     ("GET", f"/api/pagos/detalles/comanda/{RID}", {}),
     ("GET", f"/api/pagos/detalles/estancia/{RID}", {}),
     ("GET", f"/api/pagos/detalles/reservacion/{RID}", {}),

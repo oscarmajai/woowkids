@@ -259,8 +259,21 @@ def _reservacion(suc: str) -> dict[str, Any]:
     }
 
 
-def _metodo() -> str:
-    return IDS["_metodo"]
+def _venta() -> dict[str, Any]:
+    """Venta POS con un producto de la sucursal A (para B: 404)."""
+    return {
+        "total_final": 95,
+        "detalles_comanda": [
+            {
+                "producto_id": IDS["producto"],
+                "nombre": "C1 Pizza A",
+                "cantidad": 1,
+                "precio_unitario": 95,
+                "subtotal": 95,
+            }
+        ],
+        "pagos": [{"metodo_pago_id": IDS["_efectivo"], "monto": 95}],
+    }
 
 
 CASOS: list[Caso] = [
@@ -462,6 +475,7 @@ CASOS: list[Caso] = [
     Caso("GET", "/api/pagos/detalles/estancia/{registro}", 404),
     Caso("GET", "/api/pagos/detalles/reservacion/{reservacion}", 404),
     Caso("PATCH", "/api/comandas/{comanda}/estado", 404, json=lambda s: {"estado_actual": "E"}),
+    Caso("POST", "/api/pagos/completar", 404, json=lambda s: _venta()),
     # ── Lealtad y sucursal ──
     Caso("GET", "/api/lealtad/configuracion?sucursal_id={suc}", 403),
     Caso("GET", "/api/lealtad/reporte?sucursal_id={suc}", 403),
@@ -493,6 +507,9 @@ async def entorno() -> AsyncIterator[Any]:
         )
         IDS["_metodo"] = str(
             await conn.fetchval("SELECT id FROM public.metodos_pago ORDER BY nombre LIMIT 1")
+        )
+        IDS["_efectivo"] = str(
+            await conn.fetchval("SELECT id FROM public.metodos_pago WHERE nombre = 'Efectivo'")
         )
         await permission_service.load_cache(conn)
 
