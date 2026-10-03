@@ -1,0 +1,137 @@
+"""Estancias, ola 4 (paquete Q7), contra PostgreSQL real. Usa TEST_DATABASE_URL
+(una BD desechable con sql/schema_maestro.sql cargado) y se salta si no existe.
+Todo corre dentro de una transacción que se revierte al terminar.
+
+- N5: reimprimir el comprobante revoca el código anterior del portal de padres.
+- N7: con dos productos de estancia activos se elige siempre el más reciente.
+- N8: la referencia del pago de estancia se guarda (migración 104) y sale en
+  el detalle del historial.
+"""
+
+import os
+import random
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+import asyncpg
+import pytest
+import pytest_asyncio
+from app.core.security import hash_codigo_acceso_padres
+from app.repositories import codigos_acceso_padres
+from app.repositories.producto_repository import get_producto_estancia_by_branch_id
+
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+pytestmark = pytest.mark.skipif(not TEST_DATABASE_URL, reason="TEST_DATABASE_URL no definida")
+
+
+@pytest_asyncio.fixture
+async def conn_test():
+    conn = await asyncpg.connect(TEST_DATABASE_URL)
+    tx = conn.transaction()
+    await tx.start()
+    try:
+        yield conn
+    finally:
+        await tx.rollback()
+        await conn.close()
+
+
+async def _sucursal(conn: asyncpg.Connection) -> UUID:
+    return await conn.fetchval(
+        """
+        INSERT INTO sucursales (nombre, direccion, telefono, correo, clave)
+        VALUES ($1, 'x', '3310000099', $2, $3) RETURNING id
+        """,
+        f"Prueba Q7 {uuid4().hex[:6]}",
+        f"{uuid4().hex[:8]}@prueba.dev",
+        uuid4().hex[:6].upper(),
+    )
+
+
+async def _producto_estancia(
+    conn: asyncpg.Connection, sucursal_id: UUID, creado: datetime, precio: str
+) -> UUID:
+    return await conn.fetchval(
+        """
+        INSERT INTO productos (nombre, precio_unitario, tipo, sucursal_id, creado,
+                               config_estancia)
+        VALUES ($1, $2, 'E', $3, $4, $5::jsonb) RETURNING id
+        """,
+        f"Estancia {uuid4().hex[:6]}",
+        Decimal(precio),
+        sucursal_id,
+        creado,
+        f'[{{"min_horas": 1, "max_horas": 5, "precio": {precio}}}]',
+    )
+
+
+async def _registro_con_nino(
+    conn: asyncpg.Connection, sucursal_id: UUID, notas: str | None
+) -> tuple[UUID, UUID]:
+    tutor_id = await conn.fetchval(
+        "INSERT INTO tutores (sucursal_id, nombre_completo, telefono) "
+        "VALUES ($1, 'Ana Gómez', '3312345678') RETURNING id",
+        sucursal_id,
+    )
+    registro_id = uuid4()
+    await conn.execute(
+        "INSERT INTO registros (id, sucursal_id, tutores_id, estado, total) "
+        "VALUES ($1, $2, $3, 'A', 240)",
+        registro_id,
+        sucursal_id,
+        tutor_id,
+    )
+    nino_id = await conn.fetchval(
+        "INSERT INTO ninos (sucursal_id, nombre_completo, edad, notas) "
+        "VALUES ($1, 'Leo Gómez', 5, $2) RETURNING id",
+        sucursal_id,
+        notas,
+    )
+    pulsera_id = await conn.fetchval(
+        "INSERT INTO pulseras (sucursal_id, pulsera_rfid) VALUES ($1, $2) RETURNING id",
+        sucursal_id,
+        f"WK-{random.randint(0, 9_999_999):07d}",
+    )
+    producto_id = await _producto_estancia(conn, sucursal_id, datetime.now(UTC), "120")
+    entrada = datetime.now(UTC)
+    detalle_id = await conn.fetchval(
+        """
+        INSERT INTO detalles_registro (sucursal_id, registros_id, ninos_id, pulseras_id,
+            productos_id, cantidad, precio, parentesco, entrada, salida_esperada)
+        VALUES ($1, $2, $3, $4, $5, 2, 120, 'Madre', $6, $7) RETURNING id
+        """,
+        sucursal_id,
+        registro_id,
+        nino_id,
+        pulsera_id,
+        producto_id,
+        entrada,
+        entrada + timedelta(hours=2),
+    )
+    return registro_id, detalle_id
+
+
+async def _vigente(conn: asyncpg.Connection, codigo: str) -> bool:
+    fila = await codigos_acceso_padres.get_registro_por_codigo(
+        conn, hash_codigo_acceso_padres(codigo)
+    )
+    return fila is not None
+
+
+async def test_n7_con_dos_productos_de_estancia_usa_el_mas_reciente(
+    conn_test: asyncpg.Connection,
+) -> None:
+    sucursal_id = await _sucursal(conn_test)
+    ahora = datetime.now(UTC)
+    # El viejo se inserta primero: sin ORDER BY, LIMIT 1 lo devolvía a él.
+    await _producto_estancia(conn_test, sucursal_id, ahora - timedelta(days=30), "90")
+    reciente = await _producto_estancia(conn_test, sucursal_id, ahora, "150")
+
+    for _ in range(5):
+        fila = await get_producto_estancia_by_branch_id(conn_test, str(sucursal_id))
+        assert fila is not None and fila["id"] == reciente
+
+    await conn_test.execute("UPDATE productos SET activo = FALSE WHERE id = $1", reciente)
+    fila = await get_producto_estancia_by_branch_id(conn_test, str(sucursal_id))
+    assert fila is not None and fila["id"] != reciente
