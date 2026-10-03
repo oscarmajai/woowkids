@@ -524,11 +524,23 @@ async def test_cancelar_pagada_con_tarjeta_no_mueve_el_efectivo(esc: Esc) -> Non
 
 
 async def test_admin_de_otra_sucursal_no_autoriza(esc: Esc) -> None:
+    # Desde A16 el admin de otra sucursal ya no obtiene token: validar-pin-admin
+    # lo rechaza antes de probar el PIN. La revisión al consumir el token
+    # (ADMIN_NO_AUTORIZADO) queda como defensa en profundidad.
     cid = await _cobrada(esc)
-    token = await _token_admin(esc, email=esc.admin_otra_email)
-    r = await _cancelar(esc.cajero, cid, token_pin_admin=token)
+    r = await esc.cajero.post(
+        "/api/turnos-caja/validar-pin-admin",
+        json={
+            "turno_id": str(esc.apertura),
+            "admin_email": esc.admin_otra_email,
+            "pin": PIN_ADMIN,
+        },
+    )
     assert r.status_code == 403
-    assert r.json()["detail"]["code"] == "ADMIN_NO_AUTORIZADO"
+    assert r.json()["detail"]["code"] == "AUTORIZADOR_NO_VALIDO"
+    r = await _cancelar(esc.cajero, cid, token_pin_admin="token-inexistente")
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "PIN_TOKEN_REQUERIDO"
     assert tuple(await _comanda(esc, cid)) == ("P", True)
     assert await _devoluciones(esc, cid) == []
 
