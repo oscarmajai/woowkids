@@ -347,7 +347,12 @@
                     <div class="service-card__body">
                       <div class="service-card__name">{{ svc.nombre }}</div>
                       <div class="service-card__desc">{{ svc.descripcion }}</div>
-                      <div class="service-card__price">{{ fmt(parseFloat(svc.precio)) }}</div>
+                      <div class="service-card__price">
+                        {{ fmt(parseFloat(svc.precio)) }}
+                        <span class="service-card__unidad">{{
+                          etiquetaUnidadExtra(svc.unidad)
+                        }}</span>
+                      </div>
                       <q-btn
                         :unelevated="selectedExtraIds.includes(svc.id)"
                         :flat="!selectedExtraIds.includes(svc.id)"
@@ -759,9 +764,11 @@
                     }}</span>
                   </div>
                   <template v-if="extrasSeleccionados.length">
-                    <div v-for="e in extrasSeleccionados" :key="e.id" class="resumen-row">
-                      <span>{{ e.nombre }}</span
-                      ><span>{{ fmt(parseFloat(e.precio)) }}</span>
+                    <div v-for="e in extrasCotizados" :key="e.id" class="resumen-row">
+                      <span
+                        >{{ e.nombre
+                        }}<template v-if="e.cantidad > 1"> × {{ e.cantidad }}</template></span
+                      ><span>{{ fmt(e.importe) }}</span>
                     </div>
                   </template>
                   <div v-else class="resumen-row">
@@ -976,7 +983,9 @@ import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import type { AppliedPayment } from '@/types/payments'
 import { horasFacturables } from '@/utils/horario'
 import {
+  cantidadExtra,
   diasParaEvento,
+  etiquetaUnidadExtra,
   exigeLiquidacionAlReservar,
   montoPorPorcentaje as montoDePorcentaje,
   porcentajeAnticipoMinimo,
@@ -1461,10 +1470,20 @@ const precioPulserasNum = computed(
     horasSeleccionadas.value,
 )
 
+/**
+ * Extras elegidos con la cantidad que les toca por su unidad (M15): por persona
+ * = niños, por hora = horas del evento, por evento = 1. Es solo la vista
+ * previa: el servidor calcula lo mismo y, si no coincide, responde 409.
+ */
+const extrasCotizados = computed(() =>
+  extrasSeleccionados.value.map((e) => {
+    const cantidad = cantidadExtra(e.unidad, form.value.ninos, horasSeleccionadas.value)
+    return { ...e, cantidad, importe: parseFloat(e.precio) * cantidad }
+  }),
+)
+
 const extraServicesNum = computed(() =>
-  extrasStore.activos
-    .filter((e) => selectedExtraIds.value.includes(e.id))
-    .reduce((sum, e) => sum + parseFloat(e.precio), 0),
+  extrasCotizados.value.reduce((sum, e) => sum + e.importe, 0),
 )
 
 const subtotal = computed(
@@ -1620,8 +1639,11 @@ function conceptosTicket(): TicketConcepto[] {
       importe: precioUnitarioProducto(item.producto_id) * item.cantidad,
     })
   }
-  for (const extra of extrasSeleccionados.value) {
-    lineas.push({ descripcion: extra.nombre, importe: parseFloat(extra.precio) })
+  for (const extra of extrasCotizados.value) {
+    lineas.push({
+      descripcion: extra.cantidad > 1 ? `${extra.nombre} × ${extra.cantidad}` : extra.nombre,
+      importe: extra.importe,
+    })
   }
   return lineas
 }
@@ -1761,10 +1783,11 @@ const confirmarReservacion = async () => {
         anticipo: String(montoPagado.value),
         estado: 'confirmada',
       },
-      extras: selectedExtraIds.value
-        .map((extraId) => extrasStore.activos.find((e) => e.id === extraId))
-        .filter((extra): extra is NonNullable<typeof extra> => !!extra)
-        .map((extra) => ({ extra_id: extra.id, cantidad: 1, precio_unitario: extra.precio })),
+      extras: extrasCotizados.value.map((extra) => ({
+        extra_id: extra.id,
+        cantidad: extra.cantidad,
+        precio_unitario: extra.precio,
+      })),
       productos: productosAdicionales.value.map((item) => ({
         producto_id: item.producto_id,
         cantidad: item.cantidad,
@@ -1883,6 +1906,12 @@ const confirmarReservacion = async () => {
   &:last-child {
     border-bottom: none;
   }
+}
+
+.service-card__unidad {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .aviso-pulseras {

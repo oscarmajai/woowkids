@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   calcularPulseras,
+  cantidadExtra,
   dentroDePlazo,
   diasParaEvento,
   exigeLiquidacionAlReservar,
@@ -10,6 +11,7 @@ import {
   porcentajeAnticipoMinimo,
   recalcularReservacion,
   sumarHoras,
+  totalExtras,
 } from './reservacionPrecio'
 import type { Reservaciones } from '@/types/reservaciones'
 
@@ -111,6 +113,42 @@ describe('recalcularReservacion', () => {
     expect(subida.precio_total).toBe('11200')
     const regreso = recalcularReservacion(RESERVACION, 50, { invitados: 10 })
     expect(regreso.precio_total).toBe(RESERVACION.precio_total)
+  })
+
+  it('recalcula los extras por persona y por hora (M15), igual que el servidor', () => {
+    const conExtras = {
+      ...RESERVACION,
+      precio_extras: '1850', // 10 × 35 + 3 × 350 + 450
+      precio_total: '8550',
+    } as Reservaciones
+    const extras = [
+      { unidad: 'persona', precio_unitario: '35', cantidad: 10 },
+      { unidad: 'hora', precio_unitario: '350', cantidad: 3 },
+      { unidad: 'evento', precio_unitario: '450', cantidad: 1 },
+    ]
+    const r = recalcularReservacion(conExtras, 50, { invitados: 15, horas: 4 }, extras)
+    // extras: 15 × 35 + 4 × 350 + 450 = 2375; pulseras 50 × 15 × 4 = 3000
+    expect(r.precio_extras).toBe('2375')
+    expect(r.precio_total).toBe(String(5000 + 3000 + 200 + 2375))
+  })
+
+  it('sin extras guardados conserva el precio_extras de la reservación', () => {
+    const legado = { ...RESERVACION, precio_extras: '485' } as Reservaciones
+    expect(recalcularReservacion(legado, 50, { invitados: 20 }).precio_extras).toBe('485')
+  })
+})
+
+describe('cantidadExtra (M15)', () => {
+  it('por persona = invitados, por hora = horas, por evento = 1', () => {
+    expect(cantidadExtra('persona', 12, 3)).toBe(12)
+    expect(cantidadExtra('hora', 12, 3)).toBe(3)
+    expect(cantidadExtra('evento', 12, 3)).toBe(1)
+    expect(cantidadExtra(undefined, 12, 3)).toBe(1)
+  })
+
+  it('la bolsita de $35 por persona para 12 niños suma $420, no $35', () => {
+    const extras = [{ unidad: 'persona', precio_unitario: '35', cantidad: 1 }]
+    expect(totalExtras(extras, 12, 3)).toBe(420)
   })
 })
 
