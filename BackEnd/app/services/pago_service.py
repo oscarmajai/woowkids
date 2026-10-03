@@ -34,7 +34,7 @@ from app.schemas.pagos import (
     PaymentOut,
     PaymentRequest,
 )
-from app.services import inventario_service, lealtad_service, precios_venta
+from app.services import inventario_service, lealtad_service, precios_venta, turnos_caja_service
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -186,6 +186,11 @@ async def completar_pago(
         )
 
     async with conn.transaction():
+        # N1: bloqueo compartido de la apertura antes de nada (orden de
+        # bloqueo de caja: apertura_caja primero) y el turno debe seguir
+        # ABIERTA: un cobro ya no entra a la mitad del inicio de un conteo o
+        # de un cierre.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         # Folio de ticket secuencial por sucursal (QA #21): el backend asigna
         # ticket_numero de forma atómica dentro de esta transacción.
         # body.ticket_numero (lo que mande el front, si manda algo) queda solo

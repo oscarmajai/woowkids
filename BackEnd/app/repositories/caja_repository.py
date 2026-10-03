@@ -442,15 +442,35 @@ async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[
     entonces lee los datos ya actualizados (C4).
 
     FOR NO KEY UPDATE y no FOR UPDATE a propósito: no choca con el FOR KEY SHARE
-    que toma la llave foránea de movimientos_caja al insertar, así que los cobros
-    del POS nunca esperan a un retiro ni a un cierre. Es seguro porque un cobro
-    nunca baja el efectivo (el cambio no puede exceder el efectivo recibido,
-    validaciones_pago.validar_cambio). Orden de bloqueo: apertura_caja siempre
-    primero."""
+    que toma la llave foránea de movimientos_caja al insertar (un retiro o un
+    ingreso insertan su movimiento con la apertura ya bloqueada). N1: sí choca
+    con el FOR SHARE de bloquear_apertura_para_cobro, así que un cobro en curso
+    termina antes de que empiece el conteo o el cierre, y un cobro que llega
+    durante una transición espera y después ve el estado nuevo. Orden de
+    bloqueo: apertura_caja siempre primero."""
     apertura_uuid = _uuid_o_none(apertura_id)
     if apertura_uuid is None:
         return None
     row = await conn.fetchrow(_SELECT_APERTURA_POR_ID + " FOR NO KEY UPDATE OF a", apertura_uuid)
+    return dict(row) if row else None
+
+
+async def bloquear_apertura_para_cobro(
+    conn: asyncpg.Connection, apertura_id: str
+) -> dict[str, Any] | None:
+    """N1: bloqueo compartido (FOR SHARE) de la apertura para la transacción
+    de un cobro (el llamador DEBE estar en `conn.transaction()`). Dos cobros
+    del mismo turno no se esperan entre sí, pero un cobro y una transición del
+    turno (iniciar conteo, cierre, retiros: FOR NO KEY UPDATE en
+    bloquear_apertura) se serializan, así que el estado leído aquí sigue
+    valiendo hasta que el cobro confirma."""
+    apertura_uuid = _uuid_o_none(apertura_id)
+    if apertura_uuid is None:
+        return None
+    row = await conn.fetchrow(
+        "SELECT id, cajero_id, estado FROM public.apertura_caja WHERE id = $1 FOR SHARE",
+        apertura_uuid,
+    )
     return dict(row) if row else None
 
 

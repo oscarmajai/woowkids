@@ -31,7 +31,7 @@ from app.repositories.reservaciones_repository import obtener_evento_mas_cercano
 from app.repositories.tutores import get_tutor_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
-from app.services import lealtad_service
+from app.services import lealtad_service, turnos_caja_service
 from app.services.padres_service import emitir_codigo_acceso
 from app.services.tramos_estancia import tramos_de_producto
 from app.services.validaciones_pago import validar_cambio
@@ -77,6 +77,8 @@ async def create_estancia(
     )
 
     async with conn.transaction():
+        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
         if data.reservacionId is not None:

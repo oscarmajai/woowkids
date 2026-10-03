@@ -9,6 +9,7 @@ from app.repositories.caja_repository import registrar_cambio_caja, registrar_mo
 from app.repositories.pagos_comanda import pago_create
 from app.repositories.registros import obtener_saldo_para_cobro
 from app.schemas.pagos import PagoEstanciaExtraRequest
+from app.services import turnos_caja_service
 from app.services.validaciones_pago import validar_cambio
 
 
@@ -29,6 +30,8 @@ async def pago_create_service(
     )
 
     async with conn.transaction():
+        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         registro = await obtener_saldo_para_cobro(conn, registro_id)
         if not registro or registro["sucursal_id"] != sucursal_id:
             raise HTTPException(404, "Registro no encontrado")

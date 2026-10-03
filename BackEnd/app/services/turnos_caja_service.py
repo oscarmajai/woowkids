@@ -26,6 +26,7 @@ from app.repositories.caja_repository import (
     actualizar_conteo_apertura,
     actualizar_estado_apertura,
     bloquear_apertura,
+    bloquear_apertura_para_cobro,
     calcular_efectivo_disponible,
     contar_historial_cierres,
     contar_ventas_apertura,
@@ -134,6 +135,22 @@ class CredencialesAdminInvalidasError(PinInvalidoError):
 
     def __init__(self, mensaje: str = "Credenciales de administrador incorrectas."):
         super().__init__(mensaje, code="CREDENCIALES_INVALIDAS")
+
+
+class TurnoNoAbiertoError(HTTPException):
+    """RN-APE-005 / RN-CIE-001: sin turno OPERANDO (ABIERTA) no se cobra."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "TURNO_NO_ABIERTO",
+                "message": (
+                    "Debes tener un turno de caja abierto (operando) para "
+                    "registrar ventas o pagos."
+                ),
+            },
+        )
 
 
 class TurnoAjenoError(HTTPException):
@@ -880,17 +897,21 @@ async def obtener_apertura_operando_id(conn: asyncpg.Connection, user_id: str) -
     Devuelve el id de la apertura activa para que el llamador registre el movimiento."""
     apertura = await get_apertura_activa_por_usuario(conn, user_id)
     if not apertura or apertura["estado"] != "ABIERTA":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "TURNO_NO_ABIERTO",
-                "message": (
-                    "Debes tener un turno de caja abierto (operando) para "
-                    "registrar ventas o pagos."
-                ),
-            },
-        )
+        raise TurnoNoAbiertoError()
     return str(apertura["id"])
+
+
+async def bloquear_turno_para_cobro(conn: asyncpg.Connection, apertura_caja_id: str) -> None:
+    """N1: la validación de obtener_apertura_operando_id corre fuera de
+    cualquier bloqueo, así que un cobro podía entrar justo cuando empezaba el
+    conteo o el cierre. Esta función se llama al principio de la transacción
+    del cobro: toma un bloqueo compartido de la apertura (los cobros del
+    mismo turno no se esperan entre sí, pero sí esperan a una transición del
+    turno y la hacen esperar) y vuelve a exigir que el turno esté ABIERTA.
+    Debe correr dentro de `conn.transaction()`."""
+    apertura = await bloquear_apertura_para_cobro(conn, apertura_caja_id)
+    if not apertura or apertura["estado"] != "ABIERTA":
+        raise TurnoNoAbiertoError()
 
 
 async def verificar_turno_abierto(conn: asyncpg.Connection, user_id: str) -> None:
