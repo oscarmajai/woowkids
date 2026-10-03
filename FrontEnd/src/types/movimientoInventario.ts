@@ -35,9 +35,13 @@ export interface CogsRenglon {
 }
 
 // KPIs del reporte de costo de ventas: ventas, margen y merma del periodo.
+// margen = ventas - costo de ventas - merma; merma = manual + faltante de los
+// conteos físicos (M24).
 export interface ResumenCogs {
   ventasTotales: number
   costoVentas: number
   margen: number
   merma: number
+  mermaManual: number
+  mermaConteo: number
 }

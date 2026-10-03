@@ -34,12 +34,17 @@ class CogsRenglonOut(BaseModel):
 
 
 class ResumenCogsOut(BaseModel):
-    """KPIs agregados del reporte de costo de ventas (B7 pendiente #3)."""
+    """KPIs agregados del reporte de costo de ventas (B7 pendiente #3).
+
+    `margen` = ventas - costo de ventas - merma. `merma` = merma manual +
+    faltante de conteos físicos (M24), con su desglose."""
 
     ventas_totales: Decimal
     costo_ventas: Decimal
     margen: Decimal
     merma: Decimal
+    merma_manual: Decimal = Decimal("0")
+    merma_conteo: Decimal = Decimal("0")
 
     model_config = {"from_attributes": True}
 
