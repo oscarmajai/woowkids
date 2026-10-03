@@ -23,10 +23,12 @@ import asyncpg
 from app.core.database import get_pool
 from app.repositories import reservaciones_repository
 
-logger = logging.getLogger("mercury.reservaciones_vencidas_scheduler")
-
 # Plazo de liquidación: el evento debe estar pagado esta cantidad de días antes.
-DIAS_LIMITE_LIQUIDACION = 7
+# Vive junto a las reglas de cobro porque el alta usa el mismo plazo para exigir
+# el 100 % al reservar (si no, el scheduler cancelaría la reservación recién hecha).
+from app.services.reservacion_precio import DIAS_LIMITE_LIQUIDACION
+
+logger = logging.getLogger("mercury.reservaciones_vencidas_scheduler")
 
 # Una hora. El plazo se mide en días, así que revisar más seguido no adelanta
 # ninguna cancelación y sólo agrega consultas.

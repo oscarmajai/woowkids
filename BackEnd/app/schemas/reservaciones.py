@@ -41,7 +41,11 @@ class ReservacionesBase(BaseModel):
 
 
 class ReservacionesCrear(ReservacionesBase):
-    pass
+    """Alta de reservación. Los campos de precio, `anticipo` y `estado` se
+    aceptan por compatibilidad pero los decide el servidor: el precio se
+    recalcula con el paquete y el catálogo (si `precio_total` no coincide,
+    409), el anticipo es lo realmente cobrado y el estado depende del cobro
+    (C2)."""
 
 
 class ReservacionesUpdate(BaseModel):
@@ -56,15 +60,14 @@ class ReservacionesUpdate(BaseModel):
     hora_inicio: time | None = None
     hora_fin: time | None = None
     numero_personas: int | None = Field(None, gt=0)
-    precio_base: Decimal | None = None
-    precio_personas_extra: Decimal | None = None
     horas_reservadas: int | None = Field(None, ge=0)
-    precio_horas: Decimal | None = None
-    precio_productos: Decimal | None = None
-    precio_extras: Decimal | None = None
-    descuento: Decimal | None = None
+    # Cambiar invitados u horas recalcula en el servidor las pulseras y el
+    # total con la tarifa del paquete. Estos dos solo se comparan contra ese
+    # cálculo (409 si no coinciden): el precio nunca lo fija el cliente (C2).
+    # precio_base, extras, productos, descuento y anticipo ya no se editan por
+    # aquí; si llegan, se ignoran.
+    precio_personas_extra: Decimal | None = None
     precio_total: Decimal | None = None
-    anticipo: Decimal | None = None
     estado: Literal["pendiente", "confirmada", "en_curso", "completada", "cancelada"] | None = None
     notas: str | None = None
     activo: bool | None = None

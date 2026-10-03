@@ -11,6 +11,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Sin .env (worktrees, CI) `app.core.config.Settings()` no se puede instanciar al
+# importar los servicios. Se rellenan solo las variables que falten, después de
+# leer el .env, así que nunca pisan la configuración real. Los tests contra una
+# BD desechable usan TEST_DATABASE_URL, no esta DATABASE_URL.
+for _var, _valor in {
+    "SECRET_KEY": "test-secret-key",
+    "DATABASE_URL": "postgresql://user:pass@localhost:5432/test",
+    "MINIO_ACCESS_KEY": "test-access-key",
+    "MINIO_SECRET_KEY": "test-secret-key",
+}.items():
+    os.environ.setdefault(_var, _valor)
+
 
 @pytest_asyncio.fixture
 async def conn():
