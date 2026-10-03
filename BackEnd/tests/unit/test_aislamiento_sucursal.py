@@ -13,7 +13,7 @@ reventaría con 500 y el test fallaría.
 
 Para agregar un endpoint basta con sumarlo a ``CASOS_403`` o ``CASOS_404``.
 Los casos positivos (misma sucursal) viven en el test de integración
-``tests/integration/test_aislamiento_sucursal_db.py``.
+``tests/db/test_aislamiento_sucursal_db.py``.
 """
 
 from __future__ import annotations

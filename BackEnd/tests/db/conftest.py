@@ -1,7 +1,7 @@
 """Fixtures para pruebas de concurrencia contra un PostgreSQL REAL y desechable.
 
-A diferencia de tests/integration (que usa la BD compartida de desarrollo), aquí
-todo corre contra `TEST_DATABASE_URL`, que debe apuntar a una BD de prueba con
+Nunca se usa la BD compartida de desarrollo (DATABASE_URL): todo corre contra
+`TEST_DATABASE_URL`, que debe apuntar a una BD de prueba con
 `sql/schema_maestro.sql` cargado. Si la variable no existe, todos los tests de
 esta carpeta se saltan. Cada test crea sus propios datos con nombres únicos, así
 que se pueden correr varias veces sobre la misma BD sin limpiarla.

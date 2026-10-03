@@ -1,7 +1,7 @@
 """Cada alta, edición o baja de un pago de reservación recalcula
 `reservaciones.monto_pagado` en la misma transacción, con la reservación
 bloqueada (C3). Sin BD: repositories simulados; el SQL real se prueba en
-tests/integration/test_reservaciones_saldo_pg.py."""
+tests/db/test_reservaciones_saldo_pg.py."""
 
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime

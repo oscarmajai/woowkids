@@ -4,7 +4,7 @@
 Usa una BD desechable con sql/schema_maestro.sql cargado:
 
     TEST_DATABASE_URL=postgresql://dev:dev@localhost:PUERTO/woowkids \\
-        pytest tests/integration/test_precios_servidor_pos_pg.py
+        pytest tests/db/test_precios_servidor_pos_pg.py
 
 Se salta si TEST_DATABASE_URL no está definida. Cada prueba crea su propia
 sucursal, cajero, caja, apertura y catálogo con ids nuevos, así que no
