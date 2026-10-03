@@ -145,6 +145,7 @@ import StateBlock from '@/components/ui/StateBlock.vue'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import type { FilterChip } from '@/types/ui'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { compraPorRecibir } from '@/utils/inventario'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
@@ -214,7 +215,10 @@ const valorInventario = computed(() =>
   ),
 )
 
-const comprasPendientes = computed(() => comprasStore.compras.filter((c) => c.estado === 'P'))
+// B6: las parciales también tienen mercancía por llegar.
+const comprasPendientes = computed(() =>
+  comprasStore.compras.filter((c) => compraPorRecibir(c.estado)),
+)
 
 const insumosParaReponer = computed<Insumo[]>(() => [...criticos.value, ...porReordenar.value])
 
