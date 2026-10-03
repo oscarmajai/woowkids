@@ -57,6 +57,10 @@ class TurnoResponse(BaseModel):
     nombre: str
     hora_inicio: time
     hora_fin: time
+    # M8: días en que aplica (0 = lunes ... 6 = domingo; None = todos) y si el
+    # horario corresponde a la hora local actual de la sucursal de la sesión.
+    dias: list[int] | None = None
+    vigente: bool = False
 
 
 # ── Apertura de Caja ────────────────────────────────────────────────────────

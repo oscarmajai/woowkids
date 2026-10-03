@@ -14,6 +14,8 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
 from app.core.scope import resolver_sucursal
+from app.core.utils import get_mexico_now
+from app.repositories import sucursales as sucursales_repository
 from app.schemas.auth import TokenData
 from app.schemas.caja import (
     AbrirTurnoPayload,
@@ -81,7 +83,15 @@ async def listar_turnos(
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[TurnoResponse]:
-    return await turnos_caja_service.obtener_turnos(conn)
+    # M8: `vigente` se calcula con la hora local de la sucursal de la sesión
+    # (o la del selector, para AdministradorSistema); sin sucursal, con la
+    # hora de México.
+    ahora = None
+    if current_user.branch_id:
+        ahora = await sucursales_repository.ahora_en_sucursal(conn, current_user.branch_id)
+    if ahora is None:
+        ahora = get_mexico_now().replace(tzinfo=None)
+    return await turnos_caja_service.obtener_turnos(conn, ahora)
 
 
 @router.get(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -235,7 +235,36 @@ async def obtener_cajas(
     ]
 
 
-async def obtener_turnos(conn: asyncpg.Connection) -> list[TurnoResponse]:
+def horario_vigente(
+    hora_inicio: time, hora_fin: time, dias: list[int] | None, ahora: datetime
+) -> bool:
+    """M8: True si `ahora` (hora de pared de la sucursal) cae dentro del
+    horario, con los extremos incluidos y a nivel de minuto (un horario que
+    termina a las 23:59 vale hasta las 23:59:59). Un horario que cruza la
+    medianoche (22:00-06:00) vale después del inicio y antes del fin; en la
+    parte de la madrugada cuenta como del día en que empezó. `dias` usa
+    0 = lunes ... 6 = domingo; None o vacío = todos los días."""
+    minuto = ahora.time().replace(second=0, microsecond=0)
+    inicio = hora_inicio.replace(second=0, microsecond=0)
+    fin = hora_fin.replace(second=0, microsecond=0)
+    dia = ahora.weekday()
+    if inicio <= fin:
+        if not inicio <= minuto <= fin:
+            return False
+    elif minuto >= inicio:
+        pass
+    elif minuto <= fin:
+        dia = (dia - 1) % 7
+    else:
+        return False
+    return not dias or dia in dias
+
+
+async def obtener_turnos(
+    conn: asyncpg.Connection, ahora: datetime | None = None
+) -> list[TurnoResponse]:
+    """Horarios activos. `ahora` es la hora local de la sucursal de la sesión
+    (sin zona); con ella se marca cuál está vigente (M8). Sin ella, ninguno."""
     rows = await listar_turnos(conn)
     return [
         TurnoResponse(
@@ -243,6 +272,11 @@ async def obtener_turnos(conn: asyncpg.Connection) -> list[TurnoResponse]:
             nombre=r["nombre"],
             hora_inicio=r["hora_inicio"],
             hora_fin=r["hora_fin"],
+            dias=list(r["dias"]) if r.get("dias") else None,
+            vigente=(
+                ahora is not None
+                and horario_vigente(r["hora_inicio"], r["hora_fin"], r.get("dias"), ahora)
+            ),
         )
         for r in rows
     ]

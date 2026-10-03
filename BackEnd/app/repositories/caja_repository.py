@@ -128,7 +128,7 @@ async def listar_cajas_por_sucursal(
 async def listar_turnos(conn: asyncpg.Connection) -> list[dict[str, Any]]:
     rows = await conn.fetch(
         """
-        SELECT id, nombre, hora_inicio, hora_fin
+        SELECT id, nombre, hora_inicio, hora_fin, dias
         FROM public.turnos
         WHERE activo = TRUE
         ORDER BY hora_inicio ASC
