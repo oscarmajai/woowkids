@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
+from app.core.scope import resolver_sucursal
 from app.schemas.auth import TokenData
 from app.schemas.caja import (
     AbrirTurnoPayload,
@@ -34,11 +35,19 @@ from app.schemas.caja import (
     TurnoActivoResponse,
     TurnoResponse,
 )
-from app.services import turnos_caja_service
+from app.services import alcance_service, turnos_caja_service
 from app.services.pdf_service import generar_pdf_arqueo
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
+
+
+def _sucursal_filtro(current_user: TokenData, sucursal_id: str | None) -> str | None:
+    """C1: la sucursal de la sesión para roles con sucursal fija (403 si piden
+    otra); AdministradorSistema usa el parámetro, el selector o todas."""
+    sucursal = resolver_sucursal(current_user, sucursal_id)
+    return str(sucursal) if sucursal is not None else None
+
 
 _ARQUEOS_CSV_CAMPOS = [
     "id",
@@ -75,10 +84,14 @@ async def listar_turnos(
 )
 async def listar_cajas(
     sucursal_id: str | None = Query(None),
-    _: TokenData = Depends(require_permission("cajas:listar")),
+    current_user: TokenData = Depends(require_permission("cajas:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[CajaResponse]:
-    return await turnos_caja_service.obtener_cajas(conn, sucursal_id)
+    # C1 (adm B1, caj2 B19): sin sucursal_id devolvía las cajas de todas las
+    # sucursales.
+    return await turnos_caja_service.obtener_cajas(
+        conn, _sucursal_filtro(current_user, sucursal_id)
+    )
 
 
 @router.post(
@@ -269,6 +282,7 @@ async def listar_retiros(
     current_user: TokenData = Depends(require_permission("retiros_parciales:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[RetiroParcialResponse]:
+    await alcance_service.asegurar_recurso(conn, current_user, "apertura_caja", turno_id)
     return await turnos_caja_service.listar_retiros(conn, turno_id)
 
 
@@ -287,12 +301,9 @@ async def listar_historial(
     current_user: TokenData = Depends(require_permission("turnos_caja:historial")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> HistorialArqueosResponse:
-    # Un Administrador de sucursal o Cajero solo puede ver su propia sucursal, sin importar
-    # qué sucursal_id se haya mandado por query param. Solo AdministradorSistema ve todas.
-    if current_user.role == "AdministradorSistema":
-        sucursal_efectiva = sucursal_id
-    else:
-        sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
+    # Un Administrador de sucursal o Cajero solo puede ver su propia sucursal
+    # (403 si pide otra). Solo AdministradorSistema ve todas.
+    sucursal_efectiva = _sucursal_filtro(current_user, sucursal_id)
 
     filtros = FiltrosHistorial(
         sucursal_id=sucursal_efectiva,
@@ -318,10 +329,7 @@ async def resumen_historial(
     current_user: TokenData = Depends(require_permission("turnos_caja:historial")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> ResumenHistorialArqueosOut:
-    if current_user.role == "AdministradorSistema":
-        sucursal_efectiva = sucursal_id
-    else:
-        sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
+    sucursal_efectiva = _sucursal_filtro(current_user, sucursal_id)
 
     filtros = FiltrosHistorial(
         sucursal_id=sucursal_efectiva,
@@ -344,10 +352,7 @@ async def exportar_historial(
     current_user: TokenData = Depends(require_permission("turnos_caja:historial")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> StreamingResponse:
-    if current_user.role == "AdministradorSistema":
-        sucursal_efectiva = sucursal_id
-    else:
-        sucursal_efectiva = str(current_user.branch_id) if current_user.branch_id else None
+    sucursal_efectiva = _sucursal_filtro(current_user, sucursal_id)
 
     filtros = FiltrosHistorial(
         sucursal_id=sucursal_efectiva,
