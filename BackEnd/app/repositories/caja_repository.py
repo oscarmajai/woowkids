@@ -380,36 +380,57 @@ async def get_apertura_activa_por_caja(
     return dict(row) if row else None
 
 
+_SELECT_APERTURA_POR_ID = """
+    SELECT
+        a.id,
+        a.caja_id,
+        a.cajero_id,
+        a.turno_id,
+        a.fondo_inicial,
+        a.estado,
+        a.monto_declarado,
+        a.conteo_json,
+        a.token_admin_jti,
+        a.creado AS fecha_apertura,
+        c.nombre AS caja_nombre,
+        c.codigo AS terminal,
+        c.sucursal_id,
+        COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
+        COALESCE(u.nombre_completo, u.email, 'Cajero') AS cajero_nombre
+    FROM public.apertura_caja a
+    INNER JOIN public.cajas c ON a.caja_id = c.id
+    LEFT JOIN public.sucursales s ON c.sucursal_id = s.id
+    LEFT JOIN public.usuarios u ON a.cajero_id = u.id
+    WHERE a.id = $1
+"""
+
+
 async def get_apertura_por_id(conn: asyncpg.Connection, apertura_id: str) -> dict[str, Any] | None:
     apertura_uuid = _uuid_o_none(apertura_id)
     if apertura_uuid is None:
         return None
-    row = await conn.fetchrow(
-        """
-        SELECT
-            a.id,
-            a.caja_id,
-            a.cajero_id,
-            a.turno_id,
-            a.fondo_inicial,
-            a.estado,
-            a.monto_declarado,
-            a.conteo_json,
-            a.token_admin_jti,
-            a.creado AS fecha_apertura,
-            c.nombre AS caja_nombre,
-            c.codigo AS terminal,
-            c.sucursal_id,
-            COALESCE(s.nombre, 'Sucursal Central') AS sucursal_nombre,
-            COALESCE(u.nombre_completo, u.email, 'Cajero') AS cajero_nombre
-        FROM public.apertura_caja a
-        INNER JOIN public.cajas c ON a.caja_id = c.id
-        LEFT JOIN public.sucursales s ON c.sucursal_id = s.id
-        LEFT JOIN public.usuarios u ON a.cajero_id = u.id
-        WHERE a.id = $1
-        """,
-        apertura_uuid,
-    )
+    row = await conn.fetchrow(_SELECT_APERTURA_POR_ID, apertura_uuid)
+    return dict(row) if row else None
+
+
+async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[str, Any] | None:
+    """Igual que get_apertura_por_id, pero bloquea la fila de apertura_caja hasta
+    el fin de la transacción en curso (el llamador DEBE estar dentro de
+    `conn.transaction()`). Serializa las operaciones que leen, validan y
+    escriben el efectivo o el estado de un mismo turno (retiros, ingresos,
+    conteo, revisión, cierre): la segunda espera a que la primera confirme y
+    entonces lee los datos ya actualizados (C4).
+
+    FOR NO KEY UPDATE y no FOR UPDATE a propósito: no choca con el FOR KEY SHARE
+    que toma la llave foránea de movimientos_caja al insertar, así que los cobros
+    del POS nunca esperan a un retiro ni a un cierre. Es seguro porque un cobro
+    nunca baja el efectivo (el cambio no puede exceder el efectivo recibido,
+    validaciones_pago.validar_cambio). Orden de bloqueo: apertura_caja siempre
+    primero."""
+    apertura_uuid = _uuid_o_none(apertura_id)
+    if apertura_uuid is None:
+        return None
+    row = await conn.fetchrow(_SELECT_APERTURA_POR_ID + " FOR NO KEY UPDATE OF a", apertura_uuid)
     return dict(row) if row else None
 
 
