@@ -8,6 +8,13 @@
       <span class="stay__name">{{ child.nino }}</span>
       <span class="stay__tutor">{{ child.tutor }} · {{ child.parentesco }}</span>
     </button>
+    <div v-if="nota" class="stay__notes" role="note">
+      <q-icon name="medical_information" size="17px" class="stay__notes-icon" />
+      <span class="stay__notes-text"
+        ><strong>Notas / alergias:</strong> {{ nota }}
+        <q-tooltip max-width="320px">{{ nota }}</q-tooltip>
+      </span>
+    </div>
     <div class="stay__figure">
       <span class="stay__time">{{ tiempo }}</span>
       <span class="stay__entry">Entró {{ horaEntrada }}</span>
@@ -117,6 +124,7 @@ import { useAccessControlStore } from '@/stores/accessControl'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 import FotosRegistroDialog from './FotosRegistroDialog.vue'
+import { notaVisible } from '@/utils/notasNino'
 
 const props = defineProps<{ child: ActiveChild }>()
 const store = useAccessControlStore()
@@ -133,6 +141,9 @@ const STATUS = {
 } as const
 
 const status = computed(() => STATUS[props.child.status])
+
+// M26: las notas / alergias se ven en la tarjeta, no solo en el detalle.
+const nota = computed(() => notaVisible(props.child.notas))
 
 // Cifra principal: minutos excedidos (+) o restantes.
 const tiempo = computed(() => {
@@ -256,6 +267,30 @@ function formatTelefono(telefono: string) {
   &__tutor {
     font-size: 12.5px;
     color: var(--text-secondary);
+  }
+
+  &__notes {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--tone-warn-bg);
+    color: var(--tone-warn-fg);
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  &__notes-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  &__notes-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   &__figure {

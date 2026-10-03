@@ -20,6 +20,10 @@
               {{ store.isEventoMode ? store.horasEvento : child.estimatedTime }} · salida
               {{ scheduledExit(child) }}
             </span>
+            <span v-if="notaVisible(child.notes)" class="reg-kid__notes">
+              <q-icon name="medical_information" size="15px" />
+              {{ notaVisible(child.notes) }}
+            </span>
           </div>
           <span class="reg-kid__band">{{ getBraceletLabel(child.rfidBracelet) }}</span>
         </div>
@@ -81,14 +85,16 @@
 
         <!-- Niños Registrados -->
         <div class="ticket-section-title">NIÑOS REGISTRADOS</div>
-        <div
-          v-for="child in store.savedChildren"
-          :key="child.id"
-          class="ticket-row items-center q-my-xs"
-        >
-          <span class="text-weight-bold text-ellipsis">{{ child.name }}</span>
-          <span>{{ child.age }} años</span>
-        </div>
+        <template v-for="child in store.savedChildren" :key="child.id">
+          <div class="ticket-row items-center q-my-xs">
+            <span class="text-weight-bold text-ellipsis">{{ child.name }}</span>
+            <span>{{ child.age }} años</span>
+          </div>
+          <!-- M26: las notas / alergias salen en el comprobante. -->
+          <div v-if="notaVisible(child.notes)" class="ticket-notes">
+            * Notas / alergias: {{ notaVisible(child.notes) }}
+          </div>
+        </template>
 
         <div class="ticket-divider">--------------------------------</div>
 
@@ -131,6 +137,7 @@ import { useRegistrationStore } from '@/stores/registration'
 import type { Child } from '@/stores/registration'
 import { useAuthStore } from '@/stores/auth'
 import QRCode from 'qrcode'
+import { notaVisible } from '@/utils/notasNino'
 
 defineEmits<{ (e: 'nuevo'): void }>()
 
@@ -340,6 +347,15 @@ function getBraceletLabel(braceletId: string) {
     color: var(--text-secondary);
   }
 
+  &__notes {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--tone-warn-fg);
+  }
+
   &__band {
     padding: 3px 8px;
     border-radius: 6px;
@@ -411,6 +427,13 @@ function getBraceletLabel(braceletId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ticket-notes {
+  font-size: 10px;
+  font-weight: bold;
+  margin: -2px 0 4px;
+  word-break: break-word;
 }
 
 .ticket-box {

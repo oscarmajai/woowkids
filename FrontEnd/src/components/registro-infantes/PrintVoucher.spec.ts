@@ -46,3 +46,27 @@ describe('PrintVoucher: QR del portal de padres (A17)', () => {
     expect(wrapper.find('img.qr-code').exists()).toBe(false)
   })
 })
+
+describe('PrintVoucher: notas / alergias en el comprobante (M26)', () => {
+  it('cada niño con notas las muestra en el ticket', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useRegistrationStore()
+    store.codigoAccesoPadres = 'codigo'
+    store.children[0].name = 'Santiago'
+    store.children[0].age = 5
+    store.children[0].notes = 'Alérgico al cacahuate'
+    store.saveChild(0)
+    store.addChild()
+    store.children[1].name = 'Regina'
+    store.children[1].age = 7
+    store.saveChild(1)
+
+    const wrapper = mount(PrintVoucher, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    const notas = wrapper.findAll('.ticket-notes')
+    expect(notas).toHaveLength(1)
+    expect(notas[0].text()).toContain('Alérgico al cacahuate')
+  })
+})

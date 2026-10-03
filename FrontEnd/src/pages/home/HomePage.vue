@@ -12,6 +12,7 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
 import { formatMXN } from '@/utils/formatoMoneda'
+import { avisosDeNotas } from '@/utils/notasNino'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
@@ -179,6 +180,12 @@ const pendientes = computed<Pendiente[]>(() => {
         ? { label: 'Checkout', run: () => irACheckout(child) }
         : undefined,
     })
+  }
+  // M26: cada niño en estancia con notas / alergias aparece aquí.
+  if (puede.estancias.value) {
+    for (const aviso of avisosDeNotas(acceso.activos)) {
+      lista.push({ ...aviso, icon: 'medical_information', tone: 'warn' })
+    }
   }
   for (const r of eventosHoy.value) {
     if (Number(r.saldo_pendiente) <= 0) continue
