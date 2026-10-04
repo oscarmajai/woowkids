@@ -1,9 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+from app.schemas.textos import Nombre150
 
 
 class PaqueteProductoItem(BaseModel):
@@ -13,7 +15,7 @@ class PaqueteProductoItem(BaseModel):
 
 class PaquetesBase(BaseModel):
     sucursal_id: UUID
-    nombre: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
+    nombre: Nombre150
     descripcion: str | None = None
     # Rango de invitados que soporta el paquete. El asistente de reservación solo
     # ofrece los paquetes cuyo rango cubre los niños que pidió el cliente.
@@ -42,7 +44,7 @@ class PaquetesCreate(PaquetesBase):
 
 
 class PaquetesUpdate(BaseModel):
-    nombre: str | None = Field(None, max_length=150)
+    nombre: Nombre150 | None = None
     descripcion: str | None = None
     min_invitados: int | None = Field(None, gt=0)
     max_invitados: int | None = Field(None, gt=0)

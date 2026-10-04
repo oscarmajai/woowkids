@@ -124,7 +124,7 @@ async def test_crear_rechaza_metodo_de_pago_inexistente(monkeypatch):
     monkeypatch.setattr(
         reservaciones_repository,
         "obtener_para_actualizar",
-        AsyncMock(return_value=_reservacion("1000.00")),
+        AsyncMock(return_value={**_reservacion("1000.00"), "saldo_pendiente": Decimal("1000.00")}),
     )
     monkeypatch.setattr(metodos_pago_repository, "existe", AsyncMock(return_value=False))
     insertar = AsyncMock()

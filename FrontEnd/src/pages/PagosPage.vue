@@ -234,7 +234,7 @@ import type { AppliedPayment } from '@/types/payments'
 import type { TicketPagoEventoProps } from '@/types/ticketPagoEvento'
 import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import TicketPagoEvento from '@/components/eventos/TicketPagoEvento.vue'
-import { resumenPorCobrar } from '@/utils/reservacionPrecio'
+import { fechaLimiteLiquidacionTexto, resumenPorCobrar } from '@/utils/reservacionPrecio'
 import {
   descontarCambio,
   resolverMetodoPagoId,
@@ -520,6 +520,7 @@ const onCobroExitoso = async (pagos: AppliedPayment[]) => {
         saldoPendiente: Math.max(0, saldoAntes - montoPagado),
         metodosPago: resumenMetodosPago(aplicados),
         notas: notasForm || null,
+        fechaLimiteLiquidacion: fechaLimiteLiquidacionTexto(res.fecha_evento),
       }
       ticketAbierto.value = true
     }

@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, EmailStr, Field
+
+from app.schemas.textos import Nombre150
 
 
 class ProveedorBase(BaseModel):
-    nombre: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
+    nombre: Nombre150
     contacto_nombre: str | None = Field(None, max_length=150)
     telefono: str | None = Field(None, max_length=20)
     email: EmailStr | None = None
@@ -21,7 +22,7 @@ class ProveedorCrear(ProveedorBase):
 
 
 class ProveedorUpdate(BaseModel):
-    nombre: str | None = Field(None, max_length=150)
+    nombre: Nombre150 | None = None
     contacto_nombre: str | None = Field(None, max_length=150)
     telefono: str | None = Field(None, max_length=20)
     email: EmailStr | None = None

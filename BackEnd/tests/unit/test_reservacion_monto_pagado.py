@@ -23,6 +23,7 @@ from app.schemas.pagos_reservacion import (
     PagosReservacionUpdate,
 )
 from app.services import pagos_reservacion, reservaciones_vencidas_scheduler
+from fastapi import HTTPException
 
 RESERVACION_ID = uuid4()
 PAGO_ID = uuid4()
@@ -57,6 +58,7 @@ def mocks(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     reservacion = {
         "id": RESERVACION_ID,
         "precio_total": Decimal("13815.00"),
+        "saldo_pendiente": Decimal("13815.00"),
         "telefono_cliente": "",
         "sucursal_id": uuid4(),
     }
@@ -112,14 +114,48 @@ async def test_el_cambio_se_descuenta_despues_de_registrarlo(
     assert mocks["recalcular"].await_count == 2
 
 
-async def test_editar_o_borrar_un_pago_recalcula_el_saldo(mocks: dict) -> None:
-    await pagos_reservacion.actualizar(
-        _conn(), PAGO_ID, PagosReservacionUpdate(monto=Decimal("1500"))
-    )
-    await pagos_reservacion.eliminar(_conn(), PAGO_ID)
+async def test_un_pago_registrado_no_cambia_de_monto_ni_se_borra(mocks: dict) -> None:
+    """N-A1 (prueba E2E de v1.2.0): cambiar el monto o borrar un pago recalculaba
+    el saldo, pero no revertía el movimiento de caja ni los puntos."""
+    with pytest.raises(HTTPException) as editar:
+        await pagos_reservacion.actualizar(
+            _conn(), PAGO_ID, PagosReservacionUpdate(monto=Decimal("1500"))
+        )
+    assert editar.value.status_code == 409
+    assert editar.value.detail["code"] == "PAGO_NO_EDITABLE"
 
-    assert mocks["recalcular"].await_count == 2
-    assert mocks["bloquear"].await_count == 2
+    with pytest.raises(HTTPException) as borrar:
+        await pagos_reservacion.eliminar(_conn(), PAGO_ID)
+    assert borrar.value.status_code == 409
+    assert borrar.value.detail["code"] == "PAGO_NO_ELIMINABLE"
+
+    mocks["recalcular"].assert_not_awaited()
+
+
+async def test_las_notas_de_un_pago_si_se_corrigen(mocks: dict) -> None:
+    await pagos_reservacion.actualizar(
+        _conn(), PAGO_ID, PagosReservacionUpdate(notas="Pagó la tía")
+    )
+    mocks["recalcular"].assert_not_awaited()
+
+
+async def test_un_pago_mayor_al_saldo_se_rechaza(mocks: dict) -> None:
+    """N-A1: POST /pagos-reservacion aceptaba $999,999 sobre un saldo de $6,020."""
+    mocks["bloquear"].return_value = {
+        **mocks["bloquear"].return_value,
+        "saldo_pendiente": Decimal("6020.00"),
+    }
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.crear(
+            _conn(),
+            PagosReservacionCreate(
+                reservacion_id=RESERVACION_ID, metodo_pago_id=uuid4(), monto=Decimal("999999")
+            ),
+            uuid4(),
+            str(uuid4()),
+        )
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "PAGO_EXCEDE_SALDO"
 
 
 async def test_scheduler_reporta_el_saldo_real(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -14,6 +14,28 @@ export function fechaLimiteLiquidacion(fechaEvento: string): Date {
   return limite
 }
 
+/** Fecha límite de liquidación lista para imprimir ("18 oct 2026"). */
+export function fechaLimiteLiquidacionTexto(fechaEvento: string): string {
+  return fechaLimiteLiquidacion(fechaEvento).toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+/**
+ * Aviso del comprobante cuando queda saldo. N-A2 (prueba E2E de v1.2.0): decía
+ * "El saldo se liquida el día del evento", pero el sistema cancela la
+ * reservación si sigue debiendo una semana antes; el cliente confiaba en el
+ * papel y llegaba a una fiesta cancelada.
+ */
+export function avisoLiquidacion(fechaLimite?: string | null): string {
+  const cuando = fechaLimite
+    ? `a más tardar el ${fechaLimite}`
+    : `a más tardar ${DIAS_LIMITE_LIQUIDACION} días antes del evento`
+  return `Liquida el saldo ${cuando}; si no, la reservación se cancela.`
+}
+
 /** true si la reservación todavía está dentro del plazo para modificarse. */
 export function dentroDePlazo(fechaEvento: string, hoy = new Date()): boolean {
   const inicioDeHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())

@@ -445,7 +445,8 @@ CASOS: list[Caso] = [
     ),
     Caso("DELETE", "/api/reservacion-extras/{reservacion_extra}", 404),
     Caso("DELETE", "/api/reservacion-productos/{reservacion_producto}", 404),
-    Caso("DELETE", "/api/pagos-reservacion/{pago_reservacion}", 404),
+    # N-A1: un pago registrado no se borra (409); el alcance se valida antes.
+    Caso("DELETE", "/api/pagos-reservacion/{pago_reservacion}", 404, positivo=(409,)),
     Caso("DELETE", "/api/reservaciones/{reservacion}", 404),
     # ── Cajas y arqueos ──
     Caso("GET", "/api/turnos-caja/cajas?sucursal_id={suc}", 403),

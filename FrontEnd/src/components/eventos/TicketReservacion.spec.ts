@@ -47,7 +47,16 @@ describe('TicketReservacion', () => {
     expect(texto).toContain('Anticipo recibido')
     expect(texto).toContain('Saldo pendiente')
     expect(texto).toContain('$4,130.00') // 5900 - 1770
-    expect(texto).toContain('El saldo se liquida el día del evento.')
+  })
+
+  it('N-A2: avisa la fecha límite real para liquidar, no "el día del evento"', () => {
+    // El sistema cancela la reservación si sigue debiendo 7 días antes.
+    const texto = montar({ fechaLimiteLiquidacion: '13 ago 2026' }).text()
+    expect(texto).toContain('Liquida el saldo a más tardar el 13 ago 2026')
+    expect(texto).toContain('si no, la reservación se cancela')
+    expect(texto).not.toContain('el día del evento')
+    // Sin la fecha calculada, el aviso sigue siendo correcto.
+    expect(montar().text()).toContain('a más tardar 7 días antes del evento')
   })
 
   it('marca el evento como liquidado cuando se cubre el total', () => {
@@ -55,7 +64,7 @@ describe('TicketReservacion', () => {
     expect(texto).toContain('Liquidado')
     expect(texto).toContain('Sin saldo pendiente')
     // La nota de liquidar después no debe aparecer si ya no se debe nada.
-    expect(texto).not.toContain('El saldo se liquida el día del evento.')
+    expect(texto).not.toContain('Liquida el saldo')
   })
 
   it('nunca muestra un saldo negativo si se cobró de más', () => {

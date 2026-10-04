@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas.textos import Nombre
+
 # 0 = lunes ... 6 = domingo; None = todos los días.
 DiasSemana = list[int] | None
 
@@ -57,7 +59,7 @@ class HorarioCreate(BaseModel):
 
 
 class HorarioUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: Nombre | None = None
     hora_inicio: str | None = None
     hora_fin: str | None = None
     activo: bool | None = None
@@ -103,7 +105,7 @@ class CajaAdminCreate(BaseModel):
 
 
 class CajaAdminUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: Nombre | None = None
     numero: int | None = None
     activo: bool | None = None
     impresora: str | None = None

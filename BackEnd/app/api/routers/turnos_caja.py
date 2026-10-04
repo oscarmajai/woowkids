@@ -60,6 +60,19 @@ def _sucursal_filtro(current_user: TokenData, sucursal_id: str | None) -> str | 
     return str(sucursal) if sucursal is not None else None
 
 
+def _conteo_a_ciegas(turno: TurnoActivoResponse, current_user: TokenData) -> TurnoActivoResponse:
+    """B9: el conteo del cierre es a ciegas. El efectivo esperado y el desglose
+    por método (M7) solo los ve quien puede revisar el arqueo.
+
+    R1 (prueba E2E de v1.2.0): solo GET /activo los quitaba; /abrir,
+    /iniciar-conteo, /conteo y /cancelar los devolvían al cajero, y el hub los
+    mostraba justo después de abrir caja o de cancelar un conteo. Toda
+    respuesta con el turno pasa por aquí."""
+    if has_permission(current_user.role, "turnos_caja:revision_admin"):
+        return turno
+    return turno.model_copy(update={"efectivo_esperado": None, "ventas_por_metodo": None})
+
+
 _ARQUEOS_CSV_CAMPOS = [
     "id",
     "cajero_nombre",
@@ -127,12 +140,13 @@ async def abrir_turno(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
     branch_id = str(current_user.branch_id) if current_user.branch_id else None
-    return await turnos_caja_service.abrir_turno(
+    turno = await turnos_caja_service.abrir_turno(
         conn,
         user_id=current_user.sub,
         branch_id=branch_id,
         payload=payload,
     )
+    return _conteo_a_ciegas(turno, current_user)
 
 
 @router.get(
@@ -169,11 +183,7 @@ async def obtener_activo(
         if opcional:
             return None
         raise
-    # B9: el conteo del cierre es a ciegas. El efectivo esperado y el desglose
-    # por método (M7) solo los ve quien puede revisar el arqueo.
-    if not has_permission(current_user.role, "turnos_caja:revision_admin"):
-        activo = activo.model_copy(update={"efectivo_esperado": None, "ventas_por_metodo": None})
-    return activo
+    return _conteo_a_ciegas(activo, current_user)
 
 
 @router.get(
@@ -199,7 +209,8 @@ async def iniciar_conteo(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
     turno_id = body.get("turno_id", "")
-    return await turnos_caja_service.iniciar_conteo(conn, current_user.sub, turno_id)
+    turno = await turnos_caja_service.iniciar_conteo(conn, current_user.sub, turno_id)
+    return _conteo_a_ciegas(turno, current_user)
 
 
 @router.post(
@@ -212,7 +223,8 @@ async def enviar_conteo(
     current_user: TokenData = Depends(require_permission("turnos_caja:conteo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
-    return await turnos_caja_service.enviar_conteo(conn, current_user.sub, payload)
+    turno = await turnos_caja_service.enviar_conteo(conn, current_user.sub, payload)
+    return _conteo_a_ciegas(turno, current_user)
 
 
 @router.post(
@@ -294,9 +306,10 @@ async def cancelar_conteo(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> TurnoActivoResponse:
     turno_id = body.get("turno_id", "")
-    return await turnos_caja_service.cancelar_conteo(
+    turno = await turnos_caja_service.cancelar_conteo(
         conn, current_user.sub, turno_id, solicitante=current_user
     )
+    return _conteo_a_ciegas(turno, current_user)
 
 
 @router.post(
