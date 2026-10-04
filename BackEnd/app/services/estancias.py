@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -30,7 +31,7 @@ from app.repositories.registros import (
     registro_update_total,
 )
 from app.repositories.reservaciones_repository import obtener_evento_mas_cercano
-from app.repositories.tutores import get_tutor_by_phone, tutor_create
+from app.repositories.tutores import get_tutores_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
 from app.services import lealtad_service, turnos_caja_service
@@ -57,6 +58,31 @@ async def _validar_pulseras_disponibles(
             raise HTTPException(409, "La pulsera seleccionada ya fue usada o no está disponible")
 
         pulseras_validadas.add(pulsera_id)
+
+
+def normalizar_nombre(nombre: str) -> str:
+    """Forma comparable de un nombre: sin acentos, en minúsculas y con un solo
+    espacio entre palabras ("  Ana  Gómez " == "ana gomez")."""
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFKD", nombre) if not unicodedata.combining(c)
+    )
+    return " ".join(sin_acentos.lower().split())
+
+
+async def _resolver_tutor(
+    conn: asyncpg.Connection, sucursal_id: UUID, telefono: str, nombre: str, usuario_id: UUID
+) -> UUID:
+    """Tutor del registro: el existente con ese teléfono Y ese nombre, o uno nuevo.
+
+    N-1 (prueba E2E de v1.2.0): antes bastaba el teléfono. Si una familia daba
+    un teléfono ya registrado (por ejemplo, otro familiar), el registro quedaba
+    a nombre del tutor anterior y el nombre capturado se descartaba; en la
+    salida se verificaba contra la persona equivocada."""
+    buscado = normalizar_nombre(nombre)
+    for tutor in await get_tutores_by_phone(conn, telefono, sucursal_id):
+        if normalizar_nombre(tutor["nombreCompleto"]) == buscado:
+            return tutor["id"]
+    return await tutor_create(conn, sucursal_id, nombre, telefono, usuario_id)
 
 
 def _a_centavos(valor: Decimal) -> Decimal:
@@ -158,20 +184,13 @@ async def _crear_estancia_tx(
             # Mapeo de diccionario a modelo Pydantic
             evento = EventoDelDiaOut.model_validate(evento_dict)
 
-            tutor = await get_tutor_by_phone(conn, evento.telefono_cliente, data.sucursalId)
-
-            if tutor:
-                tutor_id = tutor["id"]
+            if evento.apellidos_cliente:
+                nombre = f"{evento.nombre_cliente} {evento.apellidos_cliente}"
             else:
-                if evento.apellidos_cliente:
-                    nombre = f"{evento.nombre_cliente} {evento.apellidos_cliente}"
-                    print(nombre)
-                else:
-                    nombre = evento.nombre_cliente
-
-                tutor_id = await tutor_create(
-                    conn, data.sucursalId, nombre, evento.telefono_cliente, usuario_id
-                )
+                nombre = evento.nombre_cliente
+            tutor_id = await _resolver_tutor(
+                conn, data.sucursalId, evento.telefono_cliente, nombre, usuario_id
+            )
 
             registro_id = uuid4()
 
@@ -250,7 +269,7 @@ async def _crear_estancia_tx(
             # 10 dígitos que usan comandas/reservaciones (CELULAR_PATTERN) --
             # sin esto, un tutor capturado como "555 123 4567" fragmentaría
             # sus puntos en una llave distinta a la que usa caja/POS para el
-            # mismo cliente. No se toca get_tutor_by_phone/tutor_create
+            # mismo cliente. No se toca get_tutores_by_phone/tutor_create
             # (comparan el teléfono tal cual, comportamiento preexistente
             # fuera del alcance de lealtad).
             celular_lealtad = "".join(ch for ch in data.tutor.telefono if ch.isdigit())
@@ -258,18 +277,9 @@ async def _crear_estancia_tx(
                 celular_lealtad = ""
 
             # 1. tutor
-            tutor = await get_tutor_by_phone(conn, data.tutor.telefono, data.sucursalId)
-
-            if tutor:
-                tutor_id = tutor["id"]
-            else:
-                tutor_id = await tutor_create(
-                    conn,
-                    data.sucursalId,
-                    data.tutor.nombreCompleto,
-                    data.tutor.telefono,
-                    usuario_id,
-                )
+            tutor_id = await _resolver_tutor(
+                conn, data.sucursalId, data.tutor.telefono, data.tutor.nombreCompleto, usuario_id
+            )
 
             registro_id = uuid4()
 

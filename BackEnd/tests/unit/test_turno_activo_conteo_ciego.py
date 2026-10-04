@@ -1,6 +1,6 @@
 """B9 + M7: el conteo del cierre es a ciegas.
 
-GET /turnos-caja/activo trae el efectivo esperado y las ventas por método
+Las respuestas del turno traen el efectivo esperado y las ventas por método
 (M7), pero solo a quien puede revisar el arqueo (turnos_caja:revision_admin).
 Al cajero que cuenta se le omiten.
 """
@@ -60,6 +60,45 @@ async def test_esperado_solo_para_quien_revisa_el_arqueo(
     if ve_esperado:
         assert resp.efectivo_esperado == Decimal("1500")
         assert resp.ventas_por_metodo
+    else:
+        assert resp.efectivo_esperado is None
+        assert resp.ventas_por_metodo is None
+
+
+# R1 (prueba E2E de v1.2.0): /abrir, /iniciar-conteo, /conteo y /cancelar
+# devolvían el esperado al cajero aunque GET /activo ya lo ocultara.
+_LLAMADAS = {
+    "abrir_turno": lambda u: router.abrir_turno(
+        payload=MagicMock(), current_user=u, conn=MagicMock()
+    ),
+    "iniciar_conteo": lambda u: router.iniciar_conteo(
+        body={"turno_id": "t1"}, current_user=u, conn=MagicMock()
+    ),
+    "enviar_conteo": lambda u: router.enviar_conteo(
+        payload=MagicMock(), current_user=u, conn=MagicMock()
+    ),
+    "cancelar_conteo": lambda u: router.cancelar_conteo(
+        body={"turno_id": "t1"}, current_user=u, conn=MagicMock()
+    ),
+}
+
+
+@pytest.mark.parametrize("servicio", list(_LLAMADAS))
+@pytest.mark.parametrize("revisa", [False, True])
+async def test_ninguna_respuesta_del_turno_revela_el_esperado_al_cajero(
+    monkeypatch: pytest.MonkeyPatch, servicio: str, revisa: bool
+) -> None:
+    monkeypatch.setattr(router.turnos_caja_service, servicio, AsyncMock(return_value=_activo()))
+    monkeypatch.setattr(
+        router,
+        "has_permission",
+        lambda _rol, codigo: revisa and codigo == "turnos_caja:revision_admin",
+    )
+
+    resp = await _LLAMADAS[servicio](_usuario("Cajero"))
+
+    if revisa:
+        assert resp.efectivo_esperado == Decimal("1500")
     else:
         assert resp.efectivo_esperado is None
         assert resp.ventas_por_metodo is None

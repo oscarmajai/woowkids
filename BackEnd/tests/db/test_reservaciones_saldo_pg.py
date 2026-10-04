@@ -208,12 +208,59 @@ async def test_saldo_refleja_anticipo_abonos_y_cambio(
     assert fila["monto_pagado"] == TOTAL
     assert fila["saldo_pendiente"] == Decimal("0.00")
 
-    # Borrar un pago (corrección) devuelve el saldo.
+    # N-A1: liquidada, ya no se acepta otro pago, ni por encima del saldo.
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.crear(
+            pg,
+            PagosReservacionCreate(reservacion_id=rid, metodo_pago_id=e["tarjeta"], monto=1),
+            e["usuario"],
+            str(e["apertura"]),
+        )
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "PAGO_EXCEDE_SALDO"
+
+    # N-A1: un pago registrado no se borra (dejaba la caja y los puntos como
+    # estaban); el saldo no cambia.
     pago_id = await pg.fetchval(
         "SELECT id FROM pagos_reservacion WHERE reservacion_id = $1 AND monto = 2000", rid
     )
-    await pagos_reservacion.eliminar(pg, pago_id)
-    assert (await _saldo(pg, rid))["saldo_pendiente"] == Decimal("2000.00")
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.eliminar(pg, pago_id)
+    assert exc.value.detail["code"] == "PAGO_NO_ELIMINABLE"
+    assert (await _saldo(pg, rid))["saldo_pendiente"] == Decimal("0.00")
+
+
+async def test_completar_no_acepta_mas_que_el_saldo_mas_el_cambio(
+    pg: asyncpg.Connection, escenario: dict[str, Any]
+) -> None:
+    e = escenario
+    alta = await reservaciones.crear_completa(
+        pg, _alta(e, 30, [(e["efectivo"], "4820")]), e["usuario"], str(e["apertura"])
+    )
+    rid = alta.reservacion.id
+    saldo = TOTAL - Decimal("4820")
+    # Efectivo de más con su cambio: se aplica justo el saldo.
+    exceso = PagosReservacionCompletarRequest(
+        reservacion_id=rid,
+        pagos=[PagoReservacionItem(metodo_pago_id=e["tarjeta"], monto=saldo + 1)],
+        cambio=Decimal(0),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await pagos_reservacion.completar(pg, exceso, e["usuario"], str(e["apertura"]))
+    assert exc.value.detail["code"] == "PAGO_EXCEDE_SALDO"
+    assert (await _saldo(pg, rid))["saldo_pendiente"] == saldo
+
+    await pagos_reservacion.completar(
+        pg,
+        PagosReservacionCompletarRequest(
+            reservacion_id=rid,
+            pagos=[PagoReservacionItem(metodo_pago_id=e["efectivo"], monto=saldo + 500)],
+            cambio=Decimal(500),
+        ),
+        e["usuario"],
+        str(e["apertura"]),
+    )
+    assert (await _saldo(pg, rid))["saldo_pendiente"] == Decimal("0.00")
 
 
 async def test_scheduler_solo_cancela_las_que_siguen_debiendo(

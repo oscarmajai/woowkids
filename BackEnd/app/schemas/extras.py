@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.textos import Nombre
+
 
 class ExtrasBase(BaseModel):
     nombre: str = Field(..., max_length=150)
@@ -22,7 +24,7 @@ class ExtrasCrear(ExtrasBase):
 
 
 class ExtrasUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: Nombre | None = None
     descripcion: str | None = None
     precio: Decimal | None = None
     unidad: Literal["evento", "persona", "hora"] | None = None

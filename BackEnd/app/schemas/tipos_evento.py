@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel
+
+from app.schemas.textos import Nombre100
 
 
 class TiposEventoBase(BaseModel):
-    nombre: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    nombre: Nombre100
     descripcion: str | None = None
 
 
@@ -19,7 +20,7 @@ class TiposEventoCreate(TiposEventoBase):
 
 
 class TiposEventoUpdate(BaseModel):
-    nombre: str | None = Field(None, max_length=100)
+    nombre: Nombre100 | None = None
     descripcion: str | None = None
     activo: bool | None = None
 

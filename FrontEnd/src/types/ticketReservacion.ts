@@ -26,4 +26,6 @@ export interface TicketReservacionProps {
   total: number
   anticipo: number
   metodosPago: string
+  /** Fecha límite para liquidar, ya formateada ("18 oct 2026"). */
+  fechaLimiteLiquidacion?: string | null
 }
