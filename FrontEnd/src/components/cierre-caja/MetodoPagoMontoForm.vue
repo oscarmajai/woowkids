@@ -72,6 +72,7 @@
 </template>
 
 <script setup lang="ts">
+import { nuevoId } from '@/utils/uuid'
 import { onMounted, computed, ref } from 'vue'
 import { useMetodosPagoStore } from '@/stores/metodos_pago'
 import { filtrarTeclaDecimal, reglaDecimal } from '@/utils/validacionNumerica'
@@ -120,7 +121,7 @@ function agregarFila(metodoId: string | null) {
   if (!metodo) return
 
   modelValue.value.push({
-    id: crypto.randomUUID(),
+    id: nuevoId(),
     metodo: metodo.nombre,
     monto: null,
     origen: 'manual',
