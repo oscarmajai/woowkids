@@ -1,8 +1,8 @@
 """A2 / M27 / A4 contra PostgreSQL real, por HTTP: máquina de estados de las
 comandas, cancelación sin "zombies" ni doble reversión de stock, una sola
-emisión WebSocket por cambio, y la cancelación de comandas cobradas con PIN de
+emisión WebSocket por cambio, la cancelación de comandas cobradas con PIN de
 administrador y devolución en el arqueo (de cada método, no solo el
-efectivo).
+efectivo), y la devolución de comandas ya entregadas sin regresar stock.
 
 Usa una BD desechable con sql/schema_maestro.sql cargado (TEST_DATABASE_URL);
 se salta si no está definida. Cada prueba siembra su propia sucursal, usuarios,
@@ -39,6 +39,7 @@ class Esc:
     cocina: httpx.AsyncClient
     sucursal: UUID
     cajero_id: UUID
+    cajero_email: str
     apertura: UUID
     caja: UUID
     admin_email: str
@@ -79,7 +80,8 @@ async def _seed(conn: asyncpg.Connection) -> dict[str, Any]:
         )
         return uid, email
 
-    cajero, _ = await usuario(3, sucursal)
+    # Con PIN, para probar que un cajero no autoriza aunque lo conozca.
+    cajero, cajero_email = await usuario(3, sucursal, PIN_ADMIN)
     cocina, _ = await usuario(4, sucursal)
     _, admin_email = await usuario(2, sucursal, PIN_ADMIN)
     _, admin_otra_email = await usuario(2, otra, PIN_ADMIN)
@@ -125,6 +127,7 @@ async def _seed(conn: asyncpg.Connection) -> dict[str, Any]:
     return {
         "sucursal": sucursal,
         "cajero": cajero,
+        "cajero_email": cajero_email,
         "cocina": cocina,
         "apertura": apertura,
         "caja": caja,
@@ -193,6 +196,7 @@ async def esc() -> AsyncIterator[Esc]:
             cocina=cocina,
             sucursal=d["sucursal"],
             cajero_id=d["cajero"],
+            cajero_email=d["cajero_email"],
             apertura=d["apertura"],
             caja=d["caja"],
             admin_email=d["admin_email"],
@@ -675,3 +679,213 @@ async def test_cancelar_pago_mixto_baja_cada_metodo(esc: Esc) -> None:
     )
     assert total == total_antes - Decimal("70.00")
     assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))
+
+
+# ── A4: devolución de una comanda ya entregada ───────────────────────────────
+
+
+async def _entregar(e: Esc, comanda_id: str) -> None:
+    for estado in ("E", "L", "T"):
+        r = await _patch(e.cocina, comanda_id, estado)
+        assert r.status_code == 200, r.text
+
+
+async def _devolver(
+    cliente: httpx.AsyncClient, comanda_id: str, motivo: str = "Llegó frío", **extra: Any
+) -> httpx.Response:
+    return await cliente.post(
+        f"/api/comandas/{comanda_id}/devolucion", json={"motivo": motivo, **extra}
+    )
+
+
+async def _devoluciones_completas(e: Esc, comanda_id: str) -> list[asyncpg.Record]:
+    async with e.pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT es_efectivo, monto, origen, motivo, autorizado_por, creado_por, creado "
+            "FROM devoluciones_comanda WHERE comanda_id = $1 ORDER BY es_efectivo DESC",
+            UUID(comanda_id),
+        )
+
+
+async def _admin_id(e: Esc) -> UUID:
+    async with e.pool.acquire() as conn:
+        return UUID(
+            str(await conn.fetchval("SELECT id FROM usuarios WHERE email = $1", e.admin_email))
+        )
+
+
+async def test_devolver_entregada_no_regresa_stock_y_baja_el_esperado(esc: Esc) -> None:
+    cid = await _cobrada(
+        esc,
+        pagos=[{"metodo_pago_id": str(esc.tarjeta), "monto": "70.00", "notas_pago": "Folio: 3"}],
+    )
+    await _entregar(esc, cid)
+    assert await _stock(esc) == Decimal("9")
+    tarjeta = await _nombre_tarjeta(esc)
+    total_antes, _ = await _balance(esc)
+
+    # Sin token: el mismo 403 que la cancelación, con el turno para el PIN.
+    r = await _devolver(esc.cajero, cid)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "AUTORIZACION_ADMIN_REQUERIDA"
+    assert r.json()["detail"]["turno_id"] == str(esc.apertura)
+    assert tuple(await _comanda(esc, cid)) == ("T", True)
+
+    r = await _devolver(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+    assert r.json()["estado_actual"] == "C"
+
+    # El producto ya se consumió: el stock no regresa ni hay reversión.
+    assert await _stock(esc) == Decimal("9")
+    assert await _reversiones(esc, cid) == 0
+    assert tuple(await _comanda(esc, cid)) == ("C", False)
+
+    async with esc.pool.acquire() as conn:
+        motivo = await conn.fetchval(
+            "SELECT motivo_cancelacion FROM comandas WHERE id = $1", UUID(cid)
+        )
+    assert motivo == "Llegó frío"
+    devs = await _devoluciones_completas(esc, cid)
+    assert len(devs) == 1
+    d = devs[0]
+    assert (d["es_efectivo"], d["monto"], d["origen"], d["motivo"]) == (
+        False,
+        Decimal("70.00"),
+        "entregada",
+        "Llegó frío",
+    )
+    assert d["autorizado_por"] == await _admin_id(esc)
+    assert d["creado_por"] == esc.cajero_id
+    assert d["creado"] is not None
+
+    total, filas = await _balance(esc)
+    assert (filas[tarjeta].esperado, filas[tarjeta].devoluciones) == (
+        Decimal("0.00"),
+        Decimal("70.00"),
+    )
+    assert total == total_antes - Decimal("70.00")
+
+    # No se devuelve dos veces (ni se consume otro token).
+    token = await _token_admin(esc)
+    r = await _devolver(esc.cajero, cid, token_pin_admin=token)
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "DEVOLUCION_NO_APLICA"
+    assert len(await _devoluciones_completas(esc, cid)) == 1
+    # Tampoco se cancela después (ya está cancelada).
+    assert (await _cancelar(esc.cajero, cid, token_pin_admin=token)).status_code == 409
+
+
+async def test_devolver_entregada_en_efectivo_sale_del_cajon(esc: Esc) -> None:
+    cid = await _cobrada(
+        esc,
+        pagos=[{"metodo_pago_id": str(esc.efectivo), "monto": "100.00", "notas_pago": ""}],
+        cambio="30.00",
+    )
+    await _entregar(esc, cid)
+    assert await _efectivo_esperado(esc) == (Decimal("1070.00"), Decimal("1070.00"))
+
+    r = await _devolver(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+
+    assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))
+    _, filas = await _balance(esc)
+    assert filas["efectivo"].devoluciones == Decimal("70.00")
+    assert await _stock(esc) == Decimal("9")
+
+
+async def test_devolver_entregada_simultaneas_registran_una_vez(esc: Esc) -> None:
+    from app.services import comanda_service
+
+    cid = await _cobrada(esc)
+    await _entregar(esc, cid)
+    tokens = [await _token_admin(esc) for _ in range(4)]
+    user = _usuario(esc.cajero_id, esc.sucursal)
+
+    async def devolver(token: str) -> Any:
+        async with esc.pool.acquire() as conn:
+            return await comanda_service.devolver_entregada(conn, cid, user, "Duplicado", token)
+
+    resultados = await asyncio.gather(*(devolver(t) for t in tokens), return_exceptions=True)
+    exitos = [r for r in resultados if not isinstance(r, BaseException)]
+    assert len(exitos) == 1, resultados
+    assert len(await _devoluciones_completas(esc, cid)) == 1
+    assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))
+
+
+async def test_devolver_entregada_exige_pin_de_admin_de_la_sucursal(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    await _entregar(esc, cid)
+
+    async def validar(email: str, pin: str) -> httpx.Response:
+        return await esc.cajero.post(
+            "/api/turnos-caja/validar-pin-admin",
+            json={"turno_id": str(esc.apertura), "admin_email": email, "pin": pin},
+        )
+
+    # Un cajero no autoriza aunque tenga PIN.
+    r = await validar(esc.cajero_email, PIN_ADMIN)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "AUTORIZADOR_NO_VALIDO"
+    # Ni el administrador de otra sucursal.
+    r = await validar(esc.admin_otra_email, PIN_ADMIN)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "AUTORIZADOR_NO_VALIDO"
+    # PIN incorrecto del administrador correcto: no hay token.
+    r = await validar(esc.admin_email, "0000")
+    assert r.status_code in (401, 403), r.text
+    assert "token_pin" not in r.json()
+    # Y un token inventado no se acepta.
+    r = await _devolver(esc.cajero, cid, token_pin_admin="token-inexistente")
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "PIN_TOKEN_REQUERIDO"
+
+    assert tuple(await _comanda(esc, cid)) == ("T", True)
+    assert await _devoluciones_completas(esc, cid) == []
+
+
+async def test_devolucion_solo_aplica_a_entregadas_con_cobro(esc: Esc) -> None:
+    # Una que sigue en cocina se cancela (y regresa su stock), no se devuelve.
+    en_cocina = await _cobrada(esc)
+    r = await _devolver(esc.cajero, en_cocina, token_pin_admin="x")
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "DEVOLUCION_NO_APLICA"
+
+    # Entregada sin cobros (comanda automática de evento): nada que devolver.
+    sin_cobro = await _sin_cobro(esc)
+    await _entregar(esc, sin_cobro)
+    r = await _devolver(esc.cajero, sin_cobro, token_pin_admin="x")
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "COMANDA_SIN_PAGOS"
+
+    # El motivo es obligatorio.
+    assert (await _devolver(esc.cajero, en_cocina, motivo="")).status_code == 422
+    assert (await _devolver(esc.cajero, en_cocina, motivo="   ")).status_code == 422
+
+    # Cocina no maneja dinero.
+    entregada = await _cobrada(esc)
+    await _entregar(esc, entregada)
+    r = await _devolver(esc.cocina, entregada, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 403
+    assert tuple(await _comanda(esc, entregada)) == ("T", True)
+
+
+async def test_devolver_entregada_revierte_los_puntos_de_lealtad(esc: Esc) -> None:
+    cid = await _cobrada(esc)
+    await _entregar(esc, cid)
+    async with esc.pool.acquire() as conn:
+        lote = await conn.fetchval(
+            "INSERT INTO lotes_puntos (sucursal_id, celular, comanda_id, puntos_otorgados, "
+            "puntos_disponibles, fecha_caducidad) "
+            "VALUES ($1, '5512345678', $2, 7, 7, now() + interval '30 days') RETURNING id",
+            esc.sucursal,
+            UUID(cid),
+        )
+
+    r = await _devolver(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+
+    async with esc.pool.acquire() as conn:
+        disponibles = await conn.fetchval(
+            "SELECT puntos_disponibles FROM lotes_puntos WHERE id = $1", lote
+        )
+    assert disponibles == 0

@@ -1430,6 +1430,9 @@ async def obtener_detalle(
             monto=Decimal(str(d["monto"])),
             autorizado_por_nombre=d["autorizado_por_nombre"],
             creado=d["creado"],
+            origen=d["origen"],
+            motivo=d["motivo"],
+            creado_por_nombre=d["creado_por_nombre"],
         )
         for d in await devolucion_repository.listar_por_apertura(conn, apertura_caja_id)
     ]

@@ -56,6 +56,15 @@ class CambioEstadoRequest(BaseModel):
     token_pin_admin: str | None = None
 
 
+# POST /comandas/{id}/devolucion (A4): devolver el dinero de una comanda ya
+# entregada, sin regresar su stock. Mismo flujo de autorización que cancelar
+# una comanda cobrada: sin token responde 403 AUTORIZACION_ADMIN_REQUERIDA con
+# el turno_id para POST /turnos-caja/validar-pin-admin.
+class DevolucionEntregadaRequest(BaseModel):
+    motivo: str = Field(..., min_length=1, max_length=500)
+    token_pin_admin: str | None = None
+
+
 # Esquema para cancelación parcial (eliminar productos de una comanda Pendiente)
 class ComandaModifyRequest(BaseModel):
     detalles_ids_a_eliminar: list[str] = Field(..., min_length=1)

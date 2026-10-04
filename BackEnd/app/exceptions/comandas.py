@@ -1,5 +1,6 @@
-"""Errores de dominio de comandas: máquina de estados (A2) y cancelación de
-comandas cobradas con devolución y autorización de administrador (A4)."""
+"""Errores de dominio de comandas: máquina de estados (A2), cancelación de
+comandas cobradas con devolución y autorización de administrador, y
+devolución de comandas ya entregadas (A4)."""
 
 from fastapi import HTTPException, status
 
@@ -59,12 +60,13 @@ class AutorizacionAdminRequeridaError(HTTPException):
     """Cancelar una comanda cobrada exige el token de PIN de un administrador
     (POST /turnos-caja/validar-pin-admin con el turno_id que viaja aquí)."""
 
-    def __init__(self, turno_id: str) -> None:
+    def __init__(self, turno_id: str, mensaje: str | None = None) -> None:
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "AUTORIZACION_ADMIN_REQUERIDA",
-                "message": (
+                "message": mensaje
+                or (
                     "La orden ya está pagada: cancelarla requiere la autorización con PIN "
                     "de un administrador de la sucursal."
                 ),
@@ -117,5 +119,31 @@ class ComandaModificadaError(HTTPException):
                     "La orden cambió mientras la editabas (en otra pestaña o dispositivo). "
                     "Revisa la versión actual y vuelve a intentarlo."
                 ),
+            },
+        )
+
+
+class DevolucionNoAplicaError(HTTPException):
+    """La devolución sin regreso de stock solo aplica a una comanda entregada
+    (T) y activa: una cancelada o ya devuelta no se devuelve otra vez, y una
+    que sigue en cocina se cancela (eso sí regresa su stock)."""
+
+    def __init__(self, mensaje: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "DEVOLUCION_NO_APLICA", "message": mensaje},
+        )
+
+
+class ComandaSinPagosError(HTTPException):
+    """La comanda entregada no tiene cobros que devolver (p. ej. la comanda
+    automática de un evento, que se cobra en la reservación)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "COMANDA_SIN_PAGOS",
+                "message": "La orden no tiene cobros registrados que devolver.",
             },
         )
