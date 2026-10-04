@@ -85,6 +85,11 @@ export const usersApi = {
     await apiClient.delete(`/usuarios/${id}`)
   },
 
+  /** PUT /usuarios/me/password — el usuario cambia su propia contraseña. */
+  async cambiarMiPassword(actual: string, nueva: string): Promise<void> {
+    await apiClient.put('/usuarios/me/password', { actual, nueva })
+  },
+
   /** C1: PUT /usuarios/me/pin — el usuario cambia su propio PIN de caja. */
   async cambiarMiPin(actual: string, pinNuevo: string): Promise<void> {
     await apiClient.put('/usuarios/me/pin', { actual, pin_nuevo: pinNuevo })

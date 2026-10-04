@@ -20,6 +20,8 @@ from app.exceptions.comandas import (
     ComandaCanceladaError,
     ComandaModificadaError,
     ComandaPagadaRequiereCancelacionError,
+    ComandaSinPagosError,
+    DevolucionNoAplicaError,
     TransicionComandaInvalidaError,
 )
 from app.models.comanda import Comanda, DetalleComanda
@@ -330,6 +332,7 @@ async def cambiar_estado(
                     sucursal_id=sucursal_id,
                     token_pin_admin=cast(str, token_pin_admin),
                     usuario_id=usuario_id,
+                    motivo=motivo_cancelacion,
                 )
 
         comanda = await comanda_repository.actualizar_estado_comanda(
@@ -344,6 +347,96 @@ async def cambiar_estado(
             await inventario_service.revertir_por_cancelacion(
                 conn, sucursal_id, detalles, comanda_id, UUID(usuario_id)
             )
+            await lealtad_service.revertir_por_cancelacion(conn, UUID(comanda_id), UUID(usuario_id))
+
+    if comanda is not None:
+        comanda.detalles = await expandir_detalles_comanda(conn, comanda.detalles)
+        await manager.broadcast(
+            comanda.sucursal_id, {"type": "comanda_actualizada", "comanda": asdict(comanda)}
+        )
+    return comanda
+
+
+_MENSAJE_AUTORIZACION_DEVOLUCION = (
+    "Devolver el dinero de una orden entregada requiere la autorización con PIN de un "
+    "administrador de la sucursal."
+)
+
+
+def validar_devolucion_entregada(estado_actual: str, activo: bool) -> None:
+    """409 DEVOLUCION_NO_APLICA si la comanda no es una entregada activa."""
+    if not activo or estado_actual == "C":
+        raise DevolucionNoAplicaError(
+            "La orden ya está cancelada o devuelta; no se puede devolver otra vez."
+        )
+    if estado_actual != "T":
+        raise DevolucionNoAplicaError(
+            f"La orden está «{_nombre_estado(estado_actual)}»: todavía no se entrega, así "
+            "que se cancela con «Cancelar orden» (que también regresa su stock)."
+        )
+
+
+async def devolver_entregada(
+    conn: asyncpg.Connection,
+    comanda_id: str,
+    current_user: TokenData,
+    motivo: str,
+    token_pin_admin: str | None = None,
+) -> Comanda | None:
+    """A4: devuelve al cliente el dinero de una comanda ya entregada (T).
+
+    Igual que cancelar una comanda cobrada: exige motivo y el token de PIN de
+    un administrador de la sucursal (403 AUTORIZACION_ADMIN_REQUERIDA con el
+    turno_id para /turnos-caja/validar-pin-admin, el mismo flujo), registra la
+    devolución por método en el turno abierto de quien devuelve (baja el
+    esperado de cada método en su arqueo) y revierte los puntos de lealtad que
+    otorgó la venta. A diferencia de la cancelación, NO regresa el stock: el
+    producto ya se consumió. La comanda queda cancelada (C, inactiva) con el
+    motivo, así que deja de contar como venta y no se puede devolver dos veces.
+    Retorna None si la comanda no existe."""
+    if not motivo or not motivo.strip():
+        raise ValueError("El motivo de la devolución es obligatorio.")
+    motivo = motivo.strip()
+    usuario_id = str(UUID(current_user.sub))
+
+    previo = await comanda_repository.get_estado_comanda(conn, comanda_id)
+    if previo is None:
+        return None
+    validar_devolucion_entregada(previo["estado_actual"], previo["activo"])
+    plan = await devolucion_service.planear(conn, comanda_id, usuario_id)
+    if plan is None:
+        raise ComandaSinPagosError()
+    if not token_pin_admin:
+        raise AutorizacionAdminRequeridaError(
+            plan.apertura_cancelador_id, _MENSAJE_AUTORIZACION_DEVOLUCION
+        )
+
+    async with conn.transaction():
+        await devolucion_service.bloquear_turnos(conn, plan)
+        actual = await comanda_repository.bloquear_comanda(conn, comanda_id)
+        if actual is None:
+            return None
+        # Otra devolución o cancelación pudo llegar mientras esperábamos.
+        validar_devolucion_entregada(actual["estado_actual"], actual["activo"])
+        await devolucion_service.registrar(
+            conn,
+            plan,
+            comanda_id=comanda_id,
+            sucursal_id=str(actual["sucursal_id"]),
+            token_pin_admin=token_pin_admin,
+            usuario_id=usuario_id,
+            motivo=motivo,
+            origen="entregada",
+        )
+        comanda = await comanda_repository.actualizar_estado_comanda(
+            conn,
+            comanda_id,
+            "C",
+            usuario_id,
+            motivo_cancelacion=motivo,
+            desactivar=True,
+        )
+        if comanda is not None:
             await lealtad_service.revertir_por_cancelacion(conn, UUID(comanda_id), UUID(usuario_id))
 
     if comanda is not None:

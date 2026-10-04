@@ -96,6 +96,8 @@ def checkin(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     monkeypatch.setattr(m.manager, "broadcast", AsyncMock())
     # A17: el check-in emite el código del portal de padres (fuera de este test).
     monkeypatch.setattr(m, "emitir_codigo_acceso", AsyncMock(return_value="codigo-prueba"))
+    # El aviso de privacidad se prueba aparte (test_aviso_privacidad.py).
+    monkeypatch.setattr(m.privacidad_service, "exigir_aceptacion", AsyncMock(return_value=1))
     return mocks
 
 

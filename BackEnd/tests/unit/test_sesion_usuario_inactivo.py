@@ -84,7 +84,7 @@ def _jwt(role: str = ROL_CAJERO, sub: str | None = None) -> str:
 
 @pytest.mark.asyncio
 async def test_token_de_usuario_inactivo_responde_401():
-    with patch.object(deps, "get_estado_sesion", AsyncMock(return_value=(False, False))):
+    with patch.object(deps, "get_estado_sesion", AsyncMock(return_value=(False, False, False))):
         with pytest.raises(HTTPException) as exc:
             await deps._resolve_token_data(_jwt(), MagicMock())
     assert exc.value.status_code == 401
@@ -93,7 +93,7 @@ async def test_token_de_usuario_inactivo_responde_401():
 
 @pytest.mark.asyncio
 async def test_token_revocado_responde_401_invalid_token():
-    with patch.object(deps, "get_estado_sesion", AsyncMock(return_value=(True, True))):
+    with patch.object(deps, "get_estado_sesion", AsyncMock(return_value=(True, True, False))):
         with pytest.raises(HTTPException) as exc:
             await deps._resolve_token_data(_jwt(), MagicMock())
     assert exc.value.status_code == 401
@@ -104,7 +104,7 @@ async def test_token_revocado_responde_401_invalid_token():
 async def test_token_de_usuario_activo_pasa_y_consulta_por_su_id():
     sub = str(uuid4())
     with patch.object(
-        deps, "get_estado_sesion", AsyncMock(return_value=(False, True))
+        deps, "get_estado_sesion", AsyncMock(return_value=(False, True, False))
     ) as mock_estado:
         data = await deps._resolve_token_data(_jwt(sub=sub), MagicMock())
     assert data.sub == sub
@@ -115,7 +115,7 @@ async def test_token_de_usuario_activo_pasa_y_consulta_por_su_id():
 async def test_sesion_de_padre_no_se_busca_como_usuario():
     """El sub del token del portal de padres es el registro, no un usuario."""
     with patch.object(
-        deps, "get_estado_sesion", AsyncMock(return_value=(False, True))
+        deps, "get_estado_sesion", AsyncMock(return_value=(False, True, False))
     ) as mock_estado:
         await deps._resolve_token_data(_jwt(role=ROL_PADRE), MagicMock())
     assert mock_estado.await_args.args[2] is None
@@ -126,10 +126,12 @@ async def test_estado_sesion_en_una_sola_consulta():
     from app.repositories.token_repository import get_estado_sesion
 
     conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value={"revocado": False, "usuario_activo": False})
+    conn.fetchrow = AsyncMock(
+        return_value={"revocado": False, "usuario_activo": False, "debe_cambiar_password": False}
+    )
     usuario_id = uuid4()
     resultado = await get_estado_sesion(conn, str(uuid4()), usuario_id)
-    assert resultado == (False, False)
+    assert resultado == (False, False, False)
     conn.fetchrow.assert_awaited_once()
     sql = conn.fetchrow.await_args.args[0]
     assert "tokens_revocados" in sql and "activo = TRUE" in sql

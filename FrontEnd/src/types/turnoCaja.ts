@@ -119,6 +119,8 @@ export interface FilaBalance {
   esperado: number
   /** declarado − esperado (positivo = sobrante, negativo = faltante) */
   diferencia: number
+  /** A4: lo devuelto a clientes con este método en el turno (ya restado de `esperado`). */
+  devoluciones: number
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +211,13 @@ export interface ConfirmarCierrePayload {
   tokenPinCajero?: string | null
   tokenPinAdmin?: string | null
 }
+
+/**
+ * A16: para qué se emite el token del PIN de administrador. Cada token solo
+ * sirve para su propósito: `cerrar` (revisión y confirmación del cierre de
+ * caja) o `cancelar` (cancelar o devolver una orden cobrada).
+ */
+export type PropositoPinAdmin = 'cerrar' | 'cancelar'
 
 /** Resultado de validar un PIN: el backend emite un token de un solo uso (5 min). */
 export interface ResultadoValidacionPin {
@@ -345,4 +354,25 @@ export interface DetalleArqueo extends ArqueoResumen {
   observacionesApertura?: string | null
   /** Ingresos de efectivo del turno, con su motivo. */
   ingresos?: Array<{ id: string; monto: number; observaciones: string | null; creado: string }>
+  /** A4: devoluciones a clientes registradas en el turno. */
+  devoluciones?: DevolucionArqueo[]
+}
+
+/** A4: de dónde salió una devolución: cancelar una orden cobrada (su stock
+ * regresó) o devolver una ya entregada (el stock no regresa). */
+export type OrigenDevolucion = 'cancelacion' | 'entregada'
+
+/** A4: devolución a un cliente que resta del esperado de su método en el arqueo. */
+export interface DevolucionArqueo {
+  id: string
+  comandaId: string
+  ticketNumero: string | null
+  metodoPagoNombre: string | null
+  esEfectivo: boolean
+  monto: number
+  origen: OrigenDevolucion
+  motivo: string | null
+  autorizadoPorNombre: string | null
+  creadoPorNombre: string | null
+  creado: string
 }

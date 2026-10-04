@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.core.scope import es_sistema
 from app.core.utils import get_mexico_now
-from app.exceptions import PinTokenRequeridoError
+from app.exceptions import PinTokenPropositoError, PinTokenRequeridoError
 from app.repositories import devolucion_repository, pin_token_repository
 from app.repositories.caja_repository import (
     actualizar_admin_autorizacion,
@@ -53,7 +53,7 @@ from app.repositories.caja_repository import (
     resetear_conteo_apertura,
     resumen_historial_cierres,
     sumar_cambio_apertura,
-    sumar_devoluciones_efectivo_apertura,
+    sumar_devoluciones_por_metodo_apertura,
     sumar_ingresos_por_apertura,
     sumar_retiros_por_apertura,
     sumar_total_ventas_apertura,
@@ -96,6 +96,10 @@ from app.services.permission_service import has_permission
 from app.services.pin_caja_service import (
     PERMISO_AUTORIZAR_CIERRE,
     PERMISO_REVISION_ARQUEO,
+    PROPOSITO_CANCELAR,
+    PROPOSITO_CERRAR,
+    PROPOSITOS_PIN,
+    AutorizadorEsDuenoTurnoError,
     PinInvalidoError,
 )
 
@@ -649,28 +653,38 @@ async def _calcular_balance(
       sumar_ventas_efectivo_apertura) + ingresos de efectivo - retiros -
       cambio dado - devoluciones en efectivo (A4) — contra lo que el cajero contó físicamente
       (desglose_efectivo.total en conteo_json). Cada otro método compara lo
-      que el sistema registró contra lo que el cajero declaró para ese
-      método específico.
+      que el sistema registró, menos lo devuelto a clientes con ese método
+      (A4), contra lo que el cajero declaró para ese método específico.
+      Cada renglón trae aparte sus devoluciones para mostrarlas.
     - Totales generales (esperado/declarado/diferencia): todos los métodos de
       pago cuentan como dinero real del sistema (cupones, lealtad, vouchers
       incluidos) — es la suma de todos los movimientos del turno + fondo
       inicial + ingresos de efectivo - retiros - cambio dado - devoluciones
-      en efectivo, comparada
+      de todos los métodos, comparada
       contra la suma de todo lo que el cajero declaró, independientemente
       del método."""
     monto_inicial = Decimal(str(apertura["fondo_inicial"]))
     total_retiros = await sumar_retiros_por_apertura(conn, turno_id)
     total_cambio = await sumar_cambio_apertura(conn, turno_id)
     total_ingresos = await sumar_ingresos_por_apertura(conn, turno_id)
-    # A4: efectivo devuelto a clientes por comandas canceladas en este turno.
-    total_devoluciones = await sumar_devoluciones_efectivo_apertura(conn, turno_id)
+    # A4: lo devuelto a clientes desde este turno (comandas canceladas o
+    # devueltas ya entregadas), por método. Antes solo restaba el efectivo y
+    # cada devolución con tarjeta dejaba un sobrante falso en su renglón.
+    devoluciones = await sumar_devoluciones_por_metodo_apertura(conn, turno_id)
+    devoluciones_efectivo = sum(
+        (Decimal(str(d["total"])) for d in devoluciones if d["es_efectivo"]), Decimal("0")
+    )
+    devoluciones_otros: dict[str, dict[str, Any]] = {
+        str(d["metodo_pago_id"]): d for d in devoluciones if not d["es_efectivo"]
+    }
+    total_devoluciones = sum((Decimal(str(d["total"])) for d in devoluciones), Decimal("0"))
     total_esperado_efectivo = (
         monto_inicial
         + await sumar_ventas_efectivo_apertura(conn, turno_id)
         + total_ingresos
         - total_retiros
         - total_cambio
-        - total_devoluciones
+        - devoluciones_efectivo
     )
 
     conteo = json.loads(apertura["conteo_json"]) if apertura["conteo_json"] else {}
@@ -693,27 +707,40 @@ async def _calcular_balance(
             declarado=declarado_efectivo,
             esperado=total_esperado_efectivo,
             diferencia=diferencia_neta_efectivo,
+            devoluciones=devoluciones_efectivo,
         )
     ]
+    vistos: set[str] = set()
+
+    def fila_metodo(nombre: str, total_ventas: Decimal, metodo_pago_id: str) -> FilaBalance:
+        nombre_met = nombre.lower()
+        vistos.add(nombre_met)
+        devuelto = Decimal(str(devoluciones_otros.pop(metodo_pago_id, {}).get("total", 0)))
+        esperado = total_ventas - devuelto
+        declarado = declarados_por_metodo.get(nombre_met, Decimal("0"))
+        return FilaBalance(
+            metodo=nombre_met,
+            label=nombre,
+            declarado=declarado,
+            esperado=esperado,
+            diferencia=declarado - esperado,
+            devoluciones=devuelto,
+        )
 
     movs = await obtener_movimientos_por_metodo(conn, turno_id)
-    vistos: set[str] = set()
     for m in movs:
         if m["metodo_tipo"] == "E":
             continue
-        nombre_met = m["metodo_nombre"].lower()
-        vistos.add(nombre_met)
-        esperado = Decimal(str(m["total_ventas"]))
-        declarado = declarados_por_metodo.get(nombre_met, Decimal("0"))
         balance.append(
-            FilaBalance(
-                metodo=nombre_met,
-                label=m["metodo_nombre"],
-                declarado=declarado,
-                esperado=esperado,
-                diferencia=declarado - esperado,
+            fila_metodo(
+                m["metodo_nombre"], Decimal(str(m["total_ventas"])), str(m["metodo_pago_id"])
             )
         )
+
+    # Métodos con devoluciones en este turno pero sin cobros (la venta se cobró
+    # en otro turno): su esperado queda en negativo por lo devuelto.
+    for metodo_pago_id, d in list(devoluciones_otros.items()):
+        balance.append(fila_metodo(str(d["metodo_nombre"]), Decimal("0"), metodo_pago_id))
 
     # Métodos que el cajero declaró pero el sistema no tiene registrados para este turno.
     for nombre_met, declarado in declarados_por_metodo.items():
@@ -763,24 +790,40 @@ async def _verificar_credenciales_usuario(
     sucursal_id: str | None = None,
     *,
     intentado_por: str | None = None,
+    dueno_turno_id: str | None = None,
 ) -> dict[str, Any]:
     """Revisión del administrador (A16): el autorizador debe poder revisar
     arqueos (turnos_caja:revision_admin) en la sucursal del turno —o ser
-    AdministradorSistema— y su contraseña (o su PIN) se valida con límite de
-    intentos. Lanza AutorizadorNoValidoError (403), CredencialesAdminInvalidasError
-    (403) o PinBloqueadoError (429)."""
-    return await pin_caja_service.verificar_pin_autorizador(
-        conn,
-        email=email,
-        pin=password,
-        sucursal_id=sucursal_id,
-        permiso=PERMISO_REVISION_ARQUEO,
-        tipo="revision",
-        intentado_por=intentado_por,
-        # El formulario de revisión pide la contraseña del administrador.
-        acepta_password=True,
-        error=CredencialesAdminInvalidasError("Contraseña o PIN incorrecto."),
+    AdministradorSistema—, no puede ser el dueño del turno, y su credencial se
+    valida con límite de intentos: con PIN configurado solo vale el PIN; sin
+    PIN, su contraseña (C1). Lanza AutorizadorNoValidoError (403),
+    AutorizadorEsDuenoTurnoError (403), CredencialesAdminInvalidasError (403)
+    o PinBloqueadoError (429)."""
+    autorizador = await pin_caja_service.buscar_autorizador(
+        conn, email, sucursal_id, PERMISO_REVISION_ARQUEO, dueno_turno_id=dueno_turno_id
     )
+    if autorizador["pin_hash"]:
+        error = CredencialesAdminInvalidasError(
+            "PIN incorrecto. Este administrador ya tiene PIN configurado: ingresa su PIN, "
+            "no su contraseña."
+        )
+    else:
+        error = CredencialesAdminInvalidasError(
+            "Contraseña incorrecta. Este administrador aún no tiene PIN configurado: "
+            "ingresa su contraseña."
+        )
+    await pin_caja_service.verificar_con_limite(
+        conn,
+        usuario_id=autorizador["id"],
+        sucursal_id=sucursal_id,
+        tipo="revision",
+        verificar=lambda: pin_caja_service.credencial_valida(
+            password, autorizador["pin_hash"], autorizador["password_hash"]
+        ),
+        error=error,
+        intentado_por=intentado_por,
+    )
+    return autorizador
 
 
 async def _apertura_para_autorizar(
@@ -811,6 +854,8 @@ async def autenticar_admin_revision(
         payload.admin_password,
         str(previa["sucursal_id"]) if previa.get("sucursal_id") else None,
         intentado_por=user_id,
+        # A16: nadie autoriza el cierre de su propio turno.
+        dueno_turno_id=str(previa["cajero_id"]),
     )
 
     # 3. Calcular montos esperados reales para el turno. C4: bajo el bloqueo de
@@ -823,8 +868,8 @@ async def autenticar_admin_revision(
         if apertura["estado"] == "CERRADA":
             raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
-        # La sucursal del administrador ya se validó en _verificar_credenciales_usuario
-        # (A16: busca solo entre los autorizadores de la sucursal del turno).
+        # La sucursal del administrador y que no sea el dueño del turno ya se
+        # validaron en _verificar_credenciales_usuario (A16).
 
         if apertura["monto_declarado"] is None:
             raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
@@ -845,23 +890,50 @@ async def autenticar_admin_revision(
     )
 
 
+class PropositoPinInvalidoError(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "PROPOSITO_INVALIDO",
+                "message": "El propósito de la autorización debe ser «cerrar» o «cancelar».",
+            },
+        )
+
+
+_OPERACION_POR_PROPOSITO = {
+    PROPOSITO_CERRAR: "cerrar la caja",
+    PROPOSITO_CANCELAR: "cancelar o devolver una orden",
+}
+
+
 async def _emitir_token_pin(
-    conn: asyncpg.Connection, usuario_id: str, turno_id: str, rol: str
+    conn: asyncpg.Connection, usuario_id: str, turno_id: str, rol: str, proposito: str
 ) -> str:
     """QA #14: token de un solo uso con vigencia de 5 minutos, emitido al
-    validar el PIN del cajero o del administrador."""
+    validar el PIN del cajero o del administrador. A16: solo sirve para su
+    ``proposito`` (cerrar / cancelar)."""
     token = secrets.token_urlsafe(32)
     expira = get_mexico_now() + timedelta(minutes=5)
-    await pin_token_repository.crear_token(conn, token, usuario_id, turno_id, rol, expira)
+    await pin_token_repository.crear_token(
+        conn, token, usuario_id, turno_id, rol, proposito, expira
+    )
     return token
 
 
 async def _validar_y_consumir_token_pin(
-    conn: asyncpg.Connection, token: str, turno_id: str, rol: str
+    conn: asyncpg.Connection, token: str, turno_id: str, rol: str, proposito: str
 ) -> dict[str, Any]:
     fila = await pin_token_repository.obtener_token(conn, token, turno_id, rol)
     if not fila:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} no es válido para este turno.")
+    if fila["proposito"] != proposito:
+        # A16: un token emitido para cancelar una orden no cierra la caja, ni al revés.
+        emitido = _OPERACION_POR_PROPOSITO.get(fila["proposito"], fila["proposito"])
+        raise PinTokenPropositoError(
+            f"La autorización con PIN de {rol} se emitió para {emitido}; no sirve para "
+            f"{_OPERACION_POR_PROPOSITO[proposito]}. Vuelve a validar el PIN."
+        )
     if fila["usado"]:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} ya fue usado.")
     if fila["expira"] < get_mexico_now():
@@ -870,12 +942,19 @@ async def _validar_y_consumir_token_pin(
     return fila
 
 
-async def consumir_token_pin_admin(conn: asyncpg.Connection, token: str, turno_id: str) -> str:
+async def consumir_token_pin_admin(
+    conn: asyncpg.Connection,
+    token: str,
+    turno_id: str,
+    proposito: str = PROPOSITO_CANCELAR,
+) -> str:
     """A4: consume el token de un solo uso que emite /validar-pin-admin para
-    `turno_id` (el mismo mecanismo que autoriza el cierre) y devuelve el id del
-    administrador que validó su PIN. El llamador debe estar en una transacción
-    para que el token no quede consumido si la operación autorizada falla."""
-    fila = await _validar_y_consumir_token_pin(conn, token, turno_id, "admin")
+    `turno_id` y devuelve el id del administrador que validó su PIN. A16: el
+    token debe haberse emitido para ``proposito`` (por omisión ``cancelar``:
+    cancelaciones y devoluciones de órdenes cobradas). El llamador debe estar
+    en una transacción para que el token no quede consumido si la operación
+    autorizada falla."""
+    fila = await _validar_y_consumir_token_pin(conn, token, turno_id, "admin", proposito)
     return str(fila["usuario_id"])
 
 
@@ -912,7 +991,10 @@ async def validar_pin_cajero(
         intentado_por=user_id,
     )
 
-    token = await _emitir_token_pin(conn, str(cajero_row["id"]), turno_id, "cajero")
+    # El PIN del cajero solo se pide para el cierre.
+    token = await _emitir_token_pin(
+        conn, str(cajero_row["id"]), turno_id, "cajero", PROPOSITO_CERRAR
+    )
     return {
         "ok": True,
         "mensaje": "PIN del Cajero verificado correctamente.",
@@ -928,14 +1010,21 @@ async def validar_pin_admin(
     *,
     user_id: str | None = None,
     solicitante: TokenData | None = None,
+    proposito: str = PROPOSITO_CANCELAR,
 ) -> dict[str, Any]:
-    """Valida el PIN del administrador que autoriza el cierre del turno.
+    """Valida el PIN de un administrador y emite un token de un solo uso para
+    ``turno_id`` que solo sirve para ``proposito`` (A16): ``cerrar`` (cierre
+    de caja) o ``cancelar`` (cancelar o devolver una orden cobrada; es el
+    valor por omisión, el de los llamadores anteriores a A16).
 
     A16: el administrador se busca solo entre los usuarios de la sucursal del
     turno con permiso de autorizar cierres (turnos_caja:confirmar) —o
     AdministradorSistema—; con PIN configurado solo vale el PIN, y hay límite
-    de intentos. Los argumentos posicionales son los de antes; ``user_id`` y
+    de intentos. Para ``cerrar``, el administrador no puede ser el dueño del
+    turno. Los argumentos posicionales son los de antes; ``user_id`` y
     ``solicitante`` (quien llama) son opcionales para no romper llamadores."""
+    if proposito not in PROPOSITOS_PIN:
+        raise PropositoPinInvalidoError()
     apertura = await get_apertura_por_id(conn, turno_id)
     if not apertura:
         raise TurnoNoEncontradoError()
@@ -950,9 +1039,10 @@ async def validar_pin_admin(
         permiso=PERMISO_AUTORIZAR_CIERRE,
         tipo="admin",
         intentado_por=user_id,
+        dueno_turno_id=str(apertura["cajero_id"]) if proposito == PROPOSITO_CERRAR else None,
     )
 
-    token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin")
+    token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin", proposito)
     return {
         "ok": True,
         "mensaje": "PIN del Administrador verificado correctamente.",
@@ -1193,16 +1283,25 @@ async def confirmar_cierre(
                 "Aún no se ha autorizado la revisión de un administrador."
             )
 
-        # QA #14: exige y consume los tokens de un solo uso de cajero y admin.
+        # A16: nadie autoriza el cierre de su propio turno (la revisión ya lo
+        # rechaza; esto cubre una revisión hecha antes de la regla).
+        dueno_id = str(apertura["cajero_id"])
+        if pin_caja_service.es_dueno_turno(apertura["token_admin_jti"], dueno_id):
+            raise AutorizadorEsDuenoTurnoError()
+
+        # QA #14: exige y consume los tokens de un solo uso de cajero y admin,
+        # emitidos para cerrar (A16: uno de cancelar una orden no sirve).
         if settings.exigir_pin_token:
             if not payload.token_pin_cajero or not payload.token_pin_admin:
                 raise PinTokenRequeridoError()
             await _validar_y_consumir_token_pin(
-                conn, payload.token_pin_cajero, payload.turno_id, "cajero"
+                conn, payload.token_pin_cajero, payload.turno_id, "cajero", PROPOSITO_CERRAR
             )
-            await _validar_y_consumir_token_pin(
-                conn, payload.token_pin_admin, payload.turno_id, "admin"
+            fila_admin = await _validar_y_consumir_token_pin(
+                conn, payload.token_pin_admin, payload.turno_id, "admin", PROPOSITO_CERRAR
             )
+            if pin_caja_service.es_dueno_turno(fila_admin["usuario_id"], dueno_id):
+                raise AutorizadorEsDuenoTurnoError()
 
         admin_id = str(apertura["token_admin_jti"])
         total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
@@ -1407,6 +1506,9 @@ async def obtener_detalle(
             monto=Decimal(str(d["monto"])),
             autorizado_por_nombre=d["autorizado_por_nombre"],
             creado=d["creado"],
+            origen=d["origen"],
+            motivo=d["motivo"],
+            creado_por_nombre=d["creado_por_nombre"],
         )
         for d in await devolucion_repository.listar_por_apertura(conn, apertura_caja_id)
     ]

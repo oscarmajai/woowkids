@@ -24,7 +24,7 @@ FROM ${MINIO_IMAGE} AS minio
 FROM ${BACKEND_IMAGE}
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql nginx curl ca-certificates \
+    && apt-get install -y --no-install-recommends postgresql nginx curl ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /etc/nginx/sites-enabled/default \
     && pip install --no-cache-dir supervisor==4.3.0
@@ -32,15 +32,19 @@ RUN apt-get update \
 COPY --from=frontend /usr/share/nginx/html /usr/share/woowkids/front
 COPY --from=minio /usr/bin/minio /usr/local/bin/minio
 COPY docker/allinone/nginx.conf /etc/nginx/conf.d/woowkids.conf
+COPY docker/allinone/nginx/ /etc/nginx/woowkids/
 COPY docker/allinone/supervisord.conf /etc/woowkids/supervisord.conf
-COPY docker/allinone/start.sh /etc/woowkids/start.sh
-RUN chmod +x /etc/woowkids/start.sh
+COPY docker/allinone/start.sh docker/allinone/tls.sh docker/allinone/instalar-certificado.html /etc/woowkids/
+RUN chmod +x /etc/woowkids/start.sh /etc/woowkids/tls.sh \
+    && ln -sf /etc/woowkids/supervisord.conf /etc/supervisord.conf
 
 # Valores genéricos por defecto: cámbialos con -e al correr el contenedor.
+# SECRET_KEY no tiene valor por defecto: si no se pasa, el arranque genera una
+# aleatoria y la guarda en la BD. El administrador inicial debe cambiar su
+# contraseña la primera vez que entra.
 ENV POSTGRES_USER=admin \
     POSTGRES_PASSWORD=admin1234 \
     POSTGRES_DB=woowkids \
-    SECRET_KEY=woowkids-secret-key-cambiar-en-produccion \
     MINIO_ACCESS_KEY=admin \
     MINIO_SECRET_KEY=admin1234 \
     MINIO_BUCKET=woowkids \
@@ -50,13 +54,22 @@ ENV POSTGRES_USER=admin \
     SEED_DEMO=false \
     ADMIN_EMAIL=admin@woowkids.com \
     ADMIN_PASSWORD=admin1234 \
-    CORS_ORIGINS='["http://localhost:8080"]'
+    CORS_ORIGINS='["http://localhost:8080"]' \
+    BACKUP_CADA_HORAS=6 \
+    BACKUP_DIAS_CONSERVAR=14 \
+    WOOWKIDS_DOMINIOS= \
+    REDIRIGIR_HTTPS=false \
+    HTTPS_PUERTO=443
 
 VOLUME ["/data"]
-# 80: app y API (/api). 9001: consola de MinIO (opcional).
-EXPOSE 80 9001
+# Opcional: monta una carpeta del equipo en /respaldos (-v C:\WoowKids\respaldos:/respaldos)
+# para que los respaldos automáticos queden fuera del volumen de datos.
+# 443: app y API por HTTPS (certificado en /data/tls, ver tls.sh). 80: página
+# para instalar el certificado y la app por HTTP o la redirección a HTTPS.
+# 9001: consola de MinIO (opcional).
+EXPOSE 80 443 9001
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
-    CMD curl -fs http://127.0.0.1/api/openapi.json -o /dev/null || curl -fs http://127.0.0.1:8000/openapi.json -o /dev/null
+    CMD curl -fs http://127.0.0.1:8000/openapi.json -o /dev/null
 
 ENTRYPOINT ["/etc/woowkids/start.sh"]

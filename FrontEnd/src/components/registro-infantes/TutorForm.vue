@@ -237,7 +237,10 @@ onBeforeUnmount(() => {
               (val) => val.length === 10 || 'El teléfono debe tener exactamente 10 dígitos',
             ]"
           />
-          <span v-if="saldoLealtad !== null && saldoLealtad > 0" class="text-caption text-positive">
+          <span
+            v-if="saldoLealtad !== null && saldoLealtad > 0 && !store.rechazaFinalidadesSecundarias"
+            class="text-caption text-positive"
+          >
             Cliente frecuente · {{ saldoLealtad }} pts
           </span>
         </div>

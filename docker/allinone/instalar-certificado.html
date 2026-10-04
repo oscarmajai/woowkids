@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Instalar el certificado de Woow Kids</title>
+    <!-- Plantilla: /etc/woowkids/start.sh reemplaza __HUELLA__ y __PUERTO__. -->
+    <style>
+      :root {
+        --fondo: #f6f7fb;
+        --texto: #1d2140;
+        --suave: #5b6075;
+        --primario: #005fdf;
+        --borde: #e3e5ee;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--fondo);
+        color: var(--texto);
+        font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      main { max-width: 720px; margin: 0 auto; padding: 32px 16px 48px; }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 28px 0 8px; }
+      p, li { color: var(--suave); }
+      .tarjeta {
+        background: #fff;
+        border: 1px solid var(--borde);
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+      .boton {
+        display: inline-block;
+        background: var(--primario);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+        padding: 12px 18px;
+        border-radius: 10px;
+        margin: 6px 8px 6px 0;
+      }
+      .boton.secundario { background: #fff; color: var(--primario); border: 1px solid var(--primario); }
+      code {
+        display: block;
+        word-break: break-all;
+        background: var(--fondo);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 13px;
+        color: var(--texto);
+      }
+      ol { padding-left: 20px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Conexión segura con Woow Kids</h1>
+      <p>
+        La caja, el punto de venta y la cámara del registro solo funcionan por una conexión
+        segura (HTTPS). Cada computadora, tableta o teléfono que use el sistema debe confiar
+        <strong>una sola vez</strong> en el certificado de esta instalación.
+      </p>
+
+      <div id="con-ca" class="tarjeta">
+        <a class="boton" href="/certificado-woowkids.crt">1. Descargar el certificado</a>
+        <a class="boton secundario" id="abrir" href="/">2. Abrir Woow Kids (HTTPS)</a>
+        <p>Antes de instalarlo, comprueba que su huella digital (SHA-256) sea esta:</p>
+        <code>__HUELLA__</code>
+      </div>
+
+      <div id="sin-ca" class="tarjeta" hidden>
+        <p>
+          Este servidor usa un certificado de tu organización. Si tu equipo pertenece al dominio,
+          no hay que instalar nada: abre Woow Kids directamente.
+        </p>
+        <a class="boton" id="abrir-propio" href="/">Abrir Woow Kids (HTTPS)</a>
+      </div>
+
+      <section id="pasos">
+        <h2>Windows (Chrome o Edge)</h2>
+        <ol>
+          <li>Abre el archivo <em>certificado-woowkids.crt</em> descargado y elige <strong>Instalar certificado…</strong></li>
+          <li>Ubicación del almacén: <strong>Equipo local</strong> (pide permiso de administrador).</li>
+          <li>Elige <strong>Colocar todos los certificados en el siguiente almacén</strong> →
+            <strong>Entidades de certificación raíz de confianza</strong> → Aceptar → Siguiente → Finalizar.</li>
+          <li>Cierra por completo el navegador y vuelve a abrirlo.</li>
+        </ol>
+        <p>En una red con dominio, el área de sistemas puede repartirlo a todas las computadoras por directiva de grupo (GPO).</p>
+
+        <h2>macOS</h2>
+        <ol>
+          <li>Abre el archivo descargado: se agrega a <strong>Acceso a Llaveros</strong> (llavero <em>Sistema</em>).</li>
+          <li>Haz doble clic en «Woow Kids CA local», abre <strong>Confiar</strong> y elige <strong>Confiar siempre</strong>.</li>
+        </ol>
+
+        <h2>Android</h2>
+        <ol>
+          <li>Ajustes → Seguridad → Cifrado y credenciales → <strong>Instalar un certificado</strong> → <strong>Certificado de CA</strong>.</li>
+          <li>Elige el archivo descargado y confirma.</li>
+        </ol>
+
+        <h2>iPhone o iPad</h2>
+        <ol>
+          <li>Abre esta página en Safari y descarga el certificado; acepta instalar el perfil.</li>
+          <li>Ajustes → General → VPN y gestión de dispositivos → instala el perfil «Woow Kids».</li>
+          <li>Ajustes → General → Información → <strong>Configuración de confianza de certificados</strong> → activa «Woow Kids CA local».</li>
+        </ol>
+      </section>
+    </main>
+    <script>
+      // Liga a la app por HTTPS en el mismo nombre con que se abrió esta página.
+      var puerto = '__PUERTO__'
+      var destino = 'https://' + location.hostname + (puerto && puerto !== '443' ? ':' + puerto : '') + '/'
+      document.getElementById('abrir').href = destino
+      document.getElementById('abrir-propio').href = destino
+      if (!'__HUELLA__'.replace(/_/g, '')) {
+        document.getElementById('con-ca').hidden = true
+        document.getElementById('pasos').hidden = true
+        document.getElementById('sin-ca').hidden = false
+      }
+    </script>
+  </body>
+</html>

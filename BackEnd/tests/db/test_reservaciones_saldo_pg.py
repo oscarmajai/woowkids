@@ -395,7 +395,7 @@ async def test_checkin_muestra_evento_de_hoy_liquidado_tras_el_anticipo(
     pg: asyncpg.Connection, escenario: dict[str, Any]
 ) -> None:
     e = escenario
-    hoy_bd: date = await pg.fetchval("SELECT CURRENT_DATE")
+    hoy_bd: date = e["hoy"]
     rid = await pg.fetchval(
         """INSERT INTO reservaciones (sucursal_id, tipo_evento_id, paquete_id, nombre_cliente,
                telefono_cliente, fecha_evento, hora_inicio, hora_fin, numero_personas,
@@ -417,3 +417,59 @@ async def test_checkin_muestra_evento_de_hoy_liquidado_tras_el_anticipo(
         )
     evento = await reservaciones_repository.obtener_evento_mas_cercano(pg, e["sucursal"])
     assert evento is not None and evento["id"] == rid
+
+
+async def _evento_liquidado(
+    pg: asyncpg.Connection, e: dict[str, Any], fecha: date, inicio: time, fin: time
+) -> uuid.UUID:
+    return await pg.fetchval(
+        """INSERT INTO reservaciones (sucursal_id, tipo_evento_id, paquete_id, nombre_cliente,
+               telefono_cliente, fecha_evento, hora_inicio, hora_fin, numero_personas,
+               precio_base, precio_total, anticipo, estado)
+           VALUES ($1, $2, $3, 'Fiesta', '3312345678', $4, $5, $6, 20,
+                   0, 0, 0, 'confirmada')
+           RETURNING id""",
+        e["sucursal"],
+        e["tipo"],
+        e["paquete"],
+        fecha,
+        inicio,
+        fin,
+    )
+
+
+# A cualquier hora, en al menos una de las dos primeras zonas la fecha local es
+# distinta a la de UTC: con CURRENT_DATE (UTC) el check-in fallaba ahí.
+@pytest.mark.parametrize("zona", ["Etc/GMT+12", "Pacific/Kiritimati", "America/Mexico_City"])
+async def test_checkin_usa_la_fecha_de_la_sucursal_y_no_la_de_utc(
+    pg: asyncpg.Connection, escenario: dict[str, Any], zona: str
+) -> None:
+    e = escenario
+    await pg.execute("UPDATE sucursales SET zona_horaria = $2 WHERE id = $1", e["sucursal"], zona)
+    hoy_local = await reservaciones_repository.hoy_en_sucursal(pg, e["sucursal"])
+    assert hoy_local is not None
+    rid = await _evento_liquidado(pg, e, hoy_local, time(0, 0), time(23, 59, 59))
+    # Un evento con la fecha de UTC (si es otra) no es de hoy en la sucursal.
+    hoy_utc: date = await pg.fetchval("SELECT (NOW() AT TIME ZONE 'UTC')::date")
+    if hoy_utc != hoy_local:
+        await _evento_liquidado(pg, e, hoy_utc, time(0, 0), time(23, 59, 59))
+
+    evento = await reservaciones_repository.obtener_evento_mas_cercano(pg, e["sucursal"])
+    assert evento is not None and evento["id"] == rid
+
+
+async def test_checkin_liga_el_evento_elegido_y_no_otro_simultaneo(
+    pg: asyncpg.Connection, escenario: dict[str, Any]
+) -> None:
+    e = escenario
+    primero = await _evento_liquidado(pg, e, e["hoy"], time(0, 0), time(23, 59, 59))
+    segundo = await _evento_liquidado(pg, e, e["hoy"], time(0, 1), time(23, 59, 59))
+
+    sin_elegir = await reservaciones_repository.obtener_evento_mas_cercano(pg, e["sucursal"])
+    assert sin_elegir is not None and sin_elegir["id"] == primero
+    elegido = await reservaciones_repository.obtener_evento_mas_cercano(pg, e["sucursal"], segundo)
+    assert elegido is not None and elegido["id"] == segundo
+    ajeno = await reservaciones_repository.obtener_evento_mas_cercano(
+        pg, e["sucursal"], uuid.uuid4()
+    )
+    assert ajeno is None

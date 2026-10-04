@@ -30,6 +30,15 @@ class OnboardingRequest(BaseModel):
     cambio: Decimal = Field(Decimal("0"), ge=0)
     reservacionId: UUID | None = None  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
     puntosARedimir: int = Field(default=0, ge=0)  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    # LFPDPPP: el tutor leyó y aceptó el aviso de privacidad vigente. Sin
+    # aceptación (o con una versión que ya no es la vigente) el check-in
+    # responde 422 y no registra nada.
+    aceptaAvisoPrivacidad: bool = False  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    versionAvisoPrivacidad: int | None = Field(default=None, ge=1)  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
+    # Finalidades voluntarias del aviso (lealtad y promociones). Consentimiento
+    # tácito (art. 7 LFPDPPP): vale True salvo que el tutor se niegue; si se
+    # niega, el registro no acumula ni canjea puntos.
+    aceptaFinalidadesSecundarias: bool = True  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
 
 
 class OnboardingResponse(BaseModel):

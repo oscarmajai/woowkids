@@ -13,6 +13,7 @@ function mapUser(raw: BackendUser, payload: TokenPayload | null): User {
     branchName: raw.branch_name,
     permissions: payload?.permissions ?? raw.permissions,
     tienePin: raw.tiene_pin ?? false,
+    debeCambiarPassword: raw.debe_cambiar_password ?? false,
   }
 }
 

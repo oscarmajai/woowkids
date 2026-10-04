@@ -1,16 +1,17 @@
 """
 app/services/devolucion_service.py
-A4: devolución al cliente al cancelar una comanda ya cobrada.
+A4: devolución al cliente de una comanda ya cobrada, al cancelarla (P/E/L) o
+al devolver una ya entregada (T, comanda_service.devolver_entregada).
 
 Antes, cancelar una orden pagada no movía la caja (el efectivo esperado del
 arqueo seguía contando la venta) y el cajero lo hacía sin autorización. Ahora:
   - Exige el token de PIN de un administrador de la sucursal de la comanda,
-    el mismo que emite POST /turnos-caja/validar-pin-admin para el cierre,
-    emitido para el turno abierto de quien cancela.
-  - Registra la devolución en ese turno (devoluciones_comanda): la parte en
-    efectivo (cobrado menos el cambio ya entregado) resta del efectivo
-    esperado; los pagos con otros métodos quedan registrados como devueltos
-    sin mover el efectivo.
+    el mismo que emite POST /turnos-caja/validar-pin-admin, emitido para el
+    turno abierto de quien devuelve.
+  - Registra la devolución en ese turno (devoluciones_comanda), una fila por
+    método, con su motivo y su origen: la parte en efectivo (cobrado menos el
+    cambio ya entregado) resta del efectivo esperado; la de cada otro método
+    (tarjeta, transferencia...) resta del esperado de ese método.
   - Sin turno abierto, o si la venta se cobró en un turno ya cerrado, 409.
 Una comanda sin pagos se cancela como siempre (no pasa por aquí).
 """
@@ -124,10 +125,13 @@ async def registrar(
     sucursal_id: str,
     token_pin_admin: str,
     usuario_id: str,
+    motivo: str | None = None,
+    origen: str = "cancelacion",
 ) -> None:
     """Consume el token de PIN del administrador y registra la devolución.
-    Debe correr dentro de la transacción de la cancelación, después de
-    bloquear_turnos: si algo falla, el token no queda consumido."""
+    Debe correr dentro de la transacción de la cancelación (o de la
+    devolución de una entregada), después de bloquear_turnos: si algo falla,
+    el token no queda consumido."""
     admin_id = await turnos_caja_service.consumir_token_pin_admin(
         conn, token_pin_admin, plan.apertura_cancelador_id
     )
@@ -161,6 +165,8 @@ async def registrar(
             monto=efectivo,
             autorizado_por=admin_id,
             creado_por=usuario_id,
+            origen=origen,
+            motivo=motivo,
         )
 
     for movimiento in plan.otros_metodos:
@@ -174,4 +180,6 @@ async def registrar(
             monto=Decimal(str(movimiento["monto"])),
             autorizado_por=admin_id,
             creado_por=usuario_id,
+            origen=origen,
+            motivo=motivo,
         )

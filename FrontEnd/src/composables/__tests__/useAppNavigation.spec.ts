@@ -61,3 +61,17 @@ describe('menú lateral', () => {
     expect(rutas).toContain('pos-cierre')
   })
 })
+
+describe('menú lateral: aviso de privacidad', () => {
+  it('lo ve el AdministradorSistema en Administración', () => {
+    const admin = useAppNavigation().visibleGroups.value.find((g) => g.label === 'Administración')
+    expect(admin?.items.map((i) => i.routeName)).toContain('admin-aviso-privacidad')
+  })
+
+  it('no lo ve un Administrador de sucursal aunque tenga todos los permisos', () => {
+    auth.isSistema = false
+    auth.currentBranchId = 'suc-1'
+    auth.roles = new Set(['Administrador'])
+    expect(rutasVisibles()).not.toContain('admin-aviso-privacidad')
+  })
+})

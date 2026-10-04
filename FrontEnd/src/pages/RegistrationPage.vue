@@ -72,6 +72,7 @@
           </template>
         </template>
 
+        <ConsentimientoPrivacidad />
         <TutorForm />
         <ChildrenSection v-if="store.step === 'form'" />
         <RfidSection v-if="store.step === 'rfid'" />
@@ -90,6 +91,7 @@ import { useRegistrationStore } from '@/stores/registration'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import TutorForm from '@/components/registro-infantes/TutorForm.vue'
+import ConsentimientoPrivacidad from '@/components/registro-infantes/ConsentimientoPrivacidad.vue'
 import ChildrenSection from '@/components/registro-infantes/ChildrenSection.vue'
 import OrderSummary from '@/components/registro-infantes/OrderSummary.vue'
 import RfidSection from '@/components/registro-infantes/RfidSection.vue'

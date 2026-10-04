@@ -31,6 +31,26 @@ export const comandasApi = {
     )
   },
 
+  /**
+   * A4: devuelve al cliente el dinero de una comanda ya entregada (T), sin
+   * regresar su stock. Como la cancelación de una pagada: sin `tokenPinAdmin`
+   * el backend responde 403 AUTORIZACION_ADMIN_REQUERIDA con el `turno_id`
+   * para pedir el PIN; 409 DEVOLUCION_NO_APLICA si no está entregada o ya se
+   * devolvió.
+   */
+  async devolver(
+    comandaId: string,
+    motivo: string,
+    tokenPinAdmin?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await apiClient.post(
+      `/comandas/${comandaId}/devolucion`,
+      { motivo, ...(tokenPinAdmin ? { token_pin_admin: tokenPinAdmin } : {}) },
+      { signal },
+    )
+  },
+
   async crear(payload: CrearComandaRequest, signal?: AbortSignal): Promise<Comanda> {
     const { data } = await apiClient.post<Comanda>('/comandas', payload, { signal })
     return data

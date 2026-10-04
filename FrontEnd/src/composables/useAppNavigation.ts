@@ -252,6 +252,12 @@ export function useAppNavigation(): AppNavigation {
           permission: 'cajas:crear',
         },
         {
+          label: 'Aviso de privacidad',
+          icon: 'privacy_tip',
+          routeName: 'admin-aviso-privacidad',
+          role: 'AdministradorSistema',
+        },
+        {
           label: 'Reportes',
           icon: 'analytics',
           routeName: 'reportes-dashboard',
@@ -262,7 +268,10 @@ export function useAppNavigation(): AppNavigation {
   ])
 
   function isVisible(item: NavItem): boolean {
-    return !item.permission || auth.hasPermission(item.permission)
+    return (
+      (!item.permission || auth.hasPermission(item.permission)) &&
+      (!item.role || auth.hasRole(item.role))
+    )
   }
 
   const visibleGroups = computed(() =>

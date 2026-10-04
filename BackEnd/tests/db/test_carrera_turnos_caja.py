@@ -182,6 +182,14 @@ async def test_confirmar_cierre_simultaneo_cierra_una_vez_y_el_resto_es_409(
     monkeypatch.setattr(settings, "exigir_pin_token", False)
     apertura_id = await crear_apertura(pool, escenario, Decimal("1000.00"), estado="EN_CORTE")
     async with pool.acquire() as conn:
+        # A16: la revisión la autoriza un administrador distinto del dueño.
+        admin_id = await conn.fetchval(
+            """
+            INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol)
+            VALUES ($1, 'x', 'Admin revisor', 2) RETURNING id
+            """,
+            f"admin.{uuid.uuid4().hex[:10]}@test.local",
+        )
         await conn.execute(
             """
             UPDATE public.apertura_caja
@@ -190,7 +198,7 @@ async def test_confirmar_cierre_simultaneo_cierra_una_vez_y_el_resto_es_409(
             """,
             uuid.UUID(apertura_id),
             json.dumps({"desglose_efectivo": {"total": "1000"}, "metodos_pago": []}),
-            escenario.usuario_id,
+            admin_id,
         )
     user_id = str(escenario.usuario_id)
 

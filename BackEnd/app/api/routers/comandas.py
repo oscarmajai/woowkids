@@ -28,11 +28,16 @@ from app.api.deps import (
     require_role,
     resolve_ws_auth,
 )
-from app.core.database import get_db
+from app.core.database import conexion_breve, get_db
 from app.core.scope import sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
-from app.schemas.comanda import CambioEstadoRequest, ComandaCreate, ComandaModifyRequest
+from app.schemas.comanda import (
+    CambioEstadoRequest,
+    ComandaCreate,
+    ComandaModifyRequest,
+    DevolucionEntregadaRequest,
+)
 from app.services import alcance_service, comanda_service
 from app.services.permission_service import has_permission
 
@@ -134,6 +139,42 @@ async def cambiar_estado(
     return asdict(comanda)
 
 
+@router.post("/{comanda_id}/devolucion")
+async def devolver_entregada(
+    comanda_id: str,
+    data: DevolucionEntregadaRequest,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
+) -> Any:
+    """A4: devuelve al cliente el dinero de una comanda ya entregada (T), sin
+    regresar su stock. Exige motivo y `token_pin_admin` (403
+    AUTORIZACION_ADMIN_REQUERIDA con el turno_id para
+    /turnos-caja/validar-pin-admin, como la cancelación de una cobrada).
+    Registra la devolución por método en el turno abierto de quien devuelve y
+    deja la comanda cancelada. 409 DEVOLUCION_NO_APLICA si no está entregada
+    o ya se canceló/devolvió; 409 COMANDA_SIN_PAGOS si no tiene cobros."""
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
+    try:
+        comanda = await comanda_service.devolver_entregada(
+            conn,
+            comanda_id,
+            current_user,
+            data.motivo,
+            token_pin_admin=data.token_pin_admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if comanda is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comanda no encontrada",
+        )
+    return asdict(comanda)
+
+
 @router.patch("/{comanda_id}/detalles")
 async def modificar_detalles(
     comanda_id: str,
@@ -179,7 +220,6 @@ async def comandas_ws(
     websocket: WebSocket,
     ticket: str | None = Query(None),
     token: str | None = Query(None),
-    conn: asyncpg.Connection = Depends(get_db),
 ) -> None:
     """Canal en tiempo real de comandas: emite comanda_creada/comanda_actualizada
     a los clientes de la sucursal correspondiente (ver app/core/ws_manager.py).
@@ -188,10 +228,16 @@ async def comandas_ws(
     al JWT crudo en la URL; ?token=... se sigue aceptando mientras
     settings.WS_ACEPTA_JWT sea true. Va por query param porque el handshake WS
     nativo del navegador no admite headers custom."""
+    # La conexión a la BD solo se usa para autenticar y se suelta antes de
+    # quedarse escuchando: el socket puede durar horas (ver get_db).
     try:
-        current_user = await resolve_ws_auth(conn, ticket, token)
+        async with conexion_breve() as conn:
+            current_user = await resolve_ws_auth(conn, ticket, token)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    except TimeoutError:
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return
 
     if not has_permission(current_user.role, "restaurante:ver_pedidos"):

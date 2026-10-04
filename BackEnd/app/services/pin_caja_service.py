@@ -8,7 +8,8 @@ operación) de un cajero o de un administrador:
   lo reserva la API para "token de sesión vencido", y el front lo usaba para
   refrescar la sesión, reenviar el PIN equivocado y cerrar la sesión (A5).
 - Si el usuario tiene PIN configurado solo se acepta el PIN; la contraseña
-  solo vale mientras no tenga PIN (decisión vigente del usuario).
+  solo vale mientras no tenga PIN (decisión vigente del usuario). Vale
+  también para la revisión del administrador en el cierre (A16).
 - Límite de intentos: ``MAX_FALLOS`` fallos en ``VENTANA_MINUTOS`` por
   usuario dueño del PIN + sucursal → **429** ``PIN_BLOQUEADO``. Se guarda en
   ``intentos_pin_fallidos`` (no en memoria) para que valga con varios
@@ -16,6 +17,9 @@ operación) de un cajero o de un administrador:
 - El autorizador (quien aprueba un cierre) se busca solo entre los usuarios
   de la sucursal del turno —o AdministradorSistema, que no tiene sucursal— y
   debe tener el permiso de autorizar en su rol.
+- Segregación de funciones (A16): nadie autoriza el cierre de su propio
+  turno; si el dueño del turno es un administrador, lo autoriza otro
+  administrador de la sucursal o un AdministradorSistema.
 
 ``verificar_pin_autorizador`` es la pieza reutilizable para cualquier flujo
 que pida el PIN de un administrador (cierre de caja, cancelaciones, etc.).
@@ -41,6 +45,12 @@ VENTANA_MINUTOS = 15
 # Permiso del rol del autorizador para aprobar el arqueo (revisión y cierre).
 PERMISO_REVISION_ARQUEO = "turnos_caja:revision_admin"
 PERMISO_AUTORIZAR_CIERRE = "turnos_caja:confirmar"
+
+# A16: propósito del token de un solo uso que se emite al validar un PIN. Un
+# token solo sirve para la operación para la que se emitió.
+PROPOSITO_CERRAR = "cerrar"  # revisión y confirmación del cierre de caja
+PROPOSITO_CANCELAR = "cancelar"  # cancelaciones y devoluciones de órdenes cobradas
+PROPOSITOS_PIN = frozenset({PROPOSITO_CERRAR, PROPOSITO_CANCELAR})
 
 
 class PinInvalidoError(HTTPException):
@@ -84,6 +94,27 @@ class AutorizadorNoValidoError(HTTPException):
         )
 
 
+class AutorizadorEsDuenoTurnoError(HTTPException):
+    """A16: el autorizador del cierre es el mismo dueño del turno."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "AUTORIZADOR_ES_DUENO_TURNO",
+                "message": (
+                    "No puedes autorizar el cierre de tu propio turno. Pide a otro "
+                    "administrador de la sucursal o a un administrador del sistema "
+                    "que lo autorice."
+                ),
+            },
+        )
+
+
+def es_dueno_turno(autorizador_id: str | uuid.UUID, dueno_turno_id: str | uuid.UUID) -> bool:
+    return str(autorizador_id) == str(dueno_turno_id)
+
+
 def _coincide(plano: str, hash_guardado: str | None) -> bool:
     if not plano or not hash_guardado:
         return False
@@ -94,19 +125,11 @@ def _coincide(plano: str, hash_guardado: str | None) -> bool:
         return False
 
 
-def credencial_valida(
-    secreto: str,
-    pin_hash: str | None,
-    password_hash: str | None,
-    *,
-    acepta_password: bool = False,
-) -> bool:
-    """Con PIN configurado solo vale el PIN (salvo ``acepta_password``, para la
-    revisión con contraseña); sin PIN, la contraseña hace las veces de PIN."""
+def credencial_valida(secreto: str, pin_hash: str | None, password_hash: str | None) -> bool:
+    """Con PIN configurado solo vale el PIN; sin PIN, la contraseña hace las
+    veces de PIN (C1)."""
     if pin_hash:
-        if _coincide(secreto, pin_hash):
-            return True
-        return acepta_password and _coincide(secreto, password_hash)
+        return _coincide(secreto, pin_hash)
     return _coincide(secreto, password_hash)
 
 
@@ -151,19 +174,30 @@ async def verificar_con_limite(
 
 
 async def buscar_autorizador(
-    conn: asyncpg.Connection, email: str, sucursal_id: str | uuid.UUID | None, permiso: str
+    conn: asyncpg.Connection,
+    email: str,
+    sucursal_id: str | uuid.UUID | None,
+    permiso: str,
+    *,
+    dueno_turno_id: str | uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Usuario activo con ese correo que puede autorizar en la sucursal: su rol
     tiene ``permiso`` y está asignado a la sucursal (``usuarios_sucursal``), o
     es AdministradorSistema (sin sucursal, autoriza en todas). Cualquier otro
     caso —no existe, otra sucursal, rol sin permiso— responde 403 sin llegar
-    a verificar el PIN, para no dar pistas sobre PINs de otras sucursales."""
+    a verificar el PIN, para no dar pistas sobre PINs de otras sucursales.
+
+    Con ``dueno_turno_id`` (autorizar un cierre), el autorizador no puede ser
+    el dueño del turno: 403 ``AUTORIZADOR_ES_DUENO_TURNO``, también sin llegar
+    a verificar el PIN (A16)."""
     row = await user_repository.get_autorizador_por_email(conn, email, sucursal_id, permiso)
     if not row:
         raise AutorizadorNoValidoError()
     es_sistema = row["rol"] == ROL_SISTEMA
     if not es_sistema and not (row["tiene_permiso"] and row["en_sucursal"]):
         raise AutorizadorNoValidoError()
+    if dueno_turno_id is not None and es_dueno_turno(row["id"], dueno_turno_id):
+        raise AutorizadorEsDuenoTurnoError()
     return row
 
 
@@ -176,23 +210,22 @@ async def verificar_pin_autorizador(
     permiso: str = PERMISO_AUTORIZAR_CIERRE,
     tipo: str = "admin",
     intentado_por: str | uuid.UUID | None = None,
-    acepta_password: bool = False,
+    dueno_turno_id: str | uuid.UUID | None = None,
     error: HTTPException | None = None,
 ) -> dict[str, Any]:
     """Busca al autorizador (``buscar_autorizador``) y valida su PIN con el
     límite de intentos. Devuelve la fila del autorizador (id, email,
-    nombre_completo, rol)."""
-    autorizador = await buscar_autorizador(conn, email, sucursal_id, permiso)
+    nombre_completo, rol, pin_hash)."""
+    autorizador = await buscar_autorizador(
+        conn, email, sucursal_id, permiso, dueno_turno_id=dueno_turno_id
+    )
     await verificar_con_limite(
         conn,
         usuario_id=autorizador["id"],
         sucursal_id=sucursal_id,
         tipo=tipo,
         verificar=lambda: credencial_valida(
-            pin,
-            autorizador["pin_hash"],
-            autorizador["password_hash"],
-            acepta_password=acepta_password,
+            pin, autorizador["pin_hash"], autorizador["password_hash"]
         ),
         error=error or PinInvalidoError("El PIN ingresado para el Administrador es incorrecto."),
         intentado_por=intentado_por,
