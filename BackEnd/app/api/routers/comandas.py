@@ -32,7 +32,12 @@ from app.core.database import conexion_breve, get_db
 from app.core.scope import sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
-from app.schemas.comanda import CambioEstadoRequest, ComandaCreate, ComandaModifyRequest
+from app.schemas.comanda import (
+    CambioEstadoRequest,
+    ComandaCreate,
+    ComandaModifyRequest,
+    DevolucionEntregadaRequest,
+)
 from app.services import alcance_service, comanda_service
 from app.services.permission_service import has_permission
 
@@ -131,6 +136,42 @@ async def cambiar_estado(
         )
 
     # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
+    return asdict(comanda)
+
+
+@router.post("/{comanda_id}/devolucion")
+async def devolver_entregada(
+    comanda_id: str,
+    data: DevolucionEntregadaRequest,
+    conn: asyncpg.Connection = Depends(get_db),
+    current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
+) -> Any:
+    """A4: devuelve al cliente el dinero de una comanda ya entregada (T), sin
+    regresar su stock. Exige motivo y `token_pin_admin` (403
+    AUTORIZACION_ADMIN_REQUERIDA con el turno_id para
+    /turnos-caja/validar-pin-admin, como la cancelación de una cobrada).
+    Registra la devolución por método en el turno abierto de quien devuelve y
+    deja la comanda cancelada. 409 DEVOLUCION_NO_APLICA si no está entregada
+    o ya se canceló/devolvió; 409 COMANDA_SIN_PAGOS si no tiene cobros."""
+    await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
+    try:
+        comanda = await comanda_service.devolver_entregada(
+            conn,
+            comanda_id,
+            current_user,
+            data.motivo,
+            token_pin_admin=data.token_pin_admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if comanda is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comanda no encontrada",
+        )
     return asdict(comanda)
 
 

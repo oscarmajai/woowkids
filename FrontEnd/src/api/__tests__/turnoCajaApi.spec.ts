@@ -160,3 +160,73 @@ describe('turnoCajaApi.validarPinAdmin (A16)', () => {
     })
   })
 })
+
+describe('turnoCajaApi.obtenerDetalleArqueo (A4: devoluciones)', () => {
+  beforeEach(() => {
+    get.mockReset()
+  })
+
+  it('mapea las devoluciones por método y la lista de devoluciones', async () => {
+    get.mockResolvedValue({
+      data: {
+        id: 'a1',
+        cajero_nombre: 'Diego',
+        terminal: 'CAJA 01',
+        sucursal_nombre: 'Plaza Patria',
+        fecha_apertura: '2026-10-03T08:00:00',
+        fecha_cierre: '2026-10-03T16:00:00',
+        fondo_inicial: '500.00',
+        total_declarado: '930.00',
+        total_esperado: '930.00',
+        diferencia_neta: '0.00',
+        desglose_efectivo: { total: '500.00' },
+        balance_por_metodo: [
+          {
+            metodo: 'tarjeta',
+            label: 'Tarjeta',
+            declarado: '230.00',
+            esperado: '230.00',
+            diferencia: '0.00',
+            devoluciones: '70.00',
+          },
+          // Backend viejo, sin el campo.
+          { metodo: 'otro', label: 'Otro', declarado: '0', esperado: '0', diferencia: '0' },
+        ],
+        devoluciones: [
+          {
+            id: 'd1',
+            comanda_id: 'c1',
+            ticket_numero: 'T-12',
+            metodo_pago_nombre: 'Tarjeta',
+            es_efectivo: false,
+            monto: '70.00',
+            origen: 'entregada',
+            motivo: 'Llegó frío',
+            autorizado_por_nombre: 'Admin',
+            creado_por_nombre: 'Diego',
+            creado: '2026-10-03T12:00:00',
+          },
+        ],
+      },
+    })
+
+    const detalle = await turnoCajaApi.obtenerDetalleArqueo('a1')
+
+    expect(detalle.balancePorMetodo.map((f) => f.devoluciones)).toEqual([70, 0])
+    expect(detalle.devoluciones).toEqual([
+      {
+        id: 'd1',
+        comandaId: 'c1',
+        ticketNumero: 'T-12',
+        metodoPagoNombre: 'Tarjeta',
+        esEfectivo: false,
+        monto: 70,
+        origen: 'entregada',
+        motivo: 'Llegó frío',
+        autorizadoPorNombre: 'Admin',
+        creadoPorNombre: 'Diego',
+        creado: '2026-10-03T12:00:00',
+      },
+    ])
+  })
+})

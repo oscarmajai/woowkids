@@ -234,6 +234,19 @@
                         <q-item-section avatar><q-icon name="block" size="19px" /></q-item-section>
                         <q-item-section>Cancelar orden</q-item-section>
                       </q-item>
+                      <q-item
+                        v-if="esDevolvible(tx.estado_actual)"
+                        v-close-popup
+                        clickable
+                        class="text-negative"
+                        data-test="accion-devolver"
+                        @click="abrirDevolver(tx.comanda_id!)"
+                      >
+                        <q-item-section avatar>
+                          <q-icon name="currency_exchange" size="19px" />
+                        </q-item-section>
+                        <q-item-section>Devolver dinero</q-item-section>
+                      </q-item>
                     </q-list>
                   </q-menu>
                 </q-btn>
@@ -296,7 +309,7 @@ import type { Estadisticas } from '@/api/historialApi'
 import type { CajaItem } from '@/types/turnoCaja'
 
 const $q = useQuasar()
-const { cancelarComanda } = useCancelarComanda()
+const { cancelarComanda, devolverComanda } = useCancelarComanda()
 const authStore = useAuthStore()
 const metodosPagoStore = useMetodosPagoStore()
 
@@ -617,6 +630,51 @@ function abrirCancelar(comandaId: string) {
       void cargarDatos()
     } catch (err: unknown) {
       const msg = mensajeDeError(err, 'No se pudo cancelar la orden.')
+      $q.notify({ type: 'negative', message: msg, position: 'top', timeout: 4000 })
+      void cargarDatos()
+    }
+  })
+}
+
+// A4: una entregada ya no se cancela (su producto se consumió), pero se le
+// puede devolver el dinero al cliente: no regresa stock y exige el PIN de un
+// administrador de la sucursal.
+function esDevolvible(estado: string): boolean {
+  return estado.toUpperCase() === 'T'
+}
+
+const MOTIVOS_DEVOLUCION = [
+  'Producto en mal estado',
+  'Pedido equivocado',
+  'Tardó demasiado',
+  'Cliente insatisfecho',
+]
+
+function abrirDevolver(comandaId: string) {
+  comandaSeleccionadaId.value = comandaId
+  $q.dialog({
+    component: MotivoCancelacionDialog,
+    componentProps: {
+      titulo: 'Devolver dinero',
+      subtitulo: 'La orden ya se entregó: su producto no regresa al inventario.',
+      botonLabel: 'Devolver dinero',
+      icono: 'currency_exchange',
+      motivos: MOTIVOS_DEVOLUCION,
+    },
+  }).onOk(async (motivo: string) => {
+    try {
+      const devuelta = await devolverComanda(comandaId, motivo)
+      if (!devuelta) return
+      $q.notify({
+        type: 'positive',
+        message: 'Devolución registrada correctamente.',
+        position: 'top',
+        timeout: 2500,
+        icon: 'check_circle',
+      })
+      void cargarDatos()
+    } catch (err: unknown) {
+      const msg = mensajeDeError(err, 'No se pudo registrar la devolución.')
       $q.notify({ type: 'negative', message: msg, position: 'top', timeout: 4000 })
       void cargarDatos()
     }

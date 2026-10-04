@@ -962,6 +962,33 @@ async def sumar_devoluciones_efectivo_apertura(
     return Decimal(str(val))
 
 
+async def sumar_devoluciones_por_metodo_apertura(
+    conn: asyncpg.Connection, apertura_caja_id: str
+) -> list[dict[str, Any]]:
+    """A4: lo devuelto a clientes desde este turno (cancelaciones de comandas
+    cobradas y devoluciones de entregadas), agrupado por método. Cada monto
+    baja el esperado de SU método en el arqueo: el efectivo, el del cajón; la
+    tarjeta, lo que el sistema espera ver en la terminal. Un renglón con
+    es_efectivo agrupa todo el efectivo (su método puede venir NULL: la venta
+    sin método de POST /comandas)."""
+    rows = await conn.fetch(
+        """
+        SELECT
+            d.es_efectivo,
+            CASE WHEN d.es_efectivo THEN NULL ELSE d.metodo_pago_id END AS metodo_pago_id,
+            CASE WHEN d.es_efectivo THEN NULL ELSE mp.nombre END AS metodo_nombre,
+            COALESCE(SUM(d.monto), 0) AS total
+        FROM public.devoluciones_comanda d
+        LEFT JOIN public.metodos_pago mp ON mp.id = d.metodo_pago_id
+        WHERE d.apertura_caja_id = $1
+        GROUP BY 1, 2, 3
+        ORDER BY d.es_efectivo DESC, 3
+        """,
+        uuid.UUID(apertura_caja_id),
+    )
+    return [dict(r) for r in rows]
+
+
 async def sumar_ventas_efectivo_apertura(
     conn: asyncpg.Connection, apertura_caja_id: str
 ) -> Decimal:

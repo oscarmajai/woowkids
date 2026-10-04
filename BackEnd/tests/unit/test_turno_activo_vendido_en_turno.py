@@ -51,7 +51,7 @@ def _patches(activa: dict[str, Any], **sobrescribir: Any) -> list[Any]:
         "sumar_ingresos_por_apertura": Decimal("50"),
         "sumar_cambio_apertura": Decimal("120"),
         "sumar_ventas_efectivo_apertura": Decimal("1000"),
-        "sumar_devoluciones_efectivo_apertura": Decimal("0"),
+        "sumar_devoluciones_por_metodo_apertura": [],
         "obtener_movimientos_por_metodo": [
             {"metodo_nombre": "Efectivo", "metodo_tipo": "E", "total_ventas": Decimal("1000")},
             {"metodo_nombre": "Tarjeta", "metodo_tipo": "T", "total_ventas": Decimal("300")},
@@ -65,7 +65,14 @@ def _patches(activa: dict[str, Any], **sobrescribir: Any) -> list[Any]:
         + valores["sumar_ingresos_por_apertura"]
         - valores["sumar_retiros_por_apertura"]
         - valores["sumar_cambio_apertura"]
-        - valores["sumar_devoluciones_efectivo_apertura"]
+        - sum(
+            (
+                d["total"]
+                for d in valores["sumar_devoluciones_por_metodo_apertura"]
+                if d["es_efectivo"]
+            ),
+            Decimal("0"),
+        )
     )
     return [patch(f"{SVC}.{k}", AsyncMock(return_value=v)) for k, v in valores.items()]
 

@@ -20,6 +20,7 @@ import type {
   FilaBalance,
   ConteoGuardado,
   PropositoPinAdmin,
+  DevolucionArqueo,
 } from '@/types/turnoCaja'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,6 +117,24 @@ function mapBalancePorMetodo(raw: any[] | undefined): FilaBalance[] {
     declarado: Number(f.declarado),
     esperado: Number(f.esperado),
     diferencia: Number(f.diferencia),
+    devoluciones: Number(f.devoluciones ?? 0),
+  }))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDevoluciones(raw: any[] | undefined): DevolucionArqueo[] {
+  return (raw ?? []).map((d) => ({
+    id: String(d.id),
+    comandaId: String(d.comanda_id),
+    ticketNumero: d.ticket_numero ?? null,
+    metodoPagoNombre: d.metodo_pago_nombre ?? null,
+    esEfectivo: Boolean(d.es_efectivo),
+    monto: Number(d.monto),
+    origen: d.origen === 'entregada' ? 'entregada' : 'cancelacion',
+    motivo: d.motivo ?? null,
+    autorizadoPorNombre: d.autorizado_por_nombre ?? null,
+    creadoPorNombre: d.creado_por_nombre ?? null,
+    creado: d.creado,
   }))
 }
 
@@ -463,6 +482,7 @@ export const turnoCajaApi = {
         observaciones: i.observaciones ?? null,
         creado: i.creado,
       })),
+      devoluciones: mapDevoluciones(data.devoluciones),
     }
   },
 

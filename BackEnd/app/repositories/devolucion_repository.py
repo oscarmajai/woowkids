@@ -1,7 +1,8 @@
 """
 app/repositories/devolucion_repository.py
-Devoluciones al cliente por la cancelación de una comanda cobrada (A4) y los
-cobros de caja de esa comanda que se devuelven.
+Devoluciones al cliente de una comanda cobrada (A4), al cancelarla o al
+devolver una ya entregada, y los cobros de caja de esa comanda que se
+devuelven.
 """
 
 from __future__ import annotations
@@ -41,19 +42,21 @@ _EXISTE_PAGO_ORDEN = """
 _INSERT = """
     INSERT INTO public.devoluciones_comanda
         (comanda_id, apertura_caja_id, apertura_venta_id, metodo_pago_id,
-         es_efectivo, monto, autorizado_por, creado_por)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         es_efectivo, monto, autorizado_por, creado_por, origen, motivo)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id
 """
 
 _LISTAR_POR_APERTURA = """
     SELECT d.id, d.comanda_id, c.ticket_numero, d.metodo_pago_id,
            mp.nombre AS metodo_pago_nombre, d.es_efectivo, d.monto,
-           d.autorizado_por, u.nombre_completo AS autorizado_por_nombre, d.creado
+           d.autorizado_por, u.nombre_completo AS autorizado_por_nombre, d.creado,
+           d.origen, d.motivo, cp.nombre_completo AS creado_por_nombre
     FROM public.devoluciones_comanda d
     JOIN public.comandas c ON c.id = d.comanda_id
     LEFT JOIN public.metodos_pago mp ON mp.id = d.metodo_pago_id
     LEFT JOIN public.usuarios u ON u.id = d.autorizado_por
+    LEFT JOIN public.usuarios cp ON cp.id = d.creado_por
     WHERE d.apertura_caja_id = $1
     ORDER BY d.creado DESC
 """
@@ -79,7 +82,12 @@ async def registrar(
     monto: Decimal,
     autorizado_por: str,
     creado_por: str,
+    origen: str = "cancelacion",
+    motivo: str | None = None,
 ) -> str:
+    """Una fila por método devuelto. `origen` es 'cancelacion' (comanda
+    cancelada en cocina, su stock regresó) o 'entregada' (ya se consumió, el
+    stock no regresa); `motivo` es el que dio quien devolvió."""
     devolucion_id = await conn.fetchval(
         _INSERT,
         uuid.UUID(comanda_id),
@@ -90,6 +98,8 @@ async def registrar(
         monto,
         uuid.UUID(autorizado_por),
         uuid.UUID(creado_por),
+        origen,
+        motivo,
     )
     return str(devolucion_id)
 

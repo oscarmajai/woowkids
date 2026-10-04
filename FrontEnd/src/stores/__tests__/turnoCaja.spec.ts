@@ -255,6 +255,7 @@ describe('turno en BALANCE_REVELADO tras recargar', () => {
             declarado: 100,
             esperado: 100,
             diferencia: 0,
+            devoluciones: 0,
           },
         ],
       }),
