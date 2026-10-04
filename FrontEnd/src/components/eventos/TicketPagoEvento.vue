@@ -14,6 +14,8 @@
 
 import type { TicketPagoEventoProps } from '@/types/ticketPagoEvento'
 
+import { avisoLiquidacion } from '@/utils/reservacionPrecio'
+
 const props = defineProps<TicketPagoEventoProps>()
 defineEmits<{ close: [] }>()
 
@@ -109,7 +111,9 @@ function imprimir() {
         <span>{{ fmt(saldoPendiente) }}</span>
       </div>
 
-      <div v-if="!liquidado()" class="ticket-nota">El saldo se liquida el día del evento.</div>
+      <div v-if="!liquidado()" class="ticket-nota">
+        {{ avisoLiquidacion(props.fechaLimiteLiquidacion) }}
+      </div>
 
       <div class="text-center text-caption text-grey-7 q-mt-md q-mb-md">
         ¡Gracias por celebrar con nosotros!

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  avisoLiquidacion,
+  fechaLimiteLiquidacionTexto,
   calcularPulseras,
   cantidadExtra,
   dentroDePlazo,
@@ -213,6 +215,15 @@ describe('sumarHoras', () => {
 describe('plazo de liquidación', () => {
   it('la fecha límite es una semana antes del evento', () => {
     expect(fechaLimiteLiquidacion('2027-02-25').toISOString().slice(0, 10)).toBe('2027-02-18')
+  })
+
+  it('N-A2: el aviso del comprobante nombra la fecha límite y la cancelación', () => {
+    const fecha = fechaLimiteLiquidacionTexto('2027-02-25')
+    expect(fecha).toContain('18')
+    expect(fecha).toContain('2027')
+    expect(avisoLiquidacion(fecha)).toBe(
+      `Liquida el saldo a más tardar el ${fecha}; si no, la reservación se cancela.`,
+    )
   })
 
   it('permite editar mientras falte más de una semana', () => {

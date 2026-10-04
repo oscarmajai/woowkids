@@ -23,4 +23,6 @@ export interface TicketPagoEventoProps {
   /** Métodos usados en esta transacción, ya resumidos ("Efectivo, Tarjeta Crédito"). */
   metodosPago: string
   notas?: string | null
+  /** Fecha límite para liquidar, ya formateada ("18 oct 2026"). */
+  fechaLimiteLiquidacion?: string | null
 }

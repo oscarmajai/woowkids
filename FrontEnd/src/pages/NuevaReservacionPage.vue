@@ -933,7 +933,8 @@
                       El evento queda pagado por completo
                     </template>
                     <template v-else>
-                      El resto ({{ fmt(saldoTrasAnticipo) }}) se liquida el día del evento
+                      El resto ({{ fmt(saldoTrasAnticipo) }}) se liquida a más tardar el
+                      {{ limiteLiquidacionLabel }}; si no, la reservación se cancela
                     </template>
                   </div>
                 </div>
@@ -996,6 +997,7 @@ import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import type { AppliedPayment } from '@/types/payments'
 import { horasFacturables } from '@/utils/horario'
 import {
+  fechaLimiteLiquidacionTexto,
   cantidadExtra,
   diasParaEvento,
   etiquetaUnidadExtra,
@@ -1219,6 +1221,11 @@ const nextMonth = () => {
 const handleDayClick = (day: BookingCalendarDay) => {
   if (!day.isOtherMonth && day.day !== '' && !day.isPast) form.value.selectedDate = day.date
 }
+
+// N-A2: el saldo vence una semana antes del evento, no el día del evento.
+const limiteLiquidacionLabel = computed(() =>
+  form.value.selectedDate ? fechaLimiteLiquidacionTexto(form.value.selectedDate) : '',
+)
 
 const selectedDateLabel = computed(() => {
   if (!form.value.selectedDate) return 'Sin seleccionar'
@@ -1849,6 +1856,7 @@ const confirmarReservacion = async () => {
       total: totalNum.value,
       anticipo: montoPagado.value,
       metodosPago: metodosPagoResumen.value,
+      fechaLimiteLiquidacion: limiteLiquidacionLabel.value || null,
     }
 
     $q.notify({

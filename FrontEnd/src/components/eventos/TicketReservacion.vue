@@ -13,6 +13,8 @@
 
 import type { TicketReservacionProps } from '@/types/ticketReservacion'
 
+import { avisoLiquidacion } from '@/utils/reservacionPrecio'
+
 const props = defineProps<TicketReservacionProps>()
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -127,7 +129,9 @@ function imprimir() {
         <span>{{ fmt(saldo()) }}</span>
       </div>
 
-      <div v-if="!liquidado()" class="ticket-nota">El saldo se liquida el día del evento.</div>
+      <div v-if="!liquidado()" class="ticket-nota">
+        {{ avisoLiquidacion(props.fechaLimiteLiquidacion) }}
+      </div>
 
       <div class="text-center text-caption text-grey-7 q-mt-md q-mb-md">
         ¡Gracias por celebrar con nosotros!
