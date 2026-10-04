@@ -45,8 +45,11 @@
           />
         </label>
         <p class="autoriza__hint">
-          La devolución al cliente se registrará en tu turno de caja: la parte en efectivo se resta
-          del efectivo esperado del arqueo.
+          {{
+            aviso ||
+            'La devolución al cliente se registrará en tu turno de caja: cada método resta del ' +
+              'esperado de su método en el arqueo.'
+          }}
         </p>
         <p v-if="error" class="autoriza__error" role="alert">{{ error }}</p>
       </div>
@@ -56,7 +59,7 @@
         <q-btn
           unelevated
           color="negative"
-          label="Autorizar cancelación"
+          :label="botonLabel || 'Autorizar cancelación'"
           :loading="validando"
           :disable="!puedeConfirmar"
           @click="confirmar"
@@ -76,6 +79,9 @@ import { filtrarTeclaEntero } from '@/utils/validacionNumerica'
 const props = defineProps<{
   turnoId: string
   mensaje?: string
+  /** Texto bajo el PIN; por defecto, el de la cancelación de una orden pagada. */
+  aviso?: string
+  botonLabel?: string
 }>()
 
 defineEmits([...useDialogPluginComponent.emits])
