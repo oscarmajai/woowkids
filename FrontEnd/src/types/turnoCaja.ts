@@ -210,6 +210,13 @@ export interface ConfirmarCierrePayload {
   tokenPinAdmin?: string | null
 }
 
+/**
+ * A16: para qué se emite el token del PIN de administrador. Cada token solo
+ * sirve para su propósito: `cerrar` (revisión y confirmación del cierre de
+ * caja) o `cancelar` (cancelar o devolver una orden cobrada).
+ */
+export type PropositoPinAdmin = 'cerrar' | 'cancelar'
+
 /** Resultado de validar un PIN: el backend emite un token de un solo uso (5 min). */
 export interface ResultadoValidacionPin {
   ok: boolean

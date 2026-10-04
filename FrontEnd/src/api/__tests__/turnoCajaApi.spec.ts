@@ -140,3 +140,23 @@ describe('turnoCajaApi.registrarIngreso (motivo)', () => {
     expect(resp.observaciones).toBe('Cambio')
   })
 })
+
+describe('turnoCajaApi.validarPinAdmin (A16)', () => {
+  beforeEach(() => {
+    post.mockReset()
+  })
+
+  it.each(['cerrar', 'cancelar'] as const)('manda el propósito «%s» del token', async (p) => {
+    post.mockResolvedValue({ data: { ok: true, mensaje: '', token_pin: 'tk' } })
+
+    const resp = await turnoCajaApi.validarPinAdmin('t1', 'admin@x.mx', '4821', p)
+
+    expect(resp.token_pin).toBe('tk')
+    expect(post).toHaveBeenCalledWith('/turnos-caja/validar-pin-admin', {
+      turno_id: 't1',
+      admin_email: 'admin@x.mx',
+      pin: '4821',
+      proposito: p,
+    })
+  })
+})

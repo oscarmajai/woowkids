@@ -3,6 +3,7 @@ import { resolveErrorMessage } from '@/utils/errorHandler'
 import { downloadBlob } from '@/utils/downloadBlob'
 import type { ApiError } from '@/types/auth'
 import type {
+  PropositoPinAdmin,
   ResultadoValidacionPin,
   TurnoActivoResponse,
   AbrirTurnoPayload,
@@ -200,13 +201,19 @@ export const turnoCajaService = {
     }
   },
 
+  /**
+   * Valida el PIN de un administrador. A16: el token que devuelve solo sirve
+   * para `proposito` — `cerrar` en el cierre de caja, `cancelar` para cancelar
+   * o devolver una orden cobrada.
+   */
   async validarPinAdmin(
     turnoId: string,
     adminEmail: string,
     pin: string,
+    proposito: PropositoPinAdmin,
   ): Promise<ResultadoValidacionPin> {
     try {
-      const resp = await turnoCajaApi.validarPinAdmin(turnoId, adminEmail, pin)
+      const resp = await turnoCajaApi.validarPinAdmin(turnoId, adminEmail, pin, proposito)
       return { ok: resp.ok, tokenPin: resp.token_pin ?? null }
     } catch (err) {
       throw new Error(toMensajeError(err), { cause: err })

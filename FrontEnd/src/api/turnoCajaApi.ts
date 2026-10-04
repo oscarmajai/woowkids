@@ -19,6 +19,7 @@ import type {
   RetiroParcialResponse,
   FilaBalance,
   ConteoGuardado,
+  PropositoPinAdmin,
 } from '@/types/turnoCaja'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,15 +273,18 @@ export const turnoCajaApi = {
     return data
   },
 
+  /** El `token_pin` devuelto solo sirve para `proposito` (A16). */
   async validarPinAdmin(
     turnoId: string,
     adminEmail: string,
     pin: string,
+    proposito: PropositoPinAdmin,
   ): Promise<{ ok: boolean; mensaje: string; token_pin?: string | null }> {
     const { data } = await apiClient.post(`${BASE}/validar-pin-admin`, {
       turno_id: turnoId,
       admin_email: adminEmail,
       pin,
+      proposito,
     })
     return data
   },

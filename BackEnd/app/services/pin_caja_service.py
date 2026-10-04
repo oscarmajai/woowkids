@@ -42,6 +42,12 @@ VENTANA_MINUTOS = 15
 PERMISO_REVISION_ARQUEO = "turnos_caja:revision_admin"
 PERMISO_AUTORIZAR_CIERRE = "turnos_caja:confirmar"
 
+# A16: propósito del token de un solo uso que se emite al validar un PIN. Un
+# token solo sirve para la operación para la que se emitió.
+PROPOSITO_CERRAR = "cerrar"  # revisión y confirmación del cierre de caja
+PROPOSITO_CANCELAR = "cancelar"  # cancelaciones y devoluciones de órdenes cobradas
+PROPOSITOS_PIN = frozenset({PROPOSITO_CERRAR, PROPOSITO_CANCELAR})
+
 
 class PinInvalidoError(HTTPException):
     def __init__(

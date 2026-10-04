@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.core.scope import es_sistema
 from app.core.utils import get_mexico_now
-from app.exceptions import PinTokenRequeridoError
+from app.exceptions import PinTokenPropositoError, PinTokenRequeridoError
 from app.repositories import devolucion_repository, pin_token_repository
 from app.repositories.caja_repository import (
     actualizar_admin_autorizacion,
@@ -96,6 +96,9 @@ from app.services.permission_service import has_permission
 from app.services.pin_caja_service import (
     PERMISO_AUTORIZAR_CIERRE,
     PERMISO_REVISION_ARQUEO,
+    PROPOSITO_CANCELAR,
+    PROPOSITO_CERRAR,
+    PROPOSITOS_PIN,
     PinInvalidoError,
 )
 
@@ -845,23 +848,50 @@ async def autenticar_admin_revision(
     )
 
 
+class PropositoPinInvalidoError(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "PROPOSITO_INVALIDO",
+                "message": "El propósito de la autorización debe ser «cerrar» o «cancelar».",
+            },
+        )
+
+
+_OPERACION_POR_PROPOSITO = {
+    PROPOSITO_CERRAR: "cerrar la caja",
+    PROPOSITO_CANCELAR: "cancelar o devolver una orden",
+}
+
+
 async def _emitir_token_pin(
-    conn: asyncpg.Connection, usuario_id: str, turno_id: str, rol: str
+    conn: asyncpg.Connection, usuario_id: str, turno_id: str, rol: str, proposito: str
 ) -> str:
     """QA #14: token de un solo uso con vigencia de 5 minutos, emitido al
-    validar el PIN del cajero o del administrador."""
+    validar el PIN del cajero o del administrador. A16: solo sirve para su
+    ``proposito`` (cerrar / cancelar)."""
     token = secrets.token_urlsafe(32)
     expira = get_mexico_now() + timedelta(minutes=5)
-    await pin_token_repository.crear_token(conn, token, usuario_id, turno_id, rol, expira)
+    await pin_token_repository.crear_token(
+        conn, token, usuario_id, turno_id, rol, proposito, expira
+    )
     return token
 
 
 async def _validar_y_consumir_token_pin(
-    conn: asyncpg.Connection, token: str, turno_id: str, rol: str
+    conn: asyncpg.Connection, token: str, turno_id: str, rol: str, proposito: str
 ) -> dict[str, Any]:
     fila = await pin_token_repository.obtener_token(conn, token, turno_id, rol)
     if not fila:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} no es válido para este turno.")
+    if fila["proposito"] != proposito:
+        # A16: un token emitido para cancelar una orden no cierra la caja, ni al revés.
+        emitido = _OPERACION_POR_PROPOSITO.get(fila["proposito"], fila["proposito"])
+        raise PinTokenPropositoError(
+            f"La autorización con PIN de {rol} se emitió para {emitido}; no sirve para "
+            f"{_OPERACION_POR_PROPOSITO[proposito]}. Vuelve a validar el PIN."
+        )
     if fila["usado"]:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} ya fue usado.")
     if fila["expira"] < get_mexico_now():
@@ -870,12 +900,19 @@ async def _validar_y_consumir_token_pin(
     return fila
 
 
-async def consumir_token_pin_admin(conn: asyncpg.Connection, token: str, turno_id: str) -> str:
+async def consumir_token_pin_admin(
+    conn: asyncpg.Connection,
+    token: str,
+    turno_id: str,
+    proposito: str = PROPOSITO_CANCELAR,
+) -> str:
     """A4: consume el token de un solo uso que emite /validar-pin-admin para
-    `turno_id` (el mismo mecanismo que autoriza el cierre) y devuelve el id del
-    administrador que validó su PIN. El llamador debe estar en una transacción
-    para que el token no quede consumido si la operación autorizada falla."""
-    fila = await _validar_y_consumir_token_pin(conn, token, turno_id, "admin")
+    `turno_id` y devuelve el id del administrador que validó su PIN. A16: el
+    token debe haberse emitido para ``proposito`` (por omisión ``cancelar``:
+    cancelaciones y devoluciones de órdenes cobradas). El llamador debe estar
+    en una transacción para que el token no quede consumido si la operación
+    autorizada falla."""
+    fila = await _validar_y_consumir_token_pin(conn, token, turno_id, "admin", proposito)
     return str(fila["usuario_id"])
 
 
@@ -912,7 +949,10 @@ async def validar_pin_cajero(
         intentado_por=user_id,
     )
 
-    token = await _emitir_token_pin(conn, str(cajero_row["id"]), turno_id, "cajero")
+    # El PIN del cajero solo se pide para el cierre.
+    token = await _emitir_token_pin(
+        conn, str(cajero_row["id"]), turno_id, "cajero", PROPOSITO_CERRAR
+    )
     return {
         "ok": True,
         "mensaje": "PIN del Cajero verificado correctamente.",
@@ -928,14 +968,20 @@ async def validar_pin_admin(
     *,
     user_id: str | None = None,
     solicitante: TokenData | None = None,
+    proposito: str = PROPOSITO_CANCELAR,
 ) -> dict[str, Any]:
-    """Valida el PIN del administrador que autoriza el cierre del turno.
+    """Valida el PIN de un administrador y emite un token de un solo uso para
+    ``turno_id`` que solo sirve para ``proposito`` (A16): ``cerrar`` (cierre
+    de caja) o ``cancelar`` (cancelar o devolver una orden cobrada; es el
+    valor por omisión, el de los llamadores anteriores a A16).
 
     A16: el administrador se busca solo entre los usuarios de la sucursal del
     turno con permiso de autorizar cierres (turnos_caja:confirmar) —o
     AdministradorSistema—; con PIN configurado solo vale el PIN, y hay límite
     de intentos. Los argumentos posicionales son los de antes; ``user_id`` y
     ``solicitante`` (quien llama) son opcionales para no romper llamadores."""
+    if proposito not in PROPOSITOS_PIN:
+        raise PropositoPinInvalidoError()
     apertura = await get_apertura_por_id(conn, turno_id)
     if not apertura:
         raise TurnoNoEncontradoError()
@@ -952,7 +998,7 @@ async def validar_pin_admin(
         intentado_por=user_id,
     )
 
-    token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin")
+    token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin", proposito)
     return {
         "ok": True,
         "mensaje": "PIN del Administrador verificado correctamente.",
@@ -1193,15 +1239,16 @@ async def confirmar_cierre(
                 "Aún no se ha autorizado la revisión de un administrador."
             )
 
-        # QA #14: exige y consume los tokens de un solo uso de cajero y admin.
+        # QA #14: exige y consume los tokens de un solo uso de cajero y admin,
+        # emitidos para cerrar (A16: uno de cancelar una orden no sirve).
         if settings.exigir_pin_token:
             if not payload.token_pin_cajero or not payload.token_pin_admin:
                 raise PinTokenRequeridoError()
             await _validar_y_consumir_token_pin(
-                conn, payload.token_pin_cajero, payload.turno_id, "cajero"
+                conn, payload.token_pin_cajero, payload.turno_id, "cajero", PROPOSITO_CERRAR
             )
             await _validar_y_consumir_token_pin(
-                conn, payload.token_pin_admin, payload.turno_id, "admin"
+                conn, payload.token_pin_admin, payload.turno_id, "admin", PROPOSITO_CERRAR
             )
 
         admin_id = str(apertura["token_admin_jti"])
