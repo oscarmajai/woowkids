@@ -1,5 +1,7 @@
 """A16 contra PostgreSQL real: segregación de funciones en el cierre de caja.
 
+- Un administrador que abrió caja no autoriza su propio cierre: lo autoriza
+  otro administrador de la sucursal o un AdministradorSistema.
 - El token del PIN de administrador guarda su propósito (migración 109): el de
   cancelar una orden no cierra la caja, ni al revés, y el rechazo no lo consume.
 """
@@ -15,7 +17,12 @@ from app.core.security import hash_password
 from app.exceptions import PinTokenPropositoError
 from app.schemas.caja import ConfirmarCierrePayload, RevisionAdminPayload
 from app.services import turnos_caja_service
-from app.services.pin_caja_service import PROPOSITO_CANCELAR, PROPOSITO_CERRAR
+from app.services.pin_caja_service import (
+    PROPOSITO_CANCELAR,
+    PROPOSITO_CERRAR,
+    AutorizadorEsDuenoTurnoError,
+    AutorizadorNoValidoError,
+)
 
 from tests.db.conftest import Escenario, crear_apertura
 
@@ -103,6 +110,58 @@ async def _usado(pool: asyncpg.Pool, token: str) -> bool:
         return bool(
             await conn.fetchval("SELECT usado FROM public.pin_tokens WHERE token = $1", token)
         )
+
+
+async def test_revision_del_cierre_de_un_admin_la_autoriza_otro(
+    pool: asyncpg.Pool, escenario: Escenario
+) -> None:
+    apertura_id, dueno_id, dueno_email = await _turno_de_admin_en_corte(pool, escenario)
+    otro_id, otro_admin = await _usuario(pool, ROL_ADMIN, escenario.sucursal_id)
+    _, admin_otra_sucursal = await _usuario(pool, ROL_ADMIN, await _otra_sucursal(pool))
+    sistema_id, sistema = await _usuario(pool, ROL_SISTEMA, None)
+
+    async with pool.acquire() as conn:
+        with pytest.raises(AutorizadorEsDuenoTurnoError) as exc:
+            await _revisar(conn, apertura_id, dueno_id, dueno_email, PIN)
+        assert exc.value.status_code == 403
+        assert exc.value.detail["code"] == "AUTORIZADOR_ES_DUENO_TURNO"
+
+        with pytest.raises(AutorizadorNoValidoError):
+            await _revisar(conn, apertura_id, dueno_id, admin_otra_sucursal, PIN)
+
+        await _revisar(conn, apertura_id, dueno_id, otro_admin, PIN)
+        jti = await conn.fetchval(
+            "SELECT token_admin_jti FROM public.apertura_caja WHERE id = $1",
+            uuid.UUID(apertura_id),
+        )
+        assert str(jti) == str(otro_id)
+
+        # Un AdministradorSistema (sin sucursal) también autoriza.
+        await _revisar(conn, apertura_id, dueno_id, sistema, PIN)
+        jti = await conn.fetchval(
+            "SELECT token_admin_jti FROM public.apertura_caja WHERE id = $1",
+            uuid.UUID(apertura_id),
+        )
+        assert str(jti) == str(sistema_id)
+
+
+async def test_pin_admin_para_cerrar_no_lo_da_el_dueno_pero_si_para_cancelar(
+    pool: asyncpg.Pool, escenario: Escenario
+) -> None:
+    apertura_id, _, dueno_email = await _turno_de_admin_en_corte(pool, escenario)
+    async with pool.acquire() as conn:
+        with pytest.raises(AutorizadorEsDuenoTurnoError):
+            await turnos_caja_service.validar_pin_admin(
+                conn, apertura_id, dueno_email, PIN, proposito=PROPOSITO_CERRAR
+            )
+        # La regla es del cierre; autorizar cancelaciones no cambia (fuera de A16).
+        resp = await turnos_caja_service.validar_pin_admin(
+            conn, apertura_id, dueno_email, PIN, proposito=PROPOSITO_CANCELAR
+        )
+        proposito = await conn.fetchval(
+            "SELECT proposito FROM public.pin_tokens WHERE token = $1", resp["token_pin"]
+        )
+    assert proposito == PROPOSITO_CANCELAR
 
 
 async def test_tokens_de_admin_no_se_cruzan_entre_cancelar_y_cerrar(

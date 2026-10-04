@@ -1,6 +1,9 @@
 """A16 (prueba E2E 2026-10-03): segregación de funciones en el cierre de caja.
 
 Reglas que decidió el dueño del producto:
+- Nadie autoriza el cierre de su propio turno: si el dueño del turno es un
+  administrador, lo autoriza otro administrador de la sucursal o un
+  AdministradorSistema (403 AUTORIZADOR_ES_DUENO_TURNO).
 - El token del PIN de administrador se separa por propósito: uno emitido para
   cancelar (o devolver) una orden no sirve para cerrar la caja, ni al revés.
 """
@@ -18,9 +21,14 @@ import pytest
 from app.core.security import hash_password
 from app.core.utils import get_mexico_now
 from app.exceptions import PinTokenPropositoError
-from app.schemas.caja import ConfirmarCierrePayload
-from app.services import turnos_caja_service
-from app.services.pin_caja_service import PROPOSITO_CANCELAR, PROPOSITO_CERRAR
+from app.schemas.caja import ConfirmarCierrePayload, RevisionAdminPayload
+from app.services import pin_caja_service, turnos_caja_service
+from app.services.pin_caja_service import (
+    PROPOSITO_CANCELAR,
+    PROPOSITO_CERRAR,
+    AutorizadorEsDuenoTurnoError,
+    AutorizadorNoValidoError,
+)
 from app.services.turnos_caja_service import PropositoPinInvalidoError
 
 from tests.unit.pin_fakes import ConexionConTransaccion, LimiteEnMemoria
@@ -233,3 +241,131 @@ async def test_confirmar_consume_los_tokens_con_proposito_cerrar(
         ("admin", PROPOSITO_CERRAR),
     ]
     confirmar["crear_cierre_caja"].assert_awaited_once()
+
+
+# ── Nadie autoriza el cierre de su propio turno ────────────────────────────
+
+
+async def test_buscar_autorizador_rechaza_al_dueno_del_turno_sin_probar_el_pin(
+    monkeypatch: pytest.MonkeyPatch, limite: LimiteEnMemoria
+) -> None:
+    _buscar(monkeypatch, _autorizador(id=DUENO_ID))
+    with pytest.raises(AutorizadorEsDuenoTurnoError) as exc:
+        await pin_caja_service.verificar_pin_autorizador(
+            ConexionConTransaccion(),  # type: ignore[arg-type]
+            email="dueno@woowkids.test",
+            pin="4821",
+            sucursal_id=SUC,
+            dueno_turno_id=str(DUENO_ID),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "AUTORIZADOR_ES_DUENO_TURNO"
+    assert "propio turno" in exc.value.detail["message"]
+    # No cuenta como intento fallido: ni siquiera se verificó el PIN.
+    assert limite.total() == 0
+
+
+@pytest.fixture
+def revision(monkeypatch: pytest.MonkeyPatch, limite: LimiteEnMemoria) -> dict[str, AsyncMock]:
+    mocks = {
+        "get_dueno_y_sucursal_apertura": AsyncMock(
+            return_value={"id": APERTURA_ID, "cajero_id": DUENO_ID, "sucursal_id": SUC}
+        ),
+        "bloquear_apertura": AsyncMock(return_value=_apertura()),
+        "_calcular_balance": AsyncMock(
+            return_value=(Decimal("1000"), Decimal("1000"), Decimal("0"), [])
+        ),
+        "actualizar_admin_autorizacion": AsyncMock(),
+    }
+    for nombre, mock in mocks.items():
+        monkeypatch.setattr(f"{SVC}.{nombre}", mock)
+    return mocks
+
+
+async def _revisar(secreto: str = "4821") -> Any:
+    return await turnos_caja_service.autenticar_admin_revision(
+        ConexionConTransaccion(),  # type: ignore[arg-type]
+        str(DUENO_ID),
+        RevisionAdminPayload(
+            turno_id=APERTURA_ID, admin_email="x@woowkids.test", admin_password=secreto
+        ),
+    )
+
+
+async def test_revision_admin_dueno_del_turno_es_rechazado(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(monkeypatch, _autorizador(id=DUENO_ID))
+    with pytest.raises(AutorizadorEsDuenoTurnoError):
+        await _revisar()
+    revision["actualizar_admin_autorizacion"].assert_not_called()
+
+
+async def test_revision_otro_admin_de_la_sucursal_autoriza(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(monkeypatch, _autorizador())
+    resp = await _revisar()
+    assert resp.autorizado is True
+    assert revision["actualizar_admin_autorizacion"].await_args.args[2] == str(OTRO_ADMIN_ID)
+
+
+async def test_revision_administrador_sistema_autoriza(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(
+        monkeypatch,
+        _autorizador(rol="AdministradorSistema", en_sucursal=False, tiene_permiso=False),
+    )
+    resp = await _revisar()
+    assert resp.autorizado is True
+
+
+async def test_revision_admin_de_otra_sucursal_es_rechazado(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(monkeypatch, _autorizador(en_sucursal=False))
+    with pytest.raises(AutorizadorNoValidoError):
+        await _revisar()
+    revision["actualizar_admin_autorizacion"].assert_not_called()
+
+
+async def test_validar_pin_admin_para_cerrar_rechaza_al_dueno_del_turno(
+    monkeypatch: pytest.MonkeyPatch, pin_admin: AsyncMock
+) -> None:
+    _buscar(monkeypatch, _autorizador(id=DUENO_ID))
+    with pytest.raises(AutorizadorEsDuenoTurnoError):
+        await turnos_caja_service.validar_pin_admin(
+            ConexionConTransaccion(),  # type: ignore[arg-type]
+            APERTURA_ID,
+            "dueno@woowkids.test",
+            "4821",
+            proposito=PROPOSITO_CERRAR,
+        )
+    pin_admin.assert_not_called()
+
+
+async def test_confirmar_rechaza_si_la_revision_la_autorizo_el_dueno(
+    monkeypatch: pytest.MonkeyPatch, confirmar: dict[str, AsyncMock]
+) -> None:
+    monkeypatch.setattr(
+        f"{SVC}.bloquear_apertura", AsyncMock(return_value=_apertura_revisada(DUENO_ID))
+    )
+    with pytest.raises(AutorizadorEsDuenoTurnoError):
+        await _confirmar()
+    confirmar["crear_cierre_caja"].assert_not_called()
+
+
+async def test_confirmar_rechaza_el_token_de_cerrar_emitido_por_el_dueno(
+    monkeypatch: pytest.MonkeyPatch, confirmar: dict[str, AsyncMock]
+) -> None:
+    monkeypatch.setattr(
+        f"{SVC}.bloquear_apertura", AsyncMock(return_value=_apertura_revisada(OTRO_ADMIN_ID))
+    )
+    monkeypatch.setattr(
+        f"{SVC}._validar_y_consumir_token_pin",
+        AsyncMock(return_value={"usuario_id": DUENO_ID}),
+    )
+    with pytest.raises(AutorizadorEsDuenoTurnoError):
+        await _confirmar()
+    confirmar["crear_cierre_caja"].assert_not_called()

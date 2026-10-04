@@ -16,6 +16,9 @@ operación) de un cajero o de un administrador:
 - El autorizador (quien aprueba un cierre) se busca solo entre los usuarios
   de la sucursal del turno —o AdministradorSistema, que no tiene sucursal— y
   debe tener el permiso de autorizar en su rol.
+- Segregación de funciones (A16): nadie autoriza el cierre de su propio
+  turno; si el dueño del turno es un administrador, lo autoriza otro
+  administrador de la sucursal o un AdministradorSistema.
 
 ``verificar_pin_autorizador`` es la pieza reutilizable para cualquier flujo
 que pida el PIN de un administrador (cierre de caja, cancelaciones, etc.).
@@ -90,6 +93,27 @@ class AutorizadorNoValidoError(HTTPException):
         )
 
 
+class AutorizadorEsDuenoTurnoError(HTTPException):
+    """A16: el autorizador del cierre es el mismo dueño del turno."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "AUTORIZADOR_ES_DUENO_TURNO",
+                "message": (
+                    "No puedes autorizar el cierre de tu propio turno. Pide a otro "
+                    "administrador de la sucursal o a un administrador del sistema "
+                    "que lo autorice."
+                ),
+            },
+        )
+
+
+def es_dueno_turno(autorizador_id: str | uuid.UUID, dueno_turno_id: str | uuid.UUID) -> bool:
+    return str(autorizador_id) == str(dueno_turno_id)
+
+
 def _coincide(plano: str, hash_guardado: str | None) -> bool:
     if not plano or not hash_guardado:
         return False
@@ -157,19 +181,30 @@ async def verificar_con_limite(
 
 
 async def buscar_autorizador(
-    conn: asyncpg.Connection, email: str, sucursal_id: str | uuid.UUID | None, permiso: str
+    conn: asyncpg.Connection,
+    email: str,
+    sucursal_id: str | uuid.UUID | None,
+    permiso: str,
+    *,
+    dueno_turno_id: str | uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Usuario activo con ese correo que puede autorizar en la sucursal: su rol
     tiene ``permiso`` y está asignado a la sucursal (``usuarios_sucursal``), o
     es AdministradorSistema (sin sucursal, autoriza en todas). Cualquier otro
     caso —no existe, otra sucursal, rol sin permiso— responde 403 sin llegar
-    a verificar el PIN, para no dar pistas sobre PINs de otras sucursales."""
+    a verificar el PIN, para no dar pistas sobre PINs de otras sucursales.
+
+    Con ``dueno_turno_id`` (autorizar un cierre), el autorizador no puede ser
+    el dueño del turno: 403 ``AUTORIZADOR_ES_DUENO_TURNO``, también sin llegar
+    a verificar el PIN (A16)."""
     row = await user_repository.get_autorizador_por_email(conn, email, sucursal_id, permiso)
     if not row:
         raise AutorizadorNoValidoError()
     es_sistema = row["rol"] == ROL_SISTEMA
     if not es_sistema and not (row["tiene_permiso"] and row["en_sucursal"]):
         raise AutorizadorNoValidoError()
+    if dueno_turno_id is not None and es_dueno_turno(row["id"], dueno_turno_id):
+        raise AutorizadorEsDuenoTurnoError()
     return row
 
 
@@ -182,13 +217,16 @@ async def verificar_pin_autorizador(
     permiso: str = PERMISO_AUTORIZAR_CIERRE,
     tipo: str = "admin",
     intentado_por: str | uuid.UUID | None = None,
+    dueno_turno_id: str | uuid.UUID | None = None,
     acepta_password: bool = False,
     error: HTTPException | None = None,
 ) -> dict[str, Any]:
     """Busca al autorizador (``buscar_autorizador``) y valida su PIN con el
     límite de intentos. Devuelve la fila del autorizador (id, email,
-    nombre_completo, rol)."""
-    autorizador = await buscar_autorizador(conn, email, sucursal_id, permiso)
+    nombre_completo, rol, pin_hash)."""
+    autorizador = await buscar_autorizador(
+        conn, email, sucursal_id, permiso, dueno_turno_id=dueno_turno_id
+    )
     await verificar_con_limite(
         conn,
         usuario_id=autorizador["id"],

@@ -99,6 +99,7 @@ from app.services.pin_caja_service import (
     PROPOSITO_CANCELAR,
     PROPOSITO_CERRAR,
     PROPOSITOS_PIN,
+    AutorizadorEsDuenoTurnoError,
     PinInvalidoError,
 )
 
@@ -766,11 +767,13 @@ async def _verificar_credenciales_usuario(
     sucursal_id: str | None = None,
     *,
     intentado_por: str | None = None,
+    dueno_turno_id: str | None = None,
 ) -> dict[str, Any]:
     """Revisión del administrador (A16): el autorizador debe poder revisar
     arqueos (turnos_caja:revision_admin) en la sucursal del turno —o ser
-    AdministradorSistema— y su contraseña (o su PIN) se valida con límite de
-    intentos. Lanza AutorizadorNoValidoError (403), CredencialesAdminInvalidasError
+    AdministradorSistema—, no puede ser el dueño del turno, y su contraseña
+    (o su PIN) se valida con límite de intentos. Lanza AutorizadorNoValidoError
+    (403), AutorizadorEsDuenoTurnoError (403), CredencialesAdminInvalidasError
     (403) o PinBloqueadoError (429)."""
     return await pin_caja_service.verificar_pin_autorizador(
         conn,
@@ -780,6 +783,7 @@ async def _verificar_credenciales_usuario(
         permiso=PERMISO_REVISION_ARQUEO,
         tipo="revision",
         intentado_por=intentado_por,
+        dueno_turno_id=dueno_turno_id,
         # El formulario de revisión pide la contraseña del administrador.
         acepta_password=True,
         error=CredencialesAdminInvalidasError("Contraseña o PIN incorrecto."),
@@ -814,6 +818,8 @@ async def autenticar_admin_revision(
         payload.admin_password,
         str(previa["sucursal_id"]) if previa.get("sucursal_id") else None,
         intentado_por=user_id,
+        # A16: nadie autoriza el cierre de su propio turno.
+        dueno_turno_id=str(previa["cajero_id"]),
     )
 
     # 3. Calcular montos esperados reales para el turno. C4: bajo el bloqueo de
@@ -826,8 +832,8 @@ async def autenticar_admin_revision(
         if apertura["estado"] == "CERRADA":
             raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
-        # La sucursal del administrador ya se validó en _verificar_credenciales_usuario
-        # (A16: busca solo entre los autorizadores de la sucursal del turno).
+        # La sucursal del administrador y que no sea el dueño del turno ya se
+        # validaron en _verificar_credenciales_usuario (A16).
 
         if apertura["monto_declarado"] is None:
             raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
@@ -978,7 +984,8 @@ async def validar_pin_admin(
     A16: el administrador se busca solo entre los usuarios de la sucursal del
     turno con permiso de autorizar cierres (turnos_caja:confirmar) —o
     AdministradorSistema—; con PIN configurado solo vale el PIN, y hay límite
-    de intentos. Los argumentos posicionales son los de antes; ``user_id`` y
+    de intentos. Para ``cerrar``, el administrador no puede ser el dueño del
+    turno. Los argumentos posicionales son los de antes; ``user_id`` y
     ``solicitante`` (quien llama) son opcionales para no romper llamadores."""
     if proposito not in PROPOSITOS_PIN:
         raise PropositoPinInvalidoError()
@@ -996,6 +1003,7 @@ async def validar_pin_admin(
         permiso=PERMISO_AUTORIZAR_CIERRE,
         tipo="admin",
         intentado_por=user_id,
+        dueno_turno_id=str(apertura["cajero_id"]) if proposito == PROPOSITO_CERRAR else None,
     )
 
     token = await _emitir_token_pin(conn, str(admin_row["id"]), turno_id, "admin", proposito)
@@ -1239,6 +1247,12 @@ async def confirmar_cierre(
                 "Aún no se ha autorizado la revisión de un administrador."
             )
 
+        # A16: nadie autoriza el cierre de su propio turno (la revisión ya lo
+        # rechaza; esto cubre una revisión hecha antes de la regla).
+        dueno_id = str(apertura["cajero_id"])
+        if pin_caja_service.es_dueno_turno(apertura["token_admin_jti"], dueno_id):
+            raise AutorizadorEsDuenoTurnoError()
+
         # QA #14: exige y consume los tokens de un solo uso de cajero y admin,
         # emitidos para cerrar (A16: uno de cancelar una orden no sirve).
         if settings.exigir_pin_token:
@@ -1247,9 +1261,11 @@ async def confirmar_cierre(
             await _validar_y_consumir_token_pin(
                 conn, payload.token_pin_cajero, payload.turno_id, "cajero", PROPOSITO_CERRAR
             )
-            await _validar_y_consumir_token_pin(
+            fila_admin = await _validar_y_consumir_token_pin(
                 conn, payload.token_pin_admin, payload.turno_id, "admin", PROPOSITO_CERRAR
             )
+            if pin_caja_service.es_dueno_turno(fila_admin["usuario_id"], dueno_id):
+                raise AutorizadorEsDuenoTurnoError()
 
         admin_id = str(apertura["token_admin_jti"])
         total_esperado, total_declarado, diferencia_neta, balance = await _calcular_balance(
