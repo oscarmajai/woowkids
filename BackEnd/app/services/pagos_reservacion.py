@@ -85,12 +85,60 @@ async def _validar_metodo_pago(conn: asyncpg.Connection, metodo_pago_id: UUID) -
         )
 
 
+def _excede_saldo(monto: Decimal, saldo: Decimal) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "PAGO_EXCEDE_SALDO",
+            "message": (
+                f"El pago (${monto:,.2f}) excede el saldo pendiente de la "
+                f"reservación (${max(saldo, Decimal(0)):,.2f})."
+            ),
+            "saldo_pendiente": str(max(saldo, Decimal(0))),
+        },
+    )
+
+
+async def _otorgar_puntos(
+    conn: asyncpg.Connection, reservacion_id: UUID, monto: Decimal, usuario_id: UUID
+) -> None:
+    reservacion = await reservaciones_repository.obtener(conn, reservacion_id)
+    celular = (reservacion["telefono_cliente"] or "").strip() if reservacion else ""
+    if reservacion and celular and monto > 0:
+        await lealtad_service.otorgar_puntos(
+            conn,
+            reservacion["sucursal_id"],
+            celular,
+            monto,
+            usuario_id,
+            reservacion_id=reservacion_id,
+        )
+
+
+async def _saldo_bloqueado(conn: asyncpg.Connection, reservacion_id: UUID) -> Decimal:
+    """Bloquea la reservación (C3: los cobros simultáneos se aplican en orden)
+    y devuelve su saldo pendiente real."""
+    bloqueada = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
+    if bloqueada is None:
+        raise NoEncontrado("Reservación", genero="f")
+    return Decimal(str(bloqueada["saldo_pendiente"]))
+
+
 async def crear(
     conn: asyncpg.Connection,
     body: PagosReservacionCreate,
     usuario_id: UUID,
     apertura_caja_id: str,
+    *,
+    desde_completar: bool = False,
 ) -> PagosReservacionOut:
+    """Registra un pago de reservación con su movimiento de caja y sus puntos.
+
+    N-A1 (prueba E2E de v1.2.0): el pago no puede exceder el saldo pendiente
+    (409 PAGO_EXCEDE_SALDO). Antes se aceptaba cualquier monto y se otorgaban
+    puntos sobre él. `completar()` ya valida el saldo de todo el cobro (con el
+    cambio) y otorga los puntos sobre lo neto, así que con `desde_completar`
+    este paso no repite ninguna de las dos cosas."""
     # Transacción propia (o savepoint si ya hay una, p. ej. desde completar()):
     # pago, movimiento de caja, puntos y monto_pagado quedan juntos o no quedan.
     async with conn.transaction():
@@ -99,11 +147,9 @@ async def crear(
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         # Bloquea la reservación: dos cobros simultáneos se aplican en orden y el
         # segundo recalcula monto_pagado viendo el primero (C3).
-        bloqueada = await reservaciones_repository.obtener_para_actualizar(
-            conn, body.reservacion_id
-        )
-        if bloqueada is None:
-            raise NoEncontrado("Reservación", genero="f")
+        saldo = await _saldo_bloqueado(conn, body.reservacion_id)
+        if not desde_completar and body.monto > saldo:
+            raise _excede_saldo(body.monto, saldo)
         await _validar_metodo_pago(conn, body.metodo_pago_id)
         tipo = await _resolver_tipo(conn, body.reservacion_id, body.monto, body.tipo)
         row = await pagos_reservacion_repository.crear(
@@ -129,17 +175,8 @@ async def crear(
             creado_por=str(usuario_id),
         )
 
-        reservacion = await reservaciones_repository.obtener(conn, body.reservacion_id)
-        celular = (reservacion["telefono_cliente"] or "").strip() if reservacion else ""
-        if reservacion and celular:
-            await lealtad_service.otorgar_puntos(
-                conn,
-                reservacion["sucursal_id"],
-                celular,
-                body.monto,
-                usuario_id,
-                reservacion_id=body.reservacion_id,
-            )
+        if not desde_completar:
+            await _otorgar_puntos(conn, body.reservacion_id, body.monto, usuario_id)
 
         # El saldo de la reservación refleja todos los pagos, no solo el anticipo.
         await reservaciones_repository.recalcular_monto_pagado(conn, body.reservacion_id)
@@ -168,9 +205,15 @@ async def completar(
     )
 
     pagos_creados: list[PagosReservacionOut] = []
+    neto = sum((p.monto for p in body.pagos), Decimal(0)) - cambio
     async with conn.transaction():
         # N1: también aquí, por si no hay pagos y solo se registra el cambio.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
+        # N-A1: lo que se aplica (pagos menos el cambio devuelto) no puede
+        # exceder el saldo. El efectivo sí puede pasarse, por el cambio.
+        saldo = await _saldo_bloqueado(conn, body.reservacion_id)
+        if neto > saldo:
+            raise _excede_saldo(neto, saldo)
         item: PagoReservacionItem
         for item in body.pagos:
             pago_out = await crear(
@@ -184,6 +227,7 @@ async def completar(
                 ),
                 usuario_id,
                 apertura_caja_id,
+                desde_completar=True,
             )
             pagos_creados.append(pago_out)
         if cambio > 0:
@@ -196,30 +240,45 @@ async def completar(
             )
             # El cambio devuelto no es ingreso del evento: se descuenta de lo pagado.
             await reservaciones_repository.recalcular_monto_pagado(conn, body.reservacion_id)
+        # Puntos sobre lo cobrado neto: el cambio devuelto no genera puntos.
+        await _otorgar_puntos(conn, body.reservacion_id, neto, usuario_id)
 
     return PagosReservacionCompletarResponse(pagos=pagos_creados, cambio=cambio)
+
+
+_PAGO_REGISTRADO = (
+    "Un pago registrado no se modifica ni se borra: ya movió la caja y los puntos "
+    "de lealtad del cliente. Si se registró por error, el administrador hace el "
+    "ajuste (retiro de caja y ajuste de puntos)."
+)
 
 
 async def actualizar(
     conn: asyncpg.Connection, pago_id: UUID, body: PagosReservacionUpdate
 ) -> PagosReservacionOut:
+    """Solo se corrigen las notas. N-A1 (prueba E2E de v1.2.0): cambiar el
+    monto o el método recalculaba `monto_pagado`, pero dejaba el movimiento de
+    caja y los puntos como estaban, y cualquier cajero podía reducir el pago de
+    un cliente sin autorización."""
+    updates = body.model_dump(exclude_unset=True)
+    if set(updates) - {"notas"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "PAGO_NO_EDITABLE", "message": _PAGO_REGISTRADO},
+        )
     async with conn.transaction():
-        pago = await obtener(conn, pago_id)
-        await reservaciones_repository.obtener_para_actualizar(conn, pago.reservacion_id)
-        updates = body.model_dump(exclude_unset=True)
-        if updates.get("metodo_pago_id") is not None:
-            await _validar_metodo_pago(conn, updates["metodo_pago_id"])
+        await obtener(conn, pago_id)
         row = await pagos_reservacion_repository.actualizar(conn, pago_id, updates)
         if not row:
             raise NoEncontrado("Pago")
-        # Corregir el monto de un pago cambia el saldo de la reservación.
-        await reservaciones_repository.recalcular_monto_pagado(conn, pago.reservacion_id)
     return PagosReservacionOut.model_validate(row)
 
 
 async def eliminar(conn: asyncpg.Connection, pago_id: UUID) -> None:
-    async with conn.transaction():
-        pago = await obtener(conn, pago_id)
-        await reservaciones_repository.obtener_para_actualizar(conn, pago.reservacion_id)
-        await pagos_reservacion_repository.eliminar(conn, pago_id)
-        await reservaciones_repository.recalcular_monto_pagado(conn, pago.reservacion_id)
+    """N-A1: borrar un pago dejaba en el turno el movimiento de caja y los
+    puntos otorgados. Un pago registrado no se borra."""
+    await obtener(conn, pago_id)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": "PAGO_NO_ELIMINABLE", "message": _PAGO_REGISTRADO},
+    )
