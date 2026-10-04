@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     ws_ticket_ttl_seconds: int = 30
 
     database_url: str
+    # Pool de conexiones a PostgreSQL. Un solo proceso atiende todas las
+    # sucursales: con el máximo por defecto de asyncpg (10) y sin tiempo límite
+    # para obtener conexión, la API se quedaba colgada en cuanto se agotaba.
+    db_pool_min_size: int = 2
+    db_pool_max_size: int = 20
+    # Segundos que una petición espera una conexión libre antes de responder 503.
+    db_pool_acquire_timeout: float = 15
+    # Segundos máximos de una consulta (los reportes más pesados tardan < 10 s).
+    db_command_timeout: float = 120
 
     cors_origins: list[str] = ["http://localhost:5173"]
 

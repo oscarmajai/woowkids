@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from starlette import status
 
 from app.api.deps import apertura_operando_id, require_permission, resolve_ws_auth
-from app.core.database import get_db
+from app.core.database import conexion_breve, get_db
 from app.core.scope import resolver_sucursal_obligatoria, sucursal_scope
 from app.core.ws_manager import CANAL_GLOBAL, manager
 from app.schemas.auth import TokenData
@@ -228,7 +228,6 @@ async def estancias_ws(
     websocket: WebSocket,
     ticket: str | None = Query(None),
     token: str | None = Query(None),
-    conn: asyncpg.Connection = Depends(get_db),
 ) -> None:
     """Canal en tiempo real de estancias: emite estancia_creada/estancia_checkout
     a los clientes de la sucursal correspondiente (ver app/core/ws_manager.py),
@@ -238,10 +237,16 @@ async def estancias_ws(
     al JWT crudo en la URL; ?token=... se sigue aceptando mientras
     settings.WS_ACEPTA_JWT sea true. Va por query param porque el handshake WS
     nativo del navegador no admite headers custom."""
+    # La conexión a la BD solo se usa para autenticar y se suelta antes de
+    # quedarse escuchando: el socket puede durar horas (ver get_db).
     try:
-        current_user = await resolve_ws_auth(conn, ticket, token)
+        async with conexion_breve() as conn:
+            current_user = await resolve_ws_auth(conn, ticket, token)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    except TimeoutError:
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return
 
     if not has_permission(current_user.role, "estancias:ver_activos"):
