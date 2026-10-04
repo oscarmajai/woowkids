@@ -13,10 +13,15 @@ Sistema todo en uno para franquicias de entretenimiento infantil: caja (POS), es
 
 ```bash
 docker login ghcr.io        # si el paquete es privado: token con read:packages
-docker run -d --name woowkids -p 8080:80 -v woowkids_data:/data ghcr.io/oscarmajai/woowkids:latest
+docker run -d --name woowkids -p 80:80 -p 443:443 -v woowkids_data:/data \
+  -e WOOWKIDS_DOMINIOS=woowkids.local,192.168.1.50 -e REDIRIGIR_HTTPS=true \
+  ghcr.io/oscarmajai/woowkids:latest
 ```
 
 Incluye frontend, API, PostgreSQL y MinIO, con todos los datos en el volumen `/data`. La consola de MinIO es opcional: agrega `-p 9001:9001`.
+
+- **HTTPS:** la caja, el punto de venta y la cámara solo funcionan en un contexto seguro (HTTPS o `localhost`). El contenedor crea su propia autoridad certificadora y el certificado para los nombres e IPs de `WOOWKIDS_DOMINIOS`; cada terminal la instala una vez desde `http://<servidor>/instalar-certificado`. Con un certificado propio, móntalo en `/certs` (`woowkids.crt` y `woowkids.key`). Sin `REDIRIGIR_HTTPS=true`, el puerto 80 sigue sirviendo la app por HTTP (instalaciones con un proxy HTTPS delante).
+- **Sin internet:** en operación no necesita conexión (tipografía e íconos van en la imagen); solo para descargar la imagen.
 
 ### Contenedores separados (producción)
 

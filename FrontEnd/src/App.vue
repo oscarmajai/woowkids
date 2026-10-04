@@ -1,9 +1,11 @@
 <template>
   <router-view />
+  <AvisoConexionInsegura />
 </template>
 
 <script setup lang="ts">
 import { useQuasar } from 'quasar'
+import AvisoConexionInsegura from '@/components/layout/AvisoConexionInsegura.vue'
 
 // El diseño usa Material Icons Outlined en toda la app. Los nombres "planos"
 // (home, edit, …) se resuelven a la variante outlined; los que ya traen
