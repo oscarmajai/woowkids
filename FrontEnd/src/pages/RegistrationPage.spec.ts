@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRegistrationStore } from '@/stores/registration'
 import { fetchPulseras } from '@/api/onboardingClient'
 import { productosApi } from '@/api/productosApi'
+import { privacidadService } from '@/services/privacidadService'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
@@ -24,6 +25,10 @@ vi.mock('@/api/productosApi', () => ({
   productosApi: { obtenerPreciosEstancia: vi.fn() },
 }))
 
+vi.mock('@/services/privacidadService', () => ({
+  privacidadService: { obtenerVigente: vi.fn() },
+}))
+
 // QPage exige un QLayout padre; aquí basta con un contenedor que pinte su contenido.
 const QPageStub = defineComponent({
   setup(_, { slots }) {
@@ -34,6 +39,7 @@ const QPageStub = defineComponent({
 const STUBS = {
   QPage: QPageStub,
   TutorForm: true,
+  ConsentimientoPrivacidad: true,
   ChildrenSection: true,
   RfidSection: true,
   OrderSummary: true,
@@ -65,6 +71,24 @@ describe('RegistrationPage: abierta por URL o tras F5 (A14)', () => {
         id: 'prod-1',
         config_estancia: [{ min_horas: 1, max_horas: 5, precio: 100 }],
       })
+    vi.mocked(privacidadService.obtenerVigente).mockReset().mockResolvedValue({
+      version: 2,
+      vigenteDesde: '2026-10-03T18:00:00Z',
+      fechaVigencia: '2026-10-03',
+      nombreComercial: 'Woow Kids',
+      textoIntegral: '# Integral',
+      textoSimplificado: '# Simplificado',
+    })
+  })
+
+  it('al montarse carga el aviso de privacidad vigente', async () => {
+    vi.mocked(fetchPulseras).mockResolvedValue([])
+    const { store } = montar()
+    await flushPromises()
+
+    expect(privacidadService.obtenerVigente).toHaveBeenCalledTimes(1)
+    expect(store.avisoPrivacidad?.version).toBe(2)
+    expect(store.aceptaAvisoPrivacidad).toBe(false)
   })
 
   it('al montarse sin estado previo carga las pulseras y las tarifas', async () => {

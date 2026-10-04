@@ -64,6 +64,13 @@ export function setupRouterGuards(router: Router): void {
       }
     }
 
+    if (to.meta.roles?.length && auth.currentUser) {
+      if (!to.meta.roles.some((r) => auth.hasRole(r))) {
+        avisar(mensajeSinPermiso(to))
+        return { name: 'home' }
+      }
+    }
+
     // AdministradorSistema no tiene sucursal propia: sin elegir una en el
     // selector, la caja no tiene dónde abrirse.
     if (RUTAS_CAJA.has(String(to.name)) && auth.isSistema && !auth.currentBranchId) {

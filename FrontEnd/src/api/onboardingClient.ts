@@ -84,6 +84,13 @@ export interface OnboardingPayload {
   cambio?: number
   reservacionId?: string | null
   puntosARedimir?: number
+  // LFPDPPP: el tutor aceptó la versión vigente del aviso de privacidad. Sin
+  // esto el backend responde 422 AVISO_PRIVACIDAD_NO_ACEPTADO.
+  aceptaAvisoPrivacidad: boolean
+  versionAvisoPrivacidad: number | null
+  // false si el tutor se negó a las finalidades voluntarias (lealtad y
+  // promociones): el registro no acumula ni canjea puntos.
+  aceptaFinalidadesSecundarias: boolean
 }
 
 export interface OnboardingResponse {

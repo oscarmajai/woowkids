@@ -106,6 +106,8 @@ def checkin(monkeypatch: pytest.MonkeyPatch, metodos: None) -> dict[str, Any]:
     monkeypatch.setattr(m, "change_registro_estado", registra("activar"))
     monkeypatch.setattr(m.manager, "broadcast", AsyncMock())
     monkeypatch.setattr(m, "emitir_codigo_acceso", mocks["emitir"])
+    # El aviso de privacidad se prueba aparte (test_aviso_privacidad.py).
+    monkeypatch.setattr(m.privacidad_service, "exigir_aceptacion", AsyncMock(return_value=1))
     return mocks
 
 

@@ -15,6 +15,8 @@ import { tramoParaHoras } from '@/utils/tramosEstancia'
 import type { EventoDelDia } from '@/types/reservaciones'
 import type { PrecioEstancia, TramoEstancia } from '@/types/producto'
 import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
+import { privacidadService } from '@/services/privacidadService'
+import type { AvisoPrivacidad } from '@/types/privacidad'
 
 export interface Child {
   id: string
@@ -101,6 +103,33 @@ export const useRegistrationStore = defineStore('registration', () => {
   const estadoFromServer = ref('')
   const advertenciaEfectivoFromServer = ref<string | null>(null)
 
+  // ── Aviso de privacidad (LFPDPPP) ─────────────────────────────────────────
+  // El tutor debe aceptar la versión vigente antes de registrar la entrada;
+  // las finalidades voluntarias (lealtad y promociones) se aceptan salvo que
+  // se niegue (consentimiento tácito).
+  const avisoPrivacidad = ref<AvisoPrivacidad | null>(null)
+  const cargandoAviso = ref(false)
+  const errorAviso = ref<string | null>(null)
+  const aceptaAvisoPrivacidad = ref(false)
+  const rechazaFinalidadesSecundarias = ref(false)
+  const avisoAceptado = computed(
+    () => aceptaAvisoPrivacidad.value && avisoPrivacidad.value !== null,
+  )
+
+  async function cargarAvisoPrivacidad() {
+    cargandoAviso.value = true
+    errorAviso.value = null
+    try {
+      avisoPrivacidad.value = await privacidadService.obtenerVigente()
+    } catch (err) {
+      errorAviso.value =
+        'No se pudo cargar el aviso de privacidad; sin él no se puede registrar la entrada.'
+      console.error(err)
+    } finally {
+      cargandoAviso.value = false
+    }
+  }
+
   function createChild(): Child {
     return {
       id: crypto.randomUUID(),
@@ -169,7 +198,11 @@ export const useRegistrationStore = defineStore('registration', () => {
       submitError.value = 'No hay una sucursal activa en la sesión.'
       return
     }
-    await Promise.all([loadProductos(), accessControlStore.asegurarPulserasCargadas()])
+    await Promise.all([
+      loadProductos(),
+      accessControlStore.asegurarPulserasCargadas(),
+      cargarAvisoPrivacidad(),
+    ])
   }
 
   const isLoadingInicial = computed(() => isLoadingCatalog.value || isLoadingPulseras.value)
@@ -396,7 +429,8 @@ export const useRegistrationStore = defineStore('registration', () => {
       hasArrivalPhotos &&
       hasChildren &&
       childrenAreValid &&
-      tieneTarifaValida.value
+      tieneTarifaValida.value &&
+      avisoAceptado.value
     )
   })
 
@@ -428,6 +462,9 @@ export const useRegistrationStore = defineStore('registration', () => {
 
     if (!tieneTarifaValida.value) {
       motivos.push('No hay tarifas de estancia configuradas.')
+    }
+    if (!avisoAceptado.value) {
+      motivos.push('El tutor debe leer y aceptar el aviso de privacidad')
     }
 
     return motivos
@@ -477,6 +514,11 @@ export const useRegistrationStore = defineStore('registration', () => {
       return
     }
 
+    if (!avisoAceptado.value) {
+      submitError.value = 'El tutor debe leer y aceptar el aviso de privacidad.'
+      return
+    }
+
     if (!esEvento) {
       // Los pagos (puede venir vacío si los puntos cubren todo) más el
       // descuento por puntos deben cuadrar exactamente con el total: si no,
@@ -516,6 +558,9 @@ export const useRegistrationStore = defineStore('registration', () => {
       cambio: cambioFromModal.value > 0 ? cambioFromModal.value : undefined,
       reservacionId: esEvento ? eventoSeleccionado.value!.id : null,
       puntosARedimir: puntosARedimirValue.value,
+      aceptaAvisoPrivacidad: aceptaAvisoPrivacidad.value,
+      versionAvisoPrivacidad: avisoPrivacidad.value?.version ?? null,
+      aceptaFinalidadesSecundarias: !rechazaFinalidadesSecundarias.value,
     }
 
     try {
@@ -546,6 +591,12 @@ export const useRegistrationStore = defineStore('registration', () => {
         } else {
           submitError.value = message || 'No se pudo completar el registro. Intenta de nuevo.'
         }
+      } else if (err?.statusCode === 422 && err?.code === 'AVISO_PRIVACIDAD_DESACTUALIZADO') {
+        // Se publicó otra versión mientras se capturaba: se carga la nueva y
+        // el tutor debe aceptarla otra vez.
+        aceptaAvisoPrivacidad.value = false
+        void cargarAvisoPrivacidad()
+        submitError.value = err.message
       } else if (err?.statusCode === 422 && err?.message) {
         // N8: p. ej. un pago con tarjeta o transferencia sin referencia.
         submitError.value = err.message
@@ -568,6 +619,8 @@ export const useRegistrationStore = defineStore('registration', () => {
     cambioFromModal.value = 0
     puntosARedimirValue.value = 0
     descuentoPuntosValue.value = 0
+    aceptaAvisoPrivacidad.value = false
+    rechazaFinalidadesSecundarias.value = false
     tutor.value = {
       fullName: '',
       relationship: 'Padre / Madre',
@@ -610,6 +663,13 @@ export const useRegistrationStore = defineStore('registration', () => {
     estadoFromServer,
     pagosFromModal,
     advertenciaEfectivoFromServer,
+    avisoPrivacidad,
+    cargandoAviso,
+    errorAviso,
+    aceptaAvisoPrivacidad,
+    rechazaFinalidadesSecundarias,
+    avisoAceptado,
+    cargarAvisoPrivacidad,
     savedChildren,
     hours,
     tieneTarifaValida,

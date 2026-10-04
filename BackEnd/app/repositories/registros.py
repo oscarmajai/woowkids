@@ -20,7 +20,11 @@ async def registro_create(
     usuario_id: UUID,
     nombre_segundo_tutor: str | None = None,
     reservacion_id: UUID | None = None,
+    aviso_privacidad_version: int | None = None,
+    acepta_finalidades_secundarias: bool | None = None,
 ) -> None:
+    """Crea el registro en estado P. Con `aviso_privacidad_version` deja
+    constancia de que el tutor aceptó esa versión del aviso, en este momento."""
     await conn.execute(
         """
         INSERT INTO registros (
@@ -32,9 +36,13 @@ async def registro_create(
             estado,
             creado,
             creado_por,
-            reservacion_id
+            reservacion_id,
+            aviso_privacidad_version,
+            aviso_privacidad_aceptado_en,
+            acepta_finalidades_secundarias
         )
-        VALUES ($1, $2, $3, $4, 0, 'P', NOW(), $5, $6)
+        VALUES ($1, $2, $3, $4, 0, 'P', NOW(), $5, $6, $7::int,
+                CASE WHEN $7::int IS NULL THEN NULL ELSE NOW() END, $8)
         """,
         registro_id,
         sucursal_id,
@@ -42,6 +50,8 @@ async def registro_create(
         nombre_segundo_tutor,
         usuario_id,
         reservacion_id,
+        aviso_privacidad_version,
+        acepta_finalidades_secundarias,
     )
 
 

@@ -5,6 +5,8 @@ export interface NavItem {
   icon: string
   routeName: string
   permission?: string
+  /** Solo para este rol (p. ej. AdministradorSistema). */
+  role?: string
 }
 
 export interface NavGroup {
