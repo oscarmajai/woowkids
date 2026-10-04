@@ -5,7 +5,9 @@ import { useLealtadStore } from '@/stores/lealtad'
 import { allowOnlyLettersKeydown } from '@/utils/validators'
 import { DB_LIMITS } from '@/utils/constants'
 import { camaraEnPaginaDisponible, normalizarFoto } from '@/utils/fotos'
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { esDispositivoTactil } from '@/utils/activarWebcam'
+import ActivarWebcamDialog from '@/components/registro-infantes/ActivarWebcamDialog.vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 
 const store = useRegistrationStore()
 const authStore = useAuthStore()
@@ -77,6 +79,40 @@ const currentArrivalPhotoUrl = computed(() => {
 const archivoRef = ref<HTMLInputElement | null>(null)
 const objetivoArchivo = ref<'ine' | 'arrival'>('ine')
 
+// Computadora por HTTP: el navegador no ofrece la webcam hasta activarla una
+// vez (ActivarWebcamDialog). Se ofrece sola al entrar, antes de capturar nada,
+// porque activarla reinicia el navegador. "Ahora no" usa archivos el resto de
+// la sesión.
+const OMITIR_ACTIVAR_WEBCAM = 'woowkids:omitir-activar-webcam'
+const mostrarActivarWebcam = ref(false)
+let fotoPendiente = false
+
+function necesitaActivarWebcam(): boolean {
+  return !camaraEnPaginaDisponible() && !esDispositivoTactil()
+}
+
+function activarWebcamOmitida(): boolean {
+  try {
+    return window.sessionStorage.getItem(OMITIR_ACTIVAR_WEBCAM) === '1'
+  } catch {
+    return false
+  }
+}
+
+function alUsarArchivo() {
+  try {
+    window.sessionStorage.setItem(OMITIR_ACTIVAR_WEBCAM, '1')
+  } catch {
+    // sin sessionStorage solo se vuelve a ofrecer
+  }
+  if (fotoPendiente) abrirSelectorDeFoto(objetivoArchivo.value)
+  fotoPendiente = false
+}
+
+onMounted(() => {
+  if (necesitaActivarWebcam() && !activarWebcamOmitida()) mostrarActivarWebcam.value = true
+})
+
 function abrirSelectorDeFoto(target: 'ine' | 'arrival') {
   objetivoArchivo.value = target
   archivoRef.value?.click()
@@ -109,7 +145,13 @@ function guardarFoto(file: File, target: 'ine' | 'arrival') {
 async function startCamera(target: 'ine' | 'arrival') {
   if (store.isLocked) return
   if (!camaraEnPaginaDisponible()) {
-    abrirSelectorDeFoto(target)
+    if (necesitaActivarWebcam() && !activarWebcamOmitida()) {
+      objetivoArchivo.value = target
+      fotoPendiente = true
+      mostrarActivarWebcam.value = true
+    } else {
+      abrirSelectorDeFoto(target)
+    }
     return
   }
 
@@ -499,6 +541,8 @@ onBeforeUnmount(() => {
       />
     </q-card-section>
   </q-card>
+
+  <ActivarWebcamDialog v-model="mostrarActivarWebcam" @usar-archivo="alUsarArchivo" />
 
   <!-- Respaldo sin webcam: cámara del dispositivo o archivo -->
   <input
