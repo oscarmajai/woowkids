@@ -17,6 +17,7 @@ import type { PrecioEstancia, TramoEstancia } from '@/types/producto'
 import { redondear2, TOLERANCIA_MONTO } from '@/utils/dinero'
 import { privacidadService } from '@/services/privacidadService'
 import type { AvisoPrivacidad } from '@/types/privacidad'
+import { nuevoId } from '@/utils/uuid'
 
 export interface Child {
   id: string
@@ -132,7 +133,7 @@ export const useRegistrationStore = defineStore('registration', () => {
 
   function createChild(): Child {
     return {
-      id: crypto.randomUUID(),
+      id: nuevoId(),
       name: '',
       age: null,
       notes: '',

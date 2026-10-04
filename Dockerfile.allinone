@@ -64,9 +64,9 @@ ENV POSTGRES_USER=admin \
 VOLUME ["/data"]
 # Opcional: monta una carpeta del equipo en /respaldos (-v C:\WoowKids\respaldos:/respaldos)
 # para que los respaldos automáticos queden fuera del volumen de datos.
-# 443: app y API por HTTPS (certificado en /data/tls, ver tls.sh). 80: página
-# para instalar el certificado y la app por HTTP o la redirección a HTTPS.
-# 9001: consola de MinIO (opcional).
+# 80: app y API (/api) por HTTP, la forma normal en la red local.
+# 443: HTTPS opcional (certificado en /data/tls, ver tls.sh). 9001: consola de
+# MinIO (opcional).
 EXPOSE 80 443 9001
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \

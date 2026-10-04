@@ -4,7 +4,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useLealtadStore } from '@/stores/lealtad'
 import { allowOnlyLettersKeydown } from '@/utils/validators'
 import { DB_LIMITS } from '@/utils/constants'
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { camaraEnPaginaDisponible, normalizarFoto } from '@/utils/fotos'
+import { esDispositivoTactil } from '@/utils/activarWebcam'
+import ActivarWebcamDialog from '@/components/registro-infantes/ActivarWebcamDialog.vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 
 const store = useRegistrationStore()
 const authStore = useAuthStore()
@@ -70,8 +73,87 @@ const currentArrivalPhotoUrl = computed(() => {
   return idx >= 0 ? arrivalPreviewUrls.value[idx] : undefined
 })
 
+// Sin webcam en la página (por HTTP el navegador no la permite, o no hay
+// cámara o permiso) la foto se toma con la cámara del dispositivo (tableta,
+// teléfono) o se elige un archivo.
+const archivoRef = ref<HTMLInputElement | null>(null)
+const objetivoArchivo = ref<'ine' | 'arrival'>('ine')
+
+// Computadora por HTTP: el navegador no ofrece la webcam hasta activarla una
+// vez (ActivarWebcamDialog). Se ofrece sola al entrar, antes de capturar nada,
+// porque activarla reinicia el navegador. "Ahora no" usa archivos el resto de
+// la sesión.
+const OMITIR_ACTIVAR_WEBCAM = 'woowkids:omitir-activar-webcam'
+const mostrarActivarWebcam = ref(false)
+let fotoPendiente = false
+
+function necesitaActivarWebcam(): boolean {
+  return !camaraEnPaginaDisponible() && !esDispositivoTactil()
+}
+
+function activarWebcamOmitida(): boolean {
+  try {
+    return window.sessionStorage.getItem(OMITIR_ACTIVAR_WEBCAM) === '1'
+  } catch {
+    return false
+  }
+}
+
+function alUsarArchivo() {
+  try {
+    window.sessionStorage.setItem(OMITIR_ACTIVAR_WEBCAM, '1')
+  } catch {
+    // sin sessionStorage solo se vuelve a ofrecer
+  }
+  if (fotoPendiente) abrirSelectorDeFoto(objetivoArchivo.value)
+  fotoPendiente = false
+}
+
+onMounted(() => {
+  if (necesitaActivarWebcam() && !activarWebcamOmitida()) mostrarActivarWebcam.value = true
+})
+
+function abrirSelectorDeFoto(target: 'ine' | 'arrival') {
+  objetivoArchivo.value = target
+  archivoRef.value?.click()
+}
+
+async function alElegirArchivo(event: Event) {
+  const input = event.target as HTMLInputElement
+  const original = input.files?.[0]
+  input.value = ''
+  if (!original) return
+  guardarFoto(
+    await normalizarFoto(original, `photo_${objetivoArchivo.value}.jpg`),
+    objetivoArchivo.value,
+  )
+}
+
+function guardarFoto(file: File, target: 'ine' | 'arrival') {
+  const previewUrl = URL.createObjectURL(file)
+  if (target === 'ine') {
+    store.tutor.inePhoto = file
+    if (inePreviewUrl.value) URL.revokeObjectURL(inePreviewUrl.value)
+    inePreviewUrl.value = previewUrl
+  } else {
+    store.tutor.arrivalPhotos.push(file)
+    arrivalPreviewUrls.value.push(previewUrl)
+    currentArrivalIndex.value = 0
+  }
+}
+
 async function startCamera(target: 'ine' | 'arrival') {
   if (store.isLocked) return
+  if (!camaraEnPaginaDisponible()) {
+    if (necesitaActivarWebcam() && !activarWebcamOmitida()) {
+      objetivoArchivo.value = target
+      fotoPendiente = true
+      mostrarActivarWebcam.value = true
+    } else {
+      abrirSelectorDeFoto(target)
+    }
+    return
+  }
 
   // Libera cualquier stream previo e invalida intentos pendientes.
   stopCamera()
@@ -96,7 +178,10 @@ async function startCamera(target: 'ine' | 'arrival') {
       }
     } catch (err) {
       console.error('Error al acceder a la cámara web:', err)
-      if (intentoActual === intento) cameraActive.value = false
+      if (intentoActual === intento) {
+        cameraActive.value = false
+        abrirSelectorDeFoto(target)
+      }
     }
   }, 100)
 }
@@ -126,23 +211,12 @@ function capturePhoto() {
       (blob) => {
         if (!blob) return
 
+        if (!currentPhotoTarget) return
         const file = new File([blob], `photo_${currentPhotoTarget}.jpg`, {
           type: 'image/jpeg',
           lastModified: Date.now(),
         })
-
-        const previewUrl = URL.createObjectURL(blob)
-
-        if (currentPhotoTarget === 'ine') {
-          store.tutor.inePhoto = file
-          if (inePreviewUrl.value) URL.revokeObjectURL(inePreviewUrl.value)
-          inePreviewUrl.value = previewUrl
-        } else {
-          store.tutor.arrivalPhotos.push(file)
-          arrivalPreviewUrls.value.push(previewUrl)
-          currentArrivalIndex.value = 0
-        }
-
+        guardarFoto(file, currentPhotoTarget)
         stopCamera()
       },
       'image/jpeg',
@@ -467,6 +541,19 @@ onBeforeUnmount(() => {
       />
     </q-card-section>
   </q-card>
+
+  <ActivarWebcamDialog v-model="mostrarActivarWebcam" @usar-archivo="alUsarArchivo" />
+
+  <!-- Respaldo sin webcam: cámara del dispositivo o archivo -->
+  <input
+    ref="archivoRef"
+    type="file"
+    accept="image/jpeg,image/png"
+    :capture="objetivoArchivo === 'ine' ? 'environment' : 'user'"
+    class="hidden"
+    data-testid="foto-archivo"
+    @change="alElegirArchivo"
+  />
 
   <!-- Diálogo de la Cámara -->
   <q-dialog v-model="cameraActive" persistent>

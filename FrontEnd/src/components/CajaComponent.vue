@@ -206,6 +206,7 @@
 </template>
 
 <script setup lang="ts">
+import { nuevoId } from '@/utils/uuid'
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
@@ -288,7 +289,7 @@ const abrirModalPago = () => {
     })
     return
   }
-  idempotencyKey ??= crypto.randomUUID()
+  idempotencyKey ??= nuevoId()
   persistirPedido()
   modalPagoAbierto.value = true
 }
