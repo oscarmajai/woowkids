@@ -29,14 +29,15 @@
         />
       </label>
       <label class="admin-form__field">
-        <span class="field-label">Contraseña</span>
+        <span class="field-label">PIN</span>
         <q-input
           v-model="turno.credencialesAdmin.password"
           type="password"
           outlined
           dense
-          placeholder="••••••••"
-          autocomplete="current-password"
+          placeholder="4 dígitos (o su contraseña, si aún no tiene PIN)"
+          autocomplete="off"
+          aria-label="PIN del administrador"
           :disable="turno.credencialesAdmin.cargando"
           @update:model-value="turno.credencialesAdmin.error = ''"
           @keyup.enter="intentarAutenticar"
@@ -80,13 +81,13 @@ async function intentarAutenticar() {
     return
   }
 
-  // 2. Validar contraseña no vacía
+  // 2. Validar PIN no vacío (A16: con PIN configurado no se acepta la contraseña)
   if (!password) {
     $q.notify({
       type: 'negative',
       position: 'top',
       icon: 'warning',
-      message: 'Ingresa la contraseña del administrador.',
+      message: 'Ingresa el PIN del administrador (o su contraseña si aún no tiene PIN).',
     })
     return
   }

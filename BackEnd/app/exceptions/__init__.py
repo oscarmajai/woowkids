@@ -114,6 +114,17 @@ class PinTokenRequeridoError(HTTPException):
         )
 
 
+class PinTokenPropositoError(HTTPException):
+    """A16: el token de PIN de administrador se emitió para otra operación
+    (p. ej. uno de cancelar una orden presentado para cerrar la caja)."""
+
+    def __init__(self, mensaje: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "PIN_TOKEN_PROPOSITO_INVALIDO", "message": mensaje},
+        )
+
+
 class PrecioCambiadoError(HTTPException):
     """El precio o el total que mandó el cliente no coincide con el que
     calcula el servidor con el catálogo vigente (C2). No se cobra nada; el

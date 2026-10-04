@@ -1,8 +1,9 @@
 """
 app/repositories/pin_token_repository.py
-Tokens de un solo uso emitidos al validar el PIN de cajero/administrador en
-el cierre de caja (QA #14). POST /turnos-caja/confirmar exige un token de
-cada rol y los marca como usados en la misma operación.
+Tokens de un solo uso emitidos al validar el PIN de cajero/administrador
+(QA #14). Cada token guarda su propósito (A16): ``cerrar`` para el cierre de
+caja (POST /turnos-caja/confirmar exige uno de cada rol) y ``cancelar`` para
+cancelaciones y devoluciones de órdenes cobradas.
 """
 
 from __future__ import annotations
@@ -13,12 +14,12 @@ from typing import Any
 import asyncpg
 
 _INSERT = """
-    INSERT INTO public.pin_tokens (token, usuario_id, turno_id, rol, expira)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO public.pin_tokens (token, usuario_id, turno_id, rol, proposito, expira)
+    VALUES ($1, $2, $3, $4, $5, $6)
 """
 
 _SELECT_VALIDO = """
-    SELECT token, usuario_id, turno_id, rol, expira, usado
+    SELECT token, usuario_id, turno_id, rol, proposito, expira, usado
     FROM public.pin_tokens
     WHERE token = $1 AND turno_id = $2 AND rol = $3
 """
@@ -34,9 +35,10 @@ async def crear_token(
     usuario_id: str,
     turno_id: str,
     rol: str,
+    proposito: str,
     expira: datetime,
 ) -> None:
-    await conn.execute(_INSERT, token, usuario_id, turno_id, rol, expira)
+    await conn.execute(_INSERT, token, usuario_id, turno_id, rol, proposito, expira)
 
 
 async def obtener_token(

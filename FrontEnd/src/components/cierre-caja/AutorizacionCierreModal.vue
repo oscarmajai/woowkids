@@ -46,14 +46,17 @@
                   {{ fmt(totalesPorMetodo.declarado) }}
                 </span>
               </div>
-              <span class="arqueo-table__diff" :class="claseDiferencia(totalesPorMetodo.diferencia)">
+              <span
+                class="arqueo-table__diff"
+                :class="claseDiferencia(totalesPorMetodo.diferencia)"
+              >
                 {{ signo(totalesPorMetodo.diferencia) }}{{ fmt(totalesPorMetodo.diferencia) }}
               </span>
             </div>
           </div>
           <p v-if="turno.balancePorMetodo.length" class="arqueo-table__hint">
-            Comparativo informativo por método de pago — el resumen general de abajo suma todos
-            los métodos, ya que cada uno representa dinero real del sistema.
+            Comparativo informativo por método de pago — el resumen general de abajo suma todos los
+            métodos, ya que cada uno representa dinero real del sistema.
           </p>
 
           <dl class="arqueo-totals">
@@ -308,10 +311,7 @@ async function confirmarPinCajero() {
   if (pinCajero.value.length !== 4 || !turno.turnoId) return
   cargandoPinCajero.value = true
   try {
-    const { ok, tokenPin } = await turnoCajaService.validarPinCajero(
-      turno.turnoId,
-      pinCajero.value,
-    )
+    const { ok, tokenPin } = await turnoCajaService.validarPinCajero(turno.turnoId, pinCajero.value)
     if (ok) {
       pinCajeroConfirmado.value = true
       tokenPinCajero.value = tokenPin
@@ -347,6 +347,7 @@ async function confirmarPinAdmin() {
       turno.turnoId,
       adminEmail,
       pinAdmin.value,
+      'cerrar',
     )
     if (ok) {
       pinAdminConfirmado.value = true
