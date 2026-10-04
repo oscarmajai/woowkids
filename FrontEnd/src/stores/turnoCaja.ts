@@ -437,10 +437,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
       estado.value = 'BALANCE_REVELADO'
       return true
     } catch (err) {
-      credencialesAdmin.error = mensajeDeError(
-        err,
-        'Usuario o contraseña de administrador incorrectos.',
-      )
+      credencialesAdmin.error = mensajeDeError(err, 'Correo o PIN de administrador incorrectos.')
       return false
     } finally {
       credencialesAdmin.cargando = false

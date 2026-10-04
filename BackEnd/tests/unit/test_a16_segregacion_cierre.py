@@ -6,6 +6,8 @@ Reglas que decidió el dueño del producto:
   AdministradorSistema (403 AUTORIZADOR_ES_DUENO_TURNO).
 - El token del PIN de administrador se separa por propósito: uno emitido para
   cancelar (o devolver) una orden no sirve para cerrar la caja, ni al revés.
+- En la revisión del cierre, un administrador con PIN configurado solo entra
+  con su PIN; sin PIN se sigue aceptando su contraseña (C1).
 """
 
 from __future__ import annotations
@@ -29,7 +31,10 @@ from app.services.pin_caja_service import (
     AutorizadorEsDuenoTurnoError,
     AutorizadorNoValidoError,
 )
-from app.services.turnos_caja_service import PropositoPinInvalidoError
+from app.services.turnos_caja_service import (
+    CredencialesAdminInvalidasError,
+    PropositoPinInvalidoError,
+)
 
 from tests.unit.pin_fakes import ConexionConTransaccion, LimiteEnMemoria
 
@@ -369,3 +374,36 @@ async def test_confirmar_rechaza_el_token_de_cerrar_emitido_por_el_dueno(
     with pytest.raises(AutorizadorEsDuenoTurnoError):
         await _confirmar()
     confirmar["crear_cierre_caja"].assert_not_called()
+
+
+# ── Revisión: con PIN configurado solo vale el PIN ─────────────────────────
+
+
+async def test_revision_admin_con_pin_que_manda_su_contraseña_es_rechazado(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock], limite: LimiteEnMemoria
+) -> None:
+    _buscar(monkeypatch, _autorizador())
+    with pytest.raises(CredencialesAdminInvalidasError) as exc:
+        await _revisar("contraseña-larga")
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "CREDENCIALES_INVALIDAS"
+    assert "PIN configurado" in exc.value.detail["message"]
+    assert limite.tipos == ["revision"]
+    revision["actualizar_admin_autorizacion"].assert_not_called()
+
+
+async def test_revision_admin_sin_pin_entra_con_su_contraseña(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(monkeypatch, _autorizador(pin_hash=None))
+    resp = await _revisar("contraseña-larga")
+    assert resp.autorizado is True
+
+
+async def test_revision_admin_sin_pin_con_contraseña_equivocada_explica_por_que(
+    monkeypatch: pytest.MonkeyPatch, revision: dict[str, AsyncMock]
+) -> None:
+    _buscar(monkeypatch, _autorizador(pin_hash=None))
+    with pytest.raises(CredencialesAdminInvalidasError) as exc:
+        await _revisar("otra")
+    assert "Contraseña incorrecta" in exc.value.detail["message"]

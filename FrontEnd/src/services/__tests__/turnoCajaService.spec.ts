@@ -44,6 +44,22 @@ describe('turnoCajaService — errores de PIN (A5/A16)', () => {
     )
   })
 
+  it('el rechazo de la contraseña de un administrador con PIN muestra el porqué (A16)', async () => {
+    const mensaje =
+      'PIN incorrecto. Este administrador ya tiene PIN configurado: ingresa su PIN, no su contraseña.'
+    api.autenticarRevisionAdmin.mockRejectedValue(apiError(403, 'CREDENCIALES_INVALIDAS', mensaje))
+
+    await expect(turnoCajaService.autenticarAdmin(REVISION)).rejects.toThrow(mensaje)
+  })
+
+  it('sin mensaje del backend usa el texto genérico de credenciales', async () => {
+    api.autenticarRevisionAdmin.mockRejectedValue(apiError(401, 'CREDENCIALES_INVALIDAS', ''))
+
+    await expect(turnoCajaService.autenticarAdmin(REVISION)).rejects.toThrow(
+      'Credenciales de administrador incorrectas. Verifica el correo y el PIN.',
+    )
+  })
+
   it.each([
     apiError(
       403,

@@ -108,11 +108,6 @@ def test_sin_pin_configurado_vale_la_contraseña() -> None:
     assert not credencial_valida("0000", None, PASS_HASH)
 
 
-def test_revision_con_contraseña_acepta_ambas() -> None:
-    assert credencial_valida("contraseña-larga", PIN_HASH, PASS_HASH, acepta_password=True)
-    assert credencial_valida("4821", PIN_HASH, PASS_HASH, acepta_password=True)
-
-
 def test_hash_invalido_no_revienta() -> None:
     assert not credencial_valida("x", "no-es-bcrypt", None)
     assert not credencial_valida("", PIN_HASH, PASS_HASH)

@@ -771,23 +771,36 @@ async def _verificar_credenciales_usuario(
 ) -> dict[str, Any]:
     """Revisión del administrador (A16): el autorizador debe poder revisar
     arqueos (turnos_caja:revision_admin) en la sucursal del turno —o ser
-    AdministradorSistema—, no puede ser el dueño del turno, y su contraseña
-    (o su PIN) se valida con límite de intentos. Lanza AutorizadorNoValidoError
-    (403), AutorizadorEsDuenoTurnoError (403), CredencialesAdminInvalidasError
-    (403) o PinBloqueadoError (429)."""
-    return await pin_caja_service.verificar_pin_autorizador(
-        conn,
-        email=email,
-        pin=password,
-        sucursal_id=sucursal_id,
-        permiso=PERMISO_REVISION_ARQUEO,
-        tipo="revision",
-        intentado_por=intentado_por,
-        dueno_turno_id=dueno_turno_id,
-        # El formulario de revisión pide la contraseña del administrador.
-        acepta_password=True,
-        error=CredencialesAdminInvalidasError("Contraseña o PIN incorrecto."),
+    AdministradorSistema—, no puede ser el dueño del turno, y su credencial se
+    valida con límite de intentos: con PIN configurado solo vale el PIN; sin
+    PIN, su contraseña (C1). Lanza AutorizadorNoValidoError (403),
+    AutorizadorEsDuenoTurnoError (403), CredencialesAdminInvalidasError (403)
+    o PinBloqueadoError (429)."""
+    autorizador = await pin_caja_service.buscar_autorizador(
+        conn, email, sucursal_id, PERMISO_REVISION_ARQUEO, dueno_turno_id=dueno_turno_id
     )
+    if autorizador["pin_hash"]:
+        error = CredencialesAdminInvalidasError(
+            "PIN incorrecto. Este administrador ya tiene PIN configurado: ingresa su PIN, "
+            "no su contraseña."
+        )
+    else:
+        error = CredencialesAdminInvalidasError(
+            "Contraseña incorrecta. Este administrador aún no tiene PIN configurado: "
+            "ingresa su contraseña."
+        )
+    await pin_caja_service.verificar_con_limite(
+        conn,
+        usuario_id=autorizador["id"],
+        sucursal_id=sucursal_id,
+        tipo="revision",
+        verificar=lambda: pin_caja_service.credencial_valida(
+            password, autorizador["pin_hash"], autorizador["password_hash"]
+        ),
+        error=error,
+        intentado_por=intentado_por,
+    )
+    return autorizador
 
 
 async def _apertura_para_autorizar(

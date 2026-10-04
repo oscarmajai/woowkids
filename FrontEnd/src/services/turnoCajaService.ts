@@ -41,8 +41,12 @@ export class TransicionInvalidaError extends Error {
 }
 
 export class CredencialesAdminInvalidasError extends Error {
-  constructor() {
-    super('Credenciales de administrador incorrectas. Verifica usuario y contraseña.')
+  /**
+   * A16: el backend explica qué falló (p. ej. que el administrador ya tiene PIN
+   * y no se acepta su contraseña); sin mensaje se usa el genérico.
+   */
+  constructor(mensaje?: string) {
+    super(mensaje || 'Credenciales de administrador incorrectas. Verifica el correo y el PIN.')
     this.name = 'CredencialesAdminInvalidasError'
   }
 }
@@ -175,10 +179,11 @@ export const turnoCajaService = {
   /**
    * Valida las credenciales del administrador y revela el balance.
    * Transición: ESPERANDO_REVISION → BALANCE_REVELADO
-   * Lanza CredencialesAdminInvalidasError si la contraseña/PIN no coincide
-   * (403 CREDENCIALES_INVALIDAS, o 401 de un backend viejo). Los demás
-   * rechazos (administrador de otra sucursal o sin permiso, demasiados
-   * intentos, turno ajeno) muestran el mensaje del backend.
+   * Lanza CredencialesAdminInvalidasError, con el mensaje del backend, si el
+   * PIN (o la contraseña, solo si el administrador aún no tiene PIN) no
+   * coincide (403 CREDENCIALES_INVALIDAS, o 401 de un backend viejo). Los
+   * demás rechazos (administrador de otra sucursal o sin permiso, dueño del
+   * turno, demasiados intentos, turno ajeno) muestran el mensaje del backend.
    */
   async autenticarAdmin(payload: RevisionAdminPayload): Promise<RevisionAdminResponse> {
     try {
@@ -186,7 +191,7 @@ export const turnoCajaService = {
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.statusCode === 401 || CODIGOS_CREDENCIAL_INVALIDA.has(apiErr.code)) {
-        throw new CredencialesAdminInvalidasError()
+        throw new CredencialesAdminInvalidasError(apiErr.message)
       }
       throw new Error(toMensajeError(err), { cause: err })
     }

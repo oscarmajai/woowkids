@@ -8,7 +8,8 @@ operación) de un cajero o de un administrador:
   lo reserva la API para "token de sesión vencido", y el front lo usaba para
   refrescar la sesión, reenviar el PIN equivocado y cerrar la sesión (A5).
 - Si el usuario tiene PIN configurado solo se acepta el PIN; la contraseña
-  solo vale mientras no tenga PIN (decisión vigente del usuario).
+  solo vale mientras no tenga PIN (decisión vigente del usuario). Vale
+  también para la revisión del administrador en el cierre (A16).
 - Límite de intentos: ``MAX_FALLOS`` fallos en ``VENTANA_MINUTOS`` por
   usuario dueño del PIN + sucursal → **429** ``PIN_BLOQUEADO``. Se guarda en
   ``intentos_pin_fallidos`` (no en memoria) para que valga con varios
@@ -124,19 +125,11 @@ def _coincide(plano: str, hash_guardado: str | None) -> bool:
         return False
 
 
-def credencial_valida(
-    secreto: str,
-    pin_hash: str | None,
-    password_hash: str | None,
-    *,
-    acepta_password: bool = False,
-) -> bool:
-    """Con PIN configurado solo vale el PIN (salvo ``acepta_password``, para la
-    revisión con contraseña); sin PIN, la contraseña hace las veces de PIN."""
+def credencial_valida(secreto: str, pin_hash: str | None, password_hash: str | None) -> bool:
+    """Con PIN configurado solo vale el PIN; sin PIN, la contraseña hace las
+    veces de PIN (C1)."""
     if pin_hash:
-        if _coincide(secreto, pin_hash):
-            return True
-        return acepta_password and _coincide(secreto, password_hash)
+        return _coincide(secreto, pin_hash)
     return _coincide(secreto, password_hash)
 
 
@@ -218,7 +211,6 @@ async def verificar_pin_autorizador(
     tipo: str = "admin",
     intentado_por: str | uuid.UUID | None = None,
     dueno_turno_id: str | uuid.UUID | None = None,
-    acepta_password: bool = False,
     error: HTTPException | None = None,
 ) -> dict[str, Any]:
     """Busca al autorizador (``buscar_autorizador``) y valida su PIN con el
@@ -233,10 +225,7 @@ async def verificar_pin_autorizador(
         sucursal_id=sucursal_id,
         tipo=tipo,
         verificar=lambda: credencial_valida(
-            pin,
-            autorizador["pin_hash"],
-            autorizador["password_hash"],
-            acepta_password=acepta_password,
+            pin, autorizador["pin_hash"], autorizador["password_hash"]
         ),
         error=error or PinInvalidoError("El PIN ingresado para el Administrador es incorrecto."),
         intentado_por=intentado_por,

@@ -4,6 +4,8 @@
   otro administrador de la sucursal o un AdministradorSistema.
 - El token del PIN de administrador guarda su propósito (migración 109): el de
   cancelar una orden no cierra la caja, ni al revés, y el rechazo no lo consume.
+- En la revisión, un administrador con PIN solo entra con su PIN; sin PIN, con
+  su contraseña.
 """
 
 import json
@@ -23,6 +25,7 @@ from app.services.pin_caja_service import (
     AutorizadorEsDuenoTurnoError,
     AutorizadorNoValidoError,
 )
+from app.services.turnos_caja_service import CredencialesAdminInvalidasError
 
 from tests.db.conftest import Escenario, crear_apertura
 
@@ -143,6 +146,24 @@ async def test_revision_del_cierre_de_un_admin_la_autoriza_otro(
             uuid.UUID(apertura_id),
         )
         assert str(jti) == str(sistema_id)
+
+
+async def test_revision_con_pin_configurado_no_acepta_la_contraseña(
+    pool: asyncpg.Pool, escenario: Escenario
+) -> None:
+    apertura_id, dueno_id, _ = await _turno_de_admin_en_corte(pool, escenario)
+    _, con_pin = await _usuario(pool, ROL_ADMIN, escenario.sucursal_id)
+    _, sin_pin = await _usuario(pool, ROL_ADMIN, escenario.sucursal_id, pin_hash=None)
+
+    async with pool.acquire() as conn:
+        with pytest.raises(CredencialesAdminInvalidasError) as exc:
+            await _revisar(conn, apertura_id, dueno_id, con_pin, PASSWORD)
+        assert exc.value.status_code == 403
+        assert "PIN configurado" in exc.value.detail["message"]
+
+        # C1: sin PIN se sigue aceptando la contraseña.
+        resp = await _revisar(conn, apertura_id, dueno_id, sin_pin, PASSWORD)
+        assert resp.autorizado is True  # type: ignore[attr-defined]
 
 
 async def test_pin_admin_para_cerrar_no_lo_da_el_dueno_pero_si_para_cancelar(
