@@ -592,7 +592,7 @@ def restaurar(cfg: Config, nombre: str, confirmado: bool) -> None:
             _supervisorctl("start")
     print(
         "[respaldos] Listo. Al arrancar, el backend aplica las migraciones que le falten al "
-        "respaldo. Todos deben volver a iniciar sesión."
+        "respaldo. Quien inició sesión después del respaldo debe volver a entrar."
     )
 
 

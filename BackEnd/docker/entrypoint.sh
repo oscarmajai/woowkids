@@ -115,7 +115,8 @@ aplicar_migraciones
 # cualquiera podría fabricarse un token de administrador, así que si la
 # instalación no definió una propia se genera una aleatoria la primera vez y se
 # guarda en la BD: sobrevive reinicios, actualizaciones de la imagen y
-# restauraciones de respaldo. Cambiarla solo obliga a volver a iniciar sesión.
+# restauraciones de respaldo. Cambiarla invalida los access tokens emitidos; las
+# sesiones siguen vivas porque el refresh token es opaco y vive en la BD.
 SECRET_KEY_DE_FABRICA="woowkids-secret-key-cambiar-en-produccion"
 if [ -z "${SECRET_KEY:-}" ] || [ "$SECRET_KEY" = "$SECRET_KEY_DE_FABRICA" ]; then
     nueva_clave=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
