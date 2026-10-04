@@ -27,6 +27,10 @@ export const userService = {
     return usersApi.remove(id)
   },
 
+  async cambiarMiPassword(actual: string, nueva: string): Promise<void> {
+    return usersApi.cambiarMiPassword(actual, nueva)
+  },
+
   async cambiarMiPin(actual: string, pinNuevo: string): Promise<void> {
     return usersApi.cambiarMiPin(actual, pinNuevo)
   },

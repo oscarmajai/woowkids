@@ -1,4 +1,10 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valor de fábrica de SECRET_KEY en las imágenes y el compose. El entrypoint lo
+# reemplaza por una clave aleatoria guardada en la BD (tabla secretos_sistema),
+# así que la API nunca debe arrancar con él: quien lo conozca fabricaría tokens.
+SECRET_KEY_DE_FABRICA = "woowkids-secret-key-cambiar-en-produccion"
 
 
 class Settings(BaseSettings):
@@ -29,6 +35,16 @@ class Settings(BaseSettings):
     # QA #14: exige token_pin de cajero y admin en POST /turnos-caja/confirmar.
     # Retrocompatibilidad: en false, confirmar acepta la ausencia de tokens.
     exigir_pin_token: bool = True
+
+    @field_validator("secret_key")
+    @classmethod
+    def _rechazar_secret_key_de_fabrica(cls, v: str) -> str:
+        if not v.strip() or v == SECRET_KEY_DE_FABRICA:
+            raise ValueError(
+                "SECRET_KEY vacía o de fábrica: arranca con docker/entrypoint.sh "
+                "(la genera sola) o define una propia."
+            )
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",

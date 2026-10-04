@@ -5,10 +5,15 @@ from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import (
+    get_current_user,
+    get_current_user_con_cambio_pendiente,
+    require_permission,
+)
 from app.core.database import get_db
 from app.schemas.auth import TokenData
 from app.schemas.user import (
+    CambiarMiPasswordRequest,
     CambiarMiPinRequest,
     CambiarMiPinResponse,
     UserCreateRequest,
@@ -22,9 +27,11 @@ from app.services.user_service import (
     EmailAlreadyExistsError,
     EstadoUsuarios,
     InsufficientPermissionsError,
+    PasswordNoPermitidaError,
     RolInvalidoError,
     SucursalNoEncontradaError,
     UserNotFoundError,
+    cambiar_mi_password,
     cambiar_mi_pin,
     create_user,
     delete_user,
@@ -163,6 +170,37 @@ async def put_mi_pin(
                 "message": "El PIN actual (o tu contraseña) no es correcto.",
             },
         ) from None
+
+
+@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def put_mi_password(
+    body: CambiarMiPasswordRequest,
+    current_user: TokenData = Depends(get_current_user_con_cambio_pendiente),
+    conn: asyncpg.Connection = Depends(get_db),
+) -> Response:
+    """Cualquier usuario autenticado cambia su propia contraseña. También quien
+    está obligado a cambiarla (administrador inicial o contraseña de fábrica)."""
+    try:
+        await cambiar_mi_password(conn, UUID(current_user.sub), body)
+    except UserNotFoundError:
+        raise _NOT_FOUND from None
+    except CredencialActualInvalidaError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "CREDENCIAL_ACTUAL_INVALIDA",
+                "message": "La contraseña actual no es correcta.",
+            },
+        ) from None
+    except PasswordNoPermitidaError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "PASSWORD_NO_PERMITIDA",
+                "message": "Elige una contraseña distinta a la actual y a la de fábrica.",
+            },
+        ) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/{usuario_id}")

@@ -16,7 +16,7 @@ vi.mock('quasar', async (original) => {
 
 interface AuthFake {
   isAuthenticated: boolean
-  currentUser: { id: string } | null
+  currentUser: { id: string; debeCambiarPassword?: boolean } | null
   isSistema: boolean
   currentBranchId: string | null
   permisos: Set<string>
@@ -57,6 +57,12 @@ const Vacio = { template: '<div />' }
 const RUTAS: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: Vacio, meta: { publicOnly: true } },
   { path: '/home', name: 'home', component: Vacio, meta: { requiresAuth: true } },
+  {
+    path: '/cambiar-password',
+    name: 'cambiar-password',
+    component: Vacio,
+    meta: { requiresAuth: true },
+  },
   {
     path: '/usuarios',
     name: 'usuarios-listar',
@@ -221,5 +227,36 @@ describe('rutas de la app (B12)', () => {
     expect(resuelta.name).toBe('not-found')
     expect(resuelta.meta.requiresAuth).toBe(true)
     expect(resuelta.matched).toHaveLength(2) // AppShell + NotFoundPage
+  })
+})
+
+describe('contraseña de fábrica pendiente de cambiar', () => {
+  beforeEach(() => {
+    auth.currentUser = { id: 'u1', debeCambiarPassword: true }
+    auth.permisos = new Set(['usuarios:listar'])
+  })
+
+  it('manda a cambiarla y recuerda a dónde iba', async () => {
+    const router = crearRouter()
+    await router.push('/usuarios')
+
+    expect(router.currentRoute.value.name).toBe('cambiar-password')
+    expect(router.currentRoute.value.query.redirect).toBe('/usuarios')
+  })
+
+  it('desde Inicio no guarda destino', async () => {
+    const router = crearRouter()
+    await router.push('/home')
+
+    expect(router.currentRoute.value.name).toBe('cambiar-password')
+    expect(router.currentRoute.value.query.redirect).toBeUndefined()
+  })
+
+  it('ya cambiada deja pasar', async () => {
+    auth.currentUser = { id: 'u1', debeCambiarPassword: false }
+    const router = crearRouter()
+    await router.push('/usuarios')
+
+    expect(router.currentRoute.value.name).toBe('usuarios-listar')
   })
 })

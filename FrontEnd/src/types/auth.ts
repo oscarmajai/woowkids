@@ -39,6 +39,9 @@ export interface User {
   /** C1: true si el usuario ya tiene PIN de caja configurado. Opcional para no
    * romper construcciones existentes de User (login/refresh no lo traían). */
   tienePin?: boolean
+  /** El administrador inicial (o quien entró con la contraseña de fábrica)
+   * debe cambiarla antes de usar el sistema; el backend rechaza todo lo demás. */
+  debeCambiarPassword?: boolean
 }
 
 export interface LoginResponse {

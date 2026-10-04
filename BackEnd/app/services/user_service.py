@@ -12,6 +12,7 @@ from app.repositories.refresh_token_repository import revoke_all_user_refresh_to
 from app.repositories.user_repository import (
     UsuarioRecord,
     assign_usuario_to_branch,
+    cambiar_password_propia,
     create_usuario,
     delete_usuario,
     email_exists,
@@ -23,6 +24,7 @@ from app.repositories.user_repository import (
 )
 from app.schemas.auth import TokenData
 from app.schemas.user import (
+    CambiarMiPasswordRequest,
     CambiarMiPinRequest,
     CambiarMiPinResponse,
     UserCreateRequest,
@@ -74,6 +76,10 @@ class RolInvalidoError(Exception):
 
 class AutoEliminacionError(Exception):
     """Un usuario intentó eliminar su propia cuenta."""
+
+
+class PasswordNoPermitidaError(Exception):
+    """La contraseña nueva es igual a la actual o es una de fábrica."""
 
 
 class CredencialActualInvalidaError(Exception):
@@ -340,3 +346,25 @@ async def cambiar_mi_pin(
     if not actualizado:
         raise UserNotFoundError
     return CambiarMiPinResponse(ok=True, tiene_pin=True)
+
+
+async def cambiar_mi_password(
+    conn: asyncpg.Connection,
+    user_id: UUID,
+    data: CambiarMiPasswordRequest,
+) -> None:
+    """PUT /usuarios/me/password — el usuario cambia su propia contraseña.
+
+    Es lo único que puede hacer quien debe cambiarla (administrador inicial o
+    contraseña de fábrica); al guardarla se le levanta esa obligación."""
+    from app.services.auth_service import CONTRASENAS_DE_FABRICA
+
+    target = await get_usuario_by_id(conn, user_id)
+    if target is None or not target["activo"]:
+        raise UserNotFoundError
+    if not verify_password(data.actual, target["password_hash"]):
+        raise CredencialActualInvalidaError
+    if data.nueva == data.actual or data.nueva in CONTRASENAS_DE_FABRICA:
+        raise PasswordNoPermitidaError
+    if not await cambiar_password_propia(conn, user_id, hash_password(data.nueva)):
+        raise UserNotFoundError

@@ -37,10 +37,12 @@ COPY docker/allinone/start.sh /etc/woowkids/start.sh
 RUN chmod +x /etc/woowkids/start.sh
 
 # Valores genéricos por defecto: cámbialos con -e al correr el contenedor.
+# SECRET_KEY no tiene valor por defecto: si no se pasa, el arranque genera una
+# aleatoria y la guarda en la BD. El administrador inicial debe cambiar su
+# contraseña la primera vez que entra.
 ENV POSTGRES_USER=admin \
     POSTGRES_PASSWORD=admin1234 \
     POSTGRES_DB=woowkids \
-    SECRET_KEY=woowkids-secret-key-cambiar-en-produccion \
     MINIO_ACCESS_KEY=admin \
     MINIO_SECRET_KEY=admin1234 \
     MINIO_BUCKET=woowkids \

@@ -23,6 +23,7 @@ from app.repositories.user_repository import (
     get_sucursal_ids_activas,
     get_usuario_by_email,
     get_usuario_by_id,
+    marcar_cambio_password,
     update_ultimo_acceso,
 )
 from app.schemas.auth import (
@@ -32,6 +33,11 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.services.permission_service import get_permissions
+
+# Contraseñas con las que se publica el sistema (administrador inicial de las
+# imágenes y del compose). Quien entra con una de ellas queda obligado a
+# cambiarla, también en instalaciones que ya existían antes de esta regla.
+CONTRASENAS_DE_FABRICA = frozenset({"admin1234"})
 
 
 class InvalidCredentialsError(Exception):
@@ -57,6 +63,11 @@ async def login(
 
     if usuario is None or not verify_password(password, usuario["password_hash"]):
         raise InvalidCredentialsError
+
+    debe_cambiar_password = usuario["debe_cambiar_password"]
+    if not debe_cambiar_password and password in CONTRASENAS_DE_FABRICA:
+        await marcar_cambio_password(conn, usuario["id"])
+        debe_cambiar_password = True
 
     rol = usuario["rol"]
     permissions = get_permissions(rol)
@@ -134,6 +145,7 @@ async def login(
             permissions=permissions,
             # B3: antes siempre False (solo /auth/me lo calculaba).
             tiene_pin=bool(usuario["pin_hash"]),
+            debe_cambiar_password=debe_cambiar_password,
         ),
     )
 
@@ -207,5 +219,6 @@ async def refresh_access_token(
             permissions=permissions,
             # B3: antes siempre False (solo /auth/me lo calculaba).
             tiene_pin=bool(usuario["pin_hash"]),
+            debe_cambiar_password=usuario["debe_cambiar_password"],
         ),
     )

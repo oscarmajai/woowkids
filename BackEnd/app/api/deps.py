@@ -40,6 +40,17 @@ _CUENTA_INACTIVA = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
+# El administrador inicial (y quien entra con la contraseña de fábrica) solo
+# puede cambiar su contraseña hasta hacerlo: con ella, cualquiera que conozca
+# el valor por defecto tendría el sistema completo.
+_CAMBIO_PASSWORD_PENDIENTE = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={
+        "code": "PASSWORD_CHANGE_REQUIRED",
+        "message": "Debes cambiar tu contraseña antes de continuar.",
+    },
+)
+
 _SERVICE_UNAVAILABLE = HTTPException(
     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
     detail={
@@ -84,7 +95,9 @@ async def _resolve_token_data(token: str, conn: asyncpg.Connection) -> TokenData
         # de estancia, que padres_service valida aparte).
         usuario_id = None if role == ROL_PADRE else UUID(sub)
         try:
-            revocado, usuario_activo = await get_estado_sesion(conn, jti, usuario_id)
+            revocado, usuario_activo, debe_cambiar_password = await get_estado_sesion(
+                conn, jti, usuario_id
+            )
         except (asyncpg.PostgresError, OSError) as exc:
             raise _SERVICE_UNAVAILABLE from exc
 
@@ -103,16 +116,20 @@ async def _resolve_token_data(token: str, conn: asyncpg.Connection) -> TokenData
             permissions=permissions if isinstance(permissions, list) else [],
             jti=jti,
             exp=exp_dt or datetime.now(tz=UTC),
+            debe_cambiar_password=debe_cambiar_password,
         )
     except (JWTError, ValueError, KeyError):
         raise _INVALID_TOKEN from None
 
 
-async def get_current_user(
+async def get_current_user_con_cambio_pendiente(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     conn: asyncpg.Connection = Depends(get_db),
     sucursal_vista: str | None = Header(None, alias="X-Sucursal-Vista"),
 ) -> TokenData:
+    """Usuario autenticado aunque deba cambiar su contraseña. Solo para lo
+    que necesita para hacerlo: /auth/me, /auth/logout y PUT
+    /usuarios/me/password. Todo lo demás usa get_current_user."""
     current_user = await _resolve_token_data(credentials.credentials, conn)
     # AdministradorSistema no tiene sucursal propia; este header opcional le
     # permite "pararse" en una sucursal para ver sus catálogos/listados como
@@ -123,6 +140,14 @@ async def get_current_user(
             current_user = current_user.model_copy(update={"branch_id": UUID(sucursal_vista)})
         except ValueError:
             pass
+    return current_user
+
+
+async def get_current_user(
+    current_user: TokenData = Depends(get_current_user_con_cambio_pendiente),
+) -> TokenData:
+    if current_user.debe_cambiar_password:
+        raise _CAMBIO_PASSWORD_PENDIENTE
     return current_user
 
 
@@ -147,7 +172,10 @@ async def resolve_ws_auth(
     if ticket:
         return await get_current_user_ws_ticket(ticket, conn)
     if token and settings.ws_acepta_jwt:
-        return await get_current_user_ws(token, conn)
+        current_user = await get_current_user_ws(token, conn)
+        if current_user.debe_cambiar_password:
+            raise _CAMBIO_PASSWORD_PENDIENTE
+        return current_user
     raise _INVALID_TOKEN
 
 

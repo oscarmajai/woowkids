@@ -14,6 +14,7 @@ class UsuarioRecord(TypedDict):
     email: str
     password_hash: str
     pin_hash: str | None
+    debe_cambiar_password: bool
     nombre_completo: str
     apellidos: str | None
     telefono: str | None
@@ -32,6 +33,7 @@ def _row_to_record(row: asyncpg.Record) -> UsuarioRecord:
         email=row["email"],
         password_hash=row["password_hash"],
         pin_hash=row["pin_hash"],
+        debe_cambiar_password=row["debe_cambiar_password"],
         nombre_completo=row["nombre_completo"],
         apellidos=row["apellidos"],
         telefono=row["telefono"],
@@ -55,6 +57,7 @@ _SELECT = f"""
         u.email,
         u.password_hash,
         u.pin_hash,
+        u.debe_cambiar_password,
         u.nombre_completo,
         u.apellidos,
         u.telefono,
@@ -218,6 +221,34 @@ async def update_ultimo_acceso(conn: asyncpg.Connection, user_id: UUID) -> None:
         "UPDATE public.usuarios SET ultimo_acceso = NOW() WHERE id = $1",
         user_id,
     )
+
+
+async def marcar_cambio_password(conn: asyncpg.Connection, user_id: UUID) -> None:
+    """Obliga al usuario a cambiar su contraseña antes de seguir usando la API."""
+    await conn.execute(
+        "UPDATE public.usuarios SET debe_cambiar_password = TRUE WHERE id = $1",
+        user_id,
+    )
+
+
+async def cambiar_password_propia(
+    conn: asyncpg.Connection, user_id: UUID, password_hash: str
+) -> bool:
+    """Guarda la contraseña nueva que eligió el propio usuario y levanta la
+    obligación de cambiarla."""
+    result = await conn.execute(
+        """
+        UPDATE public.usuarios
+        SET password_hash         = $2,
+            debe_cambiar_password = FALSE,
+            modificado            = NOW(),
+            modificado_por        = $1
+        WHERE id = $1 AND activo = TRUE
+        """,
+        user_id,
+        password_hash,
+    )
+    return str(result) == "UPDATE 1"
 
 
 async def update_usuario_branch(

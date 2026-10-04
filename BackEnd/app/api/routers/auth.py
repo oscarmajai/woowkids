@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import asyncpg
 from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, Response, status
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_con_cambio_pendiente
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import generate_ws_ticket, hash_refresh_token
@@ -105,7 +105,7 @@ async def login_endpoint(
 
 @router.get("/me", response_model=UserOut)
 async def me_endpoint(
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(get_current_user_con_cambio_pendiente),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> UserOut:
     """Devuelve los datos actuales del usuario autenticado desde la BD."""
@@ -130,6 +130,7 @@ async def me_endpoint(
         branch_name=branch_name,
         permissions=get_permissions(rol),
         tiene_pin=bool(usuario["pin_hash"]),
+        debe_cambiar_password=usuario["debe_cambiar_password"],
     )
 
 
@@ -157,7 +158,7 @@ async def refresh_endpoint(
 @router.post("/logout")
 async def logout_endpoint(
     response: Response,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(get_current_user_con_cambio_pendiente),
     conn: asyncpg.Connection = Depends(get_db),
     body: RefreshRequest | None = Body(None),
     refresh_token_cookie: str | None = Cookie(None, alias=_REFRESH_COOKIE_NAME),

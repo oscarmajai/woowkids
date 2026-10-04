@@ -45,6 +45,17 @@ export function setupRouterGuards(router: Router): void {
       return { name: 'home' }
     }
 
+    // El administrador inicial (o quien entró con la contraseña de fábrica)
+    // no puede usar nada más hasta cambiarla: el backend responde 403 a todo.
+    if (
+      auth.isAuthenticated &&
+      auth.currentUser?.debeCambiarPassword &&
+      to.name !== 'cambiar-password'
+    ) {
+      const redirect = to.meta.requiresAuth && to.name !== 'home' ? to.fullPath : undefined
+      return { name: 'cambiar-password', query: redirect ? { redirect } : {} }
+    }
+
     if (to.meta.permissions?.length && auth.currentUser) {
       const allowed = to.meta.permissions.some((p) => auth.hasPermission(p))
       if (!allowed) {
