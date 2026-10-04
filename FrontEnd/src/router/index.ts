@@ -7,6 +7,8 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     publicOnly?: boolean
     permissions?: string[]
+    /** Solo estos roles (p. ej. lo que en el backend es require_role(ROL_SISTEMA)). */
+    roles?: string[]
     /** La ruta exige un turno de caja abierto; el guard espera a que se cargue antes de validar. */
     requiresTurno?: boolean
     title?: string
@@ -463,6 +465,12 @@ const routes: RouteRecordRaw[] = [
         name: 'admin-cajas',
         component: () => import('@/pages/admin/CajasAdminPage.vue'),
         meta: { permissions: ['cajas:crear'], title: 'Cajas' },
+      },
+      {
+        path: 'aviso-privacidad',
+        name: 'admin-aviso-privacidad',
+        component: () => import('@/pages/admin/AvisoPrivacidadAdminPage.vue'),
+        meta: { roles: ['AdministradorSistema'], title: 'Aviso de privacidad' },
       },
     ],
   },

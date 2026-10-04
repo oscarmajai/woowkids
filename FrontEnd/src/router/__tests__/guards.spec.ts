@@ -99,6 +99,12 @@ const RUTAS: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/admin/aviso-privacidad',
+    name: 'admin-aviso-privacidad',
+    component: Vacio,
+    meta: { requiresAuth: true, roles: ['AdministradorSistema'], title: 'Aviso de privacidad' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: Vacio,
@@ -258,5 +264,33 @@ describe('contraseña de fábrica pendiente de cambiar', () => {
     await router.push('/usuarios')
 
     expect(router.currentRoute.value.name).toBe('usuarios-listar')
+  })
+})
+
+describe('rutas solo para un rol (aviso de privacidad)', () => {
+  it('un Administrador de sucursal no entra y se le dice por qué', async () => {
+    auth.roles = new Set(['Administrador'])
+    auth.permisos = new Set(['usuarios:listar', 'cajas:crear'])
+    const router = crearRouter()
+    await router.push('/admin/aviso-privacidad')
+
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'No tienes permiso para abrir «Aviso de privacidad».' }),
+    )
+  })
+
+  it('el AdministradorSistema sí entra', async () => {
+    auth.roles = new Set(['AdministradorSistema'])
+    auth.isSistema = true
+    const router = crearRouter()
+    await router.push('/admin/aviso-privacidad')
+
+    expect(router.currentRoute.value.name).toBe('admin-aviso-privacidad')
+  })
+
+  it('la ruta real exige el rol AdministradorSistema', async () => {
+    const { default: router } = await import('@/router')
+    expect(router.resolve('/admin/aviso-privacidad').meta.roles).toEqual(['AdministradorSistema'])
   })
 })
