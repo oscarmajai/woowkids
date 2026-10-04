@@ -3,6 +3,7 @@ import { obtenerComboHijos } from '@/services/productoService'
 import type { Producto } from '@/types/producto'
 import type { DetalleComandaRequest } from '@/types/comanda'
 import type { ItemTicket } from '@/components/comandas/TicketItem.vue'
+import { nuevoId } from '@/utils/uuid'
 
 /**
  * Composable centralizado que orquesta el carrito de comandas.
@@ -68,7 +69,7 @@ export function useTicketComanda() {
       existente.cantidad++
     } else {
       itemsTicket.value.push({
-        id: crypto.randomUUID(),
+        id: nuevoId(),
         producto,
         cantidad: 1,
         notas: '',
@@ -103,7 +104,7 @@ export function useTicketComanda() {
   ): Promise<boolean> {
     try {
       const hijos = await obtenerComboHijos(producto.id)
-      const parentId = crypto.randomUUID()
+      const parentId = nuevoId()
       const childIds = new Set<string>()
 
       itemsTicket.value.push({
@@ -114,7 +115,7 @@ export function useTicketComanda() {
       })
 
       for (const hijo of hijos) {
-        const childId = crypto.randomUUID()
+        const childId = nuevoId()
         childIds.add(childId)
         itemsTicket.value.push({
           id: childId,
@@ -173,7 +174,7 @@ export function useTicketComanda() {
       }
     }
 
-    const newParentId = crypto.randomUUID()
+    const newParentId = nuevoId()
     const newChildIds = new Set<string>()
 
     itemsTicket.value.push({
@@ -184,7 +185,7 @@ export function useTicketComanda() {
     })
 
     for (const hijo of hijos) {
-      const childId = crypto.randomUUID()
+      const childId = nuevoId()
       newChildIds.add(childId)
       itemsTicket.value.push({
         id: childId,
@@ -368,7 +369,7 @@ export function useTicketComanda() {
 
       const hijos = itemsTicket.value.filter((i) => i.padreTicketId === item.id)
       for (let unidad = 0; unidad < item.cantidad; unidad++) {
-        const idInstancia = crypto.randomUUID()
+        const idInstancia = nuevoId()
         for (const hijo of hijos) {
           detalles.push({
             producto_id: hijo.producto.id,

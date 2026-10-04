@@ -1,5 +1,8 @@
 #!/bin/sh
-# HTTPS de la imagen todo en uno: deja en /data/tls lo que nginx necesita.
+# HTTPS OPCIONAL de la imagen todo en uno: deja en /data/tls lo que nginx
+# necesita para el puerto 443. El sistema funciona completo por HTTP (puerto 80)
+# en la red local; HTTPS solo hace falta para usar la webcam dentro de la página
+# desde otra computadora, o si se expone fuera de la red.
 #
 # - Con certificado propio (/data/tls/propio/servidor.crt y servidor.key, o
 #   montados en /certs como woowkids.crt y woowkids.key) se usa ese.
@@ -85,7 +88,7 @@ if [ "$emitir" = si ]; then
     rm -f "$TLS/servidor.csr" "$TLS/servidor.ext"
 fi
 
-if [ -z "${WOOWKIDS_DOMINIOS:-}" ]; then
+if [ -z "${WOOWKIDS_DOMINIOS:-}" ] && [ "${REDIRIGIR_HTTPS:-false}" = "true" ]; then
     echo "[tls] AVISO: WOOWKIDS_DOMINIOS está vacía; el certificado solo sirve para localhost." >&2
     echo "[tls]        Pon el nombre o la IP con que las terminales abren el sistema." >&2
 fi

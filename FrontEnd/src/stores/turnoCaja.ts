@@ -33,6 +33,7 @@ import type {
   ConteoGuardado,
   VentaPorMetodo,
 } from '@/types/turnoCaja'
+import { nuevoId } from '@/utils/uuid'
 
 // v-model.number sobre <q-input type="text"> no convierte "" a 0 ni a null: Vue
 // solo castea cuando parseFloat produce un número válido, así que al borrar un
@@ -622,7 +623,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     const filasSistema = turno.movimientos
       .filter((m) => m.metodo.trim().toLowerCase() !== 'efectivo')
       .map((m) => ({
-        id: crypto.randomUUID(),
+        id: nuevoId(),
         metodo: m.metodo,
         monto: null,
         origen: 'sistema' as const,
@@ -662,7 +663,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     for (const m of declarados.values()) {
       if (clave(m.metodo) === 'efectivo') continue
       metodosPago.value.push({
-        id: crypto.randomUUID(),
+        id: nuevoId(),
         metodo: m.metodo,
         monto: m.monto,
         origen: 'manual',
