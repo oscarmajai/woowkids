@@ -4,8 +4,9 @@
 #   - "tipo!:" o "BREAKING CHANGE" en el cuerpo  -> mayor
 #   - "feat:"                                     -> menor
 #   - cualquier otro commit                       -> parche
-# Sin tags previos parte de v0.0.0. Si no hay commits nuevos desde el último
-# tag no imprime nada (no hay nada que liberar).
+# Sin tags previos la primera versión es v1.0.0, sea cual sea el tipo de los
+# commits. Si no hay commits nuevos desde el último tag no imprime nada (no hay
+# nada que liberar).
 set -euo pipefail
 
 ultimo=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "")
@@ -13,8 +14,8 @@ if [ -n "$ultimo" ]; then
     rango="$ultimo..HEAD"
     base="${ultimo#v}"
 else
-    rango="HEAD"
-    base="0.0.0"
+    echo "v1.0.0"
+    exit 0
 fi
 
 commits=$(git log --no-merges --format='%s%n%b%n--fin--' "$rango")
