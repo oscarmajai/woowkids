@@ -889,3 +889,79 @@ async def test_devolver_entregada_revierte_los_puntos_de_lealtad(esc: Esc) -> No
             "SELECT puntos_disponibles FROM lotes_puntos WHERE id = $1", lote
         )
     assert disponibles == 0
+
+
+def _texto_pdf(pdf: bytes) -> bytes:
+    """Contenido de los flujos del PDF (ReportLab los guarda en ASCII85 +
+    Flate), decodificados, para buscar texto."""
+    import base64
+    import re
+    import zlib
+
+    texto = b""
+    for flujo in re.findall(rb"stream\r?\n(.*?)endstream", pdf, re.S):
+        try:
+            datos = flujo.strip().removesuffix(b"~>")
+            texto += zlib.decompress(base64.a85decode(datos))
+        except (ValueError, zlib.error):
+            texto += flujo
+    return texto
+
+
+async def test_detalle_y_pdf_del_arqueo_muestran_las_devoluciones(esc: Esc) -> None:
+    from app.repositories.caja_repository import crear_cierre_caja
+    from app.services import pdf_service, turnos_caja_service
+
+    cancelada = await _cobrada(
+        esc,
+        pagos=[{"metodo_pago_id": str(esc.tarjeta), "monto": "70.00", "notas_pago": "Folio: 4"}],
+    )
+    r = await _cancelar(esc.cajero, cancelada, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+    entregada = await _cobrada(esc)
+    await _entregar(esc, entregada)
+    token = await _token_admin(esc)
+    r = await _devolver(esc.cajero, entregada, motivo="Producto equivocado", token_pin_admin=token)
+    assert r.status_code == 200, r.text
+
+    tarjeta = await _nombre_tarjeta(esc)
+    admin_id = await _admin_id(esc)
+    async with esc.pool.acquire() as conn:
+        tickets = [
+            str(row["ticket_numero"])
+            for row in await conn.fetch(
+                "SELECT ticket_numero FROM comandas WHERE id = ANY($1::uuid[])",
+                [UUID(cancelada), UUID(entregada)],
+            )
+        ]
+        cierre = await crear_cierre_caja(
+            conn,
+            apertura_caja_id=str(esc.apertura),
+            tipo_cierre="NORMAL",
+            monto_sistema=Decimal("1000.00"),
+            monto_cierre=Decimal("1000.00"),
+            cajero_id=str(esc.cajero_id),
+            administrador_id=str(admin_id),
+            creado_por=str(admin_id),
+        )
+        detalle = await turnos_caja_service.obtener_detalle(conn, str(cierre["id"]))
+
+    por_origen = {d.origen: d for d in detalle.devoluciones}
+    assert set(por_origen) == {"cancelacion", "entregada"}
+    assert por_origen["cancelacion"].monto == Decimal("70.00")
+    assert not por_origen["cancelacion"].es_efectivo
+    assert por_origen["cancelacion"].motivo == "Cliente se arrepintió"
+    assert por_origen["entregada"].es_efectivo
+    assert por_origen["entregada"].motivo == "Producto equivocado"
+    assert por_origen["entregada"].autorizado_por_nombre
+    assert por_origen["entregada"].creado_por_nombre
+    filas = {b.metodo: b for b in detalle.balance_por_metodo}
+    assert filas["efectivo"].devoluciones == Decimal("70.00")
+    assert filas[tarjeta].devoluciones == Decimal("70.00")
+
+    texto = _texto_pdf(pdf_service.generar_pdf_arqueo(detalle))
+    assert b"Devoluciones a Clientes" in texto
+    assert b"Producto equivocado" in texto
+    for ticket in tickets:
+        assert ticket.encode() in texto
+    assert b"-$ 70.00" in texto
