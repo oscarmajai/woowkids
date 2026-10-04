@@ -28,6 +28,7 @@ from app.api.routers import (
     paquetes,
     permissions,
     presentaciones_insumo,
+    privacidad,
     producto_insumos,
     productos,
     proveedores,
@@ -123,3 +124,4 @@ app.include_router(padres.router)
 app.include_router(compras.router)
 app.include_router(lealtad.router)
 app.include_router(sistema.router)
+app.include_router(privacidad.router)

@@ -273,6 +273,8 @@ async def test_checkin_rechaza_cambio_sin_ningun_pago(
     """Antes, `if data.pagos:` saltaba validar_cambio con pagos vacíos u
     omitidos y el cambio se registraba sin efectivo que lo respaldara. La
     validación corre antes de tocar tutor, niños, fotos o pulseras."""
+    async with pool.acquire() as conn:
+        version_aviso = await conn.fetchval("SELECT max(version) FROM avisos_privacidad")
     data = OnboardingRequest(
         sucursalId=escenario.sucursal_id,
         tutor=TutorIn(nombreCompleto="Tutor Rechazo", telefono="5550000000"),
@@ -280,6 +282,8 @@ async def test_checkin_rechaza_cambio_sin_ningun_pago(
         detalles=[],
         pagos=pagos,
         cambio=Decimal("100.00"),
+        aceptaAvisoPrivacidad=True,
+        versionAvisoPrivacidad=version_aviso,
     )
     apertura = await crear_apertura(pool, escenario, FONDO)
     async with pool.acquire() as conn:

@@ -4,8 +4,8 @@
 -- GENERADO por scripts/generar_schema_maestro.sh. NO editar a mano: agrega una
 -- migración en sql/migrations/ y vuelve a correr el script.
 --
--- Equivale a aplicar las 116 migraciones de sql/migrations/ en orden
--- (última: 106_bitacora_respaldos.sql).
+-- Equivale a aplicar las 117 migraciones de sql/migrations/ en orden
+-- (última: 107_aviso_privacidad.sql).
 -- Incluye el esquema y los datos de catálogo que esas migraciones insertan
 -- (roles, permisos, etc.). No incluye datos de prueba: para eso está
 -- sql/seed_local.sql.
@@ -195,6 +195,32 @@ CREATE TABLE public.apertura_caja (
     observaciones_apertura text,
     CONSTRAINT chk_apertura_estado CHECK (((estado)::text = ANY ((ARRAY['ABIERTA'::character varying, 'EN_CORTE'::character varying, 'CERRADA'::character varying])::text[]))),
     CONSTRAINT chk_fondo_no_negativo CHECK ((fondo_inicial >= (0)::numeric))
+);
+
+
+--
+-- Name: avisos_privacidad; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.avisos_privacidad (
+    version integer NOT NULL,
+    texto_integral text NOT NULL,
+    texto_simplificado text NOT NULL,
+    razon_social character varying(200) DEFAULT ''::character varying NOT NULL,
+    nombre_comercial character varying(150) DEFAULT ''::character varying NOT NULL,
+    domicilio character varying(400) DEFAULT ''::character varying NOT NULL,
+    area_datos_personales character varying(150) DEFAULT ''::character varying NOT NULL,
+    correo_datos_personales character varying(150) DEFAULT ''::character varying NOT NULL,
+    telefono_datos_personales character varying(30) DEFAULT ''::character varying NOT NULL,
+    url_aviso character varying(300) DEFAULT ''::character varying NOT NULL,
+    dias_conservacion_imagenes integer DEFAULT 90 NOT NULL,
+    anios_conservacion_registros integer DEFAULT 5 NOT NULL,
+    motivo_cambio text,
+    vigente_desde timestamp with time zone DEFAULT now() NOT NULL,
+    publicado_por uuid,
+    CONSTRAINT avisos_privacidad_anios_conservacion_registros_check CHECK (((anios_conservacion_registros >= 1) AND (anios_conservacion_registros <= 20))),
+    CONSTRAINT avisos_privacidad_dias_conservacion_imagenes_check CHECK (((dias_conservacion_imagenes >= 1) AND (dias_conservacion_imagenes <= 3650))),
+    CONSTRAINT avisos_privacidad_version_check CHECK ((version > 0))
 );
 
 
@@ -1117,7 +1143,10 @@ CREATE TABLE public.registros (
     modificado_por uuid,
     pulseras_tutor_id uuid,
     nombre_segundo_tutor character varying(200),
-    reservacion_id uuid
+    reservacion_id uuid,
+    aviso_privacidad_version integer,
+    aviso_privacidad_aceptado_en timestamp with time zone,
+    acepta_finalidades_secundarias boolean
 );
 
 
@@ -1538,6 +1567,14 @@ ALTER TABLE ONLY public.roles ALTER COLUMN id SET DEFAULT nextval('public.roles_
 
 ALTER TABLE ONLY public.apertura_caja
     ADD CONSTRAINT apertura_caja_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avisos_privacidad avisos_privacidad_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avisos_privacidad
+    ADD CONSTRAINT avisos_privacidad_pkey PRIMARY KEY (version);
 
 
 --
@@ -2566,6 +2603,14 @@ ALTER TABLE ONLY public.apertura_caja
 
 
 --
+-- Name: avisos_privacidad avisos_privacidad_publicado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avisos_privacidad
+    ADD CONSTRAINT avisos_privacidad_publicado_por_fkey FOREIGN KEY (publicado_por) REFERENCES public.usuarios(id);
+
+
+--
 -- Name: cajas cajas_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3558,6 +3603,14 @@ ALTER TABLE ONLY public.refresh_tokens
 
 
 --
+-- Name: registros registros_aviso_privacidad_version_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.registros
+    ADD CONSTRAINT registros_aviso_privacidad_version_fkey FOREIGN KEY (aviso_privacidad_version) REFERENCES public.avisos_privacidad(version);
+
+
+--
 -- Name: registros registros_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3900,14 +3953,151 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (1, 'AdministradorSistema', 'Acceso total al sistema sin restricción de sucursal.', true);
+INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (2, 'Administrador', 'Gestión completa de su sucursal asignada.', true);
+INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (3, 'Cajero', 'Operaciones de caja y punto de venta.', true);
+INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (4, 'Cocina', 'Gestión de órdenes y comandas de cocina.', true);
+INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (5, 'Personal de atención de niños', 'Registra entradas/salidas de niños y cobra estancias en el módulo de Estancias.', true);
+
+
+--
+-- Data for Name: usuarios; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso, debe_cambiar_password) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-04 03:27:55.867517+00', NULL, '2026-10-04 03:27:55.867517+00', NULL, 1, NULL, NULL, NULL, NULL, false);
+
+
+--
+-- Data for Name: avisos_privacidad; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.avisos_privacidad (version, texto_integral, texto_simplificado, razon_social, nombre_comercial, domicilio, area_datos_personales, correo_datos_personales, telefono_datos_personales, url_aviso, dias_conservacion_imagenes, anios_conservacion_registros, motivo_cambio, vigente_desde, publicado_por) VALUES (1, '# AVISO DE PRIVACIDAD INTEGRAL
+
+Versión {{version}}. Vigente desde el {{fecha_vigencia}}.
+
+## 1. Identidad y domicilio del responsable
+
+{{razon_social}}, que opera comercialmente como «{{nombre_comercial}}» (el «Responsable»), con domicilio en {{domicilio}}, es responsable del tratamiento de los datos personales que usted nos proporcione, conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares publicada en el Diario Oficial de la Federación el 20 de marzo de 2025 (la «Ley») y demás disposiciones aplicables.
+
+Para cualquier asunto relacionado con este aviso o con sus datos personales, puede contactar a nuestro {{area_datos_personales}} en el correo electrónico {{correo_datos_personales}} o en el teléfono {{telefono_datos_personales}}.
+
+## 2. Datos personales que tratamos
+
+Recabamos sus datos de manera personal en la recepción de nuestras sucursales y, cuando reserva un evento, en persona o por teléfono. Según el servicio que contrate, tratamos los siguientes datos:
+
+- Del padre, madre o tutor que registra la entrada de un niño o niña: nombre completo, teléfono celular, parentesco con el menor, nombre de una segunda persona autorizada para recogerlo (si usted la designa), imagen de su identificación oficial (por ejemplo, la credencial para votar) y fotografías tomadas a su llegada.
+- De los niños y niñas: nombre completo, edad, fotografías tomadas a su llegada y las observaciones que usted nos indique para su cuidado.
+- De quien reserva un evento: nombre, apellidos, teléfono y, en su caso, correo electrónico y notas sobre el evento contratado.
+- Para el programa de lealtad: número de teléfono celular e historial de puntos acumulados y canjeados.
+- De los pagos: método de pago, monto y, en pagos con tarjeta o transferencia, el número de autorización o referencia. No guardamos el número completo de su tarjeta.
+
+Datos personales sensibles. Las observaciones sobre la salud de los niños (por ejemplo, alergias, padecimientos o cuidados especiales) son datos personales sensibles. Solo las tratamos si usted decide proporcionarlas, únicamente para cuidar la integridad del menor durante su estancia, y con su consentimiento expreso y por escrito.
+
+Datos de niñas, niños y adolescentes. Tratamos los datos de los menores únicamente con el consentimiento de quien ejerce la patria potestad o la tutela, conforme a las reglas de representación de la legislación civil aplicable. La persona que registra la entrada declara ser madre, padre o tutor del menor, o contar con su autorización para hacerlo.
+
+Datos de terceros. Si usted nos proporciona datos de otra persona (por ejemplo, la segunda persona autorizada para recoger al menor), declara que le informó de este aviso y que cuenta con su consentimiento.
+
+## 3. Finalidades del tratamiento
+
+Finalidades necesarias. Son indispensables para prestar el servicio que usted solicita:
+
+- Registrar la entrada y la salida de los niños y controlar el acceso a las áreas de juego.
+- Identificar al adulto responsable y entregar a cada niño o niña únicamente a su tutor o a la persona autorizada, comparando sus datos, su identificación y las fotografías de llegada.
+- Cuidar la seguridad e integridad de los niños durante su estancia, atender las indicaciones de salud que usted nos dé y localizar al tutor en caso de emergencia.
+- Calcular y cobrar el tiempo de estancia, los productos y los servicios; emitir comprobantes y atender aclaraciones.
+- Gestionar la reservación, el pago y la realización de eventos.
+- Darle acceso al portal de padres mediante el código QR de su comprobante, para consultar el estado de la visita.
+- Cumplir obligaciones legales y fiscales, y atender requerimientos de autoridades competentes.
+
+Finalidades voluntarias. No son necesarias para el servicio y requieren su consentimiento; puede negarse sin que ello afecte el servicio que contrata:
+
+- Acumular y canjear puntos del programa de lealtad, asociados a su teléfono celular.
+- Enviarle promociones, ofertas e información de eventos de {{nombre_comercial}}.
+- Invitarle a responder encuestas de calidad del servicio.
+
+## 4. Cómo negarse a las finalidades voluntarias y limitar el uso de sus datos
+
+- Al registrar la entrada, indique al personal de recepción que no desea que sus datos se usen para las finalidades voluntarias. Se dejará constancia en el sistema y no se acumularán puntos ni se le enviarán promociones.
+- En cualquier momento, escriba a {{correo_datos_personales}} con el asunto «Negativa de finalidades voluntarias», indicando su nombre y teléfono.
+- Puede inscribir su teléfono en el Registro Público para Evitar Publicidad (REPEP) de la Procuraduría Federal del Consumidor.
+
+## 5. Transferencias y encargados
+
+No transferimos sus datos personales a terceros sin su consentimiento, salvo en los casos que la Ley permite sin él (artículo 36), por ejemplo cuando lo exija una ley o una autoridad competente, cuando sea necesario para la atención médica de un menor en una emergencia, o para el reconocimiento, ejercicio o defensa de un derecho en un proceso judicial.
+
+Algunos proveedores nos prestan servicios que implican el manejo de sus datos (por ejemplo, alojamiento y respaldo de la información, soporte técnico del sistema o procesamiento de pagos con tarjeta). Actúan como encargados: tratan los datos solo por cuenta del Responsable, según sus instrucciones y con obligación de confidencialidad. Esto no es una transferencia.
+
+## 6. Derechos ARCO
+
+Usted, o su representante legal, tiene derecho a conocer qué datos personales tenemos de usted y cómo los usamos (Acceso); a pedir que los corrijamos si están desactualizados, son inexactos o incompletos (Rectificación); a que los eliminemos de nuestros registros (Cancelación), y a oponerse a su uso para fines específicos (Oposición). Los derechos sobre los datos de un menor los ejerce quien ejerza su patria potestad o tutela.
+
+Para ejercerlos, envíe su solicitud al correo {{correo_datos_personales}} o entréguela por escrito en {{domicilio}}. La solicitud debe contener:
+
+- Su nombre y domicilio, o cualquier otro medio para recibir notificaciones.
+- Los documentos que acrediten su identidad o, en su caso, la personalidad e identidad de su representante. Si la solicitud es sobre los datos de un menor, también el documento que acredite la patria potestad o la tutela.
+- La descripción clara y precisa de los datos sobre los que ejerce el derecho, salvo que se trate del derecho de acceso.
+- El derecho que desea ejercer o lo que solicita. Si pide una rectificación, indique la corrección y acompañe la documentación que la sustente.
+- Cualquier otro dato que facilite localizar su información (por ejemplo, la fecha y la sucursal de la visita).
+
+Le comunicaremos nuestra respuesta en un plazo máximo de veinte días hábiles contados desde que recibamos su solicitud y, si resulta procedente, la haremos efectiva dentro de los quince días hábiles siguientes. Estos plazos podrán ampliarse una sola vez por un periodo igual cuando las circunstancias del caso lo justifiquen. El acceso se dará mediante copias simples o documentos electrónicos.
+
+El ejercicio de los derechos ARCO es gratuito; solo podrán cobrarse los costos de reproducción, copias o envío. Si no está conforme con nuestra respuesta, o no la recibe, puede acudir ante la Secretaría Anticorrupción y Buen Gobierno, autoridad en materia de protección de datos personales.
+
+## 7. Revocación del consentimiento
+
+Puede revocar en cualquier momento el consentimiento que nos haya otorgado, sin efectos retroactivos, con el mismo procedimiento y medios de la sección 6. En algunos casos no podremos atender su solicitud o concluir el tratamiento de inmediato, porque una obligación legal nos exija conservar ciertos datos. Si revoca el consentimiento para una finalidad necesaria, no podremos seguir prestándole el servicio relacionado con ella.
+
+## 8. Plazo de conservación
+
+- La imagen de la identificación del tutor, las fotografías de llegada y las observaciones de salud de los niños se conservan {{dias_conservacion_imagenes}} días naturales después de la visita, para aclarar cualquier incidente relacionado con la entrega de los menores. Después se eliminan de forma segura.
+- Los datos de registro de visitas, cobros y eventos se conservan {{anios_conservacion_registros}} años, por obligaciones fiscales y mercantiles y para atender aclaraciones.
+- Los datos del programa de lealtad se conservan mientras usted participe en él.
+
+Cumplidos estos plazos, los datos se bloquean y se suprimen conforme a la Ley.
+
+## 9. Medidas de seguridad
+
+Mantenemos medidas de seguridad administrativas, técnicas y físicas para proteger sus datos contra daño, pérdida, alteración, destrucción o uso, acceso o tratamiento no autorizado. Entre ellas: acceso al sistema solo con usuario y contraseña y según el puesto de cada persona, imágenes guardadas en un almacenamiento que no es público, y respaldos periódicos. Si ocurre una vulneración de seguridad que afecte de forma significativa sus derechos, se lo informaremos de inmediato.
+
+## 10. Uso de tecnologías
+
+Nuestro sistema y el portal de padres no usan cookies publicitarias ni herramientas de rastreo de terceros. Solo usan el almacenamiento del navegador estrictamente necesario para funcionar (por ejemplo, para mantener la sesión del portal de padres). El código QR de su comprobante da acceso al estado de la visita y deja de funcionar a las 24 horas o cuando sale el último niño del registro.
+
+## 11. Cambios a este aviso de privacidad
+
+Este aviso puede modificarse por cambios en la ley, en nuestros servicios o en nuestras prácticas de privacidad. Las versiones nuevas se publicarán en {{url_aviso}} y estarán disponibles en la recepción de nuestras sucursales; el número de versión y la fecha de vigencia aparecen al inicio de este documento. Si un cambio implica nuevas finalidades que requieran su consentimiento, se lo pediremos de nuevo antes de usar sus datos para ellas.
+
+## 12. Consentimiento
+
+Al registrar la entrada de un menor, el tutor manifiesta que se le puso a disposición este aviso de privacidad y otorga su consentimiento para el tratamiento de sus datos y los del menor en los términos aquí descritos. Para las observaciones de salud del menor, que son datos sensibles, el consentimiento expreso y por escrito se recaba mediante su firma o el mecanismo de autenticación que le indique el personal de recepción.', '# AVISO DE PRIVACIDAD SIMPLIFICADO
+
+{{razon_social}} («{{nombre_comercial}}»), con domicilio en {{domicilio}}, es responsable del tratamiento de sus datos personales.
+
+¿Qué datos usamos? Del tutor: nombre, teléfono, parentesco, la persona autorizada para recoger al menor, la imagen de su identificación oficial y fotografías de llegada. De los niños y niñas: nombre, edad, fotografías de llegada y, si usted las indica, observaciones de salud como alergias, que son datos sensibles. De quien reserva un evento: nombre y teléfono. Para el programa de lealtad: su celular. Los datos de los menores se tratan con el consentimiento de quien ejerce la patria potestad o la tutela.
+
+¿Para qué los usamos? Finalidades necesarias: controlar el acceso y la seguridad de los niños, entregarlos solo a su tutor o a la persona autorizada, cobrar los servicios, gestionar reservaciones y eventos, y cumplir obligaciones legales. Finalidades voluntarias: el programa de lealtad y el envío de promociones.
+
+¿Cómo negarse a las finalidades voluntarias? Avise al personal de recepción al registrarse o escriba a {{correo_datos_personales}}. Negarse no afecta el servicio que contrata.
+
+Para limitar el uso de sus datos, ejercer sus derechos de acceso, rectificación, cancelación u oposición (ARCO) o revocar su consentimiento, escriba a {{correo_datos_personales}} o llame al {{telefono_datos_personales}}.
+
+Consulte el aviso de privacidad integral en {{url_aviso}} o pídalo en recepción.
+
+Versión {{version}}, vigente desde el {{fecha_vigencia}}.', '', 'Woow Kids', '', 'Departamento de Datos Personales', '', '', '', 90, 5, 'Plantilla inicial (pendiente de revisión legal).', '2026-10-04 03:28:02.055873+00', NULL);
+
+
+--
 -- Data for Name: metodos_pago; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('061cb106-a721-4833-8927-f1ae74d28fb8', 'Efectivo', NULL, '2026-10-04 02:02:11.043504+00', NULL, '2026-10-04 02:02:11.043504+00', NULL, 'E', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('4a53e915-d518-4030-b7e3-b6f369ad8de6', 'Otro', NULL, '2026-10-04 02:02:11.043504+00', NULL, '2026-10-04 02:02:11.043504+00', NULL, 'O', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('8a3acb0a-d7c6-4a6e-833c-54b61889a1d3', 'Cupones', NULL, '2026-10-04 02:02:11.043504+00', NULL, '2026-10-04 02:02:11.043504+00', NULL, 'C', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('02a51036-b2de-4ef9-8c8b-654f22f70e4a', 'Lealtad', NULL, '2026-10-04 02:02:11.043504+00', NULL, '2026-10-04 02:02:11.043504+00', NULL, 'L', NULL, false);
-INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('5c2f287d-cafb-4c40-83c0-cf1d9f93cfa5', 'Tarjeta', NULL, '2026-10-04 02:02:11.043504+00', NULL, '2026-10-04 02:02:11.043504+00', NULL, 'T', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('9eec4de3-466c-40ae-a44d-616d260d0314', 'Efectivo', NULL, '2026-10-04 03:27:56.428462+00', NULL, '2026-10-04 03:27:56.428462+00', NULL, 'E', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('e91397bd-9196-426f-9111-38930522bb88', 'Otro', NULL, '2026-10-04 03:27:56.428462+00', NULL, '2026-10-04 03:27:56.428462+00', NULL, 'O', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('226d2025-ccdf-46a9-8c3c-d85811752739', 'Cupones', NULL, '2026-10-04 03:27:56.428462+00', NULL, '2026-10-04 03:27:56.428462+00', NULL, 'C', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('f923bfc0-42e1-4213-82be-9df1104da191', 'Lealtad', NULL, '2026-10-04 03:27:56.428462+00', NULL, '2026-10-04 03:27:56.428462+00', NULL, 'L', NULL, false);
+INSERT INTO public.metodos_pago (id, nombre, descripcion, creado, creado_por, modificado, modificado_por, tipo, comision_porcentaje, requiere_referencia) VALUES ('d53e6aaf-3012-4eeb-bda0-d1cd40802d04', 'Tarjeta', NULL, '2026-10-04 03:27:56.428462+00', NULL, '2026-10-04 03:27:56.428462+00', NULL, 'T', NULL, false);
 
 
 --
@@ -4009,17 +4199,6 @@ INSERT INTO public.permisos (id, codigo, nombre, modulo, descripcion) VALUES (12
 INSERT INTO public.permisos (id, codigo, nombre, modulo, descripcion) VALUES (121, 'turnos_caja:ingreso_efectivo', 'Registrar ingreso de efectivo en el turno', 'turnos_caja', NULL);
 INSERT INTO public.permisos (id, codigo, nombre, modulo, descripcion) VALUES (122, 'lealtad:ajustar', 'Ajustar manualmente el saldo de puntos de un cliente', 'lealtad', NULL);
 INSERT INTO public.permisos (id, codigo, nombre, modulo, descripcion) VALUES (123, 'restaurante:registrar_pago', 'Registrar pagos de comandas y ver historial de ventas', 'restaurante', NULL);
-
-
---
--- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: -
---
-
-INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (1, 'AdministradorSistema', 'Acceso total al sistema sin restricción de sucursal.', true);
-INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (2, 'Administrador', 'Gestión completa de su sucursal asignada.', true);
-INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (3, 'Cajero', 'Operaciones de caja y punto de venta.', true);
-INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (4, 'Cocina', 'Gestión de órdenes y comandas de cocina.', true);
-INSERT INTO public.roles (id, nombre, descripcion, activo) VALUES (5, 'Personal de atención de niños', 'Registra entradas/salidas de niños y cobra estancias en el módulo de Estancias.', true);
 
 
 --
@@ -4264,30 +4443,23 @@ INSERT INTO public.rol_permisos (rol_id, permiso_id) VALUES (2, 121);
 
 
 --
--- Data for Name: usuarios; Type: TABLE DATA; Schema: public; Owner: -
---
-
-INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, activo, creado, creado_por, modificado, modificado_por, rol, pin_hash, apellidos, telefono, ultimo_acceso, debe_cambiar_password) VALUES ('00000000-0000-0000-0000-000000000001', 'sistema@mercury.internal', '$2b$12$1.UyHXPmALkBSPqgtfWzcunfWNDSfZpaRQiNC8fiCPy2VyNiEu6w6', 'Sistema (comandas automáticas)', true, '2026-10-04 02:02:10.056053+00', NULL, '2026-10-04 02:02:10.056053+00', NULL, 1, NULL, NULL, NULL, NULL, false);
-
-
---
 -- Data for Name: turnos; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('5be58556-d65d-425b-a3d1-7b61045b36b6', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-04 02:02:06.500306+00', NULL, NULL, NULL, true, NULL, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('3bf6953f-a79a-4e52-8a8a-1533c580f88c', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-04 02:02:06.500306+00', NULL, NULL, NULL, true, NULL, NULL);
-INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('729cdd20-b347-4eee-a6de-58b1eec5b87c', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-04 02:02:06.500306+00', NULL, NULL, NULL, true, NULL, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('f940b221-08e7-4c54-9a99-9ffb1f0a07ff', 'Turno Matutino', '08:00:00', '16:00:00', '2026-10-04 03:27:54.523615+00', NULL, NULL, NULL, true, NULL, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('23451e0d-034b-4799-83fc-9a3d6113f3b9', 'Turno Vespertino', '16:00:00', '00:00:00', '2026-10-04 03:27:54.523615+00', NULL, NULL, NULL, true, NULL, NULL);
+INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, creado, creado_por, modificado, modificado_por, activo, dias, sucursal_id) VALUES ('34adeb39-e1f7-4d2c-8432-83cb3f376b5b', 'Turno Nocturno', '00:00:00', '08:00:00', '2026-10-04 03:27:54.523615+00', NULL, NULL, NULL, true, NULL, NULL);
 
 
 --
 -- Data for Name: unidades_medida; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('ded4bcc3-520b-47cb-9475-b989a0b95ccc', 'g', 'Gramo', 'masa', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('b9ecd783-1171-4198-b479-254b605a8193', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('688bfbdd-6cf7-488b-9c90-81831c93e7bc', 'ml', 'Mililitro', 'volumen', 1.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('c2519cca-5ead-4fc3-a3c6-547c41821fe3', 'l', 'Litro', 'volumen', 1000.000000, true);
-INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('44ccf8c2-59f0-4eaa-b211-bd620785b106', 'pza', 'Pieza', 'pieza', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('e869535c-96dd-46e8-a68c-7b640e525157', 'g', 'Gramo', 'masa', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('6dfa6297-580d-4882-a13d-568492c0d5e7', 'kg', 'Kilogramo', 'masa', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('e818f3d5-634b-4877-b114-51dfa0f71c0d', 'ml', 'Mililitro', 'volumen', 1.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('7a385782-2c82-445a-930c-a2978f4db09c', 'l', 'Litro', 'volumen', 1000.000000, true);
+INSERT INTO public.unidades_medida (id, codigo, nombre, tipo, factor_a_base, activo) VALUES ('2c607030-dc51-458d-8520-72ec24b9a96f', 'pza', 'Pieza', 'pieza', 1.000000, true);
 
 
 --
