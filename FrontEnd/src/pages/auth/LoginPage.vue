@@ -4,6 +4,7 @@ import { Notify } from 'quasar'
 import type { QForm } from 'quasar'
 import { useAuthForm } from '@/composables/useAuthForm'
 import BaseDialog from '@/components/ui/BaseDialog.vue'
+import { RUTA_AVISO_PRIVACIDAD } from '@/utils/avisoPrivacidad'
 
 const formRef = ref<InstanceType<typeof QForm> | null>(null)
 
@@ -166,7 +167,12 @@ function onCancelSucursal(): void {
         </q-form>
       </main>
 
-      <footer class="auth-footer">© 2026 Woow Kids.</footer>
+      <footer class="auth-footer">
+        © 2026 Woow Kids. ·
+        <router-link :to="RUTA_AVISO_PRIVACIDAD" target="_blank" class="auth-footer__link">
+          Aviso de privacidad
+        </router-link>
+      </footer>
     </section>
 
     <BaseDialog
@@ -426,6 +432,15 @@ function onCancelSucursal(): void {
   text-align: center;
   font-size: 12px;
   color: var(--text-muted);
+
+  &__link {
+    color: inherit;
+    font-weight: 700;
+
+    &:hover {
+      color: var(--q-primary);
+    }
+  }
 }
 
 // ── Diálogo de sucursal ─────────────────────────────────────────────────────

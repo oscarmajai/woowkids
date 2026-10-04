@@ -251,6 +251,10 @@ async function handleLogout(): Promise<void> {
                 <q-item-section avatar><q-icon name="password" size="18px" /></q-item-section>
                 <q-item-section>Cambiar mi PIN de caja</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable :to="{ name: 'cambiar-password' }">
+                <q-item-section avatar><q-icon name="lock_reset" size="18px" /></q-item-section>
+                <q-item-section>Cambiar mi contraseña</q-item-section>
+              </q-item>
             </q-list>
           </q-menu>
         </button>

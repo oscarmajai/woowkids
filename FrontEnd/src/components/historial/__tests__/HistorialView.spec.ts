@@ -34,7 +34,7 @@ vi.mock('@/stores/metodos_pago', () => ({
   useMetodosPagoStore: () => ({ metodos: [{ id: 'mp', nombre: 'Efectivo' }], cargar: vi.fn() }),
 }))
 vi.mock('@/composables/useCancelarComanda', () => ({
-  useCancelarComanda: () => ({ cancelarComanda: vi.fn() }),
+  useCancelarComanda: () => ({ cancelarComanda: vi.fn(), devolverComanda: vi.fn() }),
 }))
 
 const montar = () =>

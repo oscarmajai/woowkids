@@ -2,7 +2,7 @@
   <q-dialog ref="dialogRef" @hide="onDialogHide">
     <q-card class="motivo">
       <header class="motivo__head">
-        <span class="motivo__icon"><q-icon name="block" size="22px" /></span>
+        <span class="motivo__icon"><q-icon :name="icono ?? 'block'" size="22px" /></span>
         <div class="motivo__titles">
           <span class="motivo__title">{{ titulo ?? 'Cancelar orden' }}</span>
           <span class="motivo__subtitle">
@@ -24,7 +24,7 @@
         <span class="field-label">Motivo</span>
         <div class="motivo__chips" role="radiogroup">
           <button
-            v-for="m in MOTIVOS_OPTIONS"
+            v-for="m in opciones"
             :key="m"
             type="button"
             role="radio"
@@ -77,11 +77,18 @@ const MOTIVOS_OPTIONS = [
   'Otro',
 ]
 
-defineProps<{
+const props = defineProps<{
   titulo?: string
   subtitulo?: string
   botonLabel?: string
+  icono?: string
+  /** Motivos a elegir; «Otro» (texto libre) se agrega siempre al final. */
+  motivos?: string[]
 }>()
+
+const opciones = computed(() =>
+  props.motivos ? [...props.motivos.filter((m) => m !== 'Otro'), 'Otro'] : MOTIVOS_OPTIONS,
+)
 
 defineEmits([...useDialogPluginComponent.emits])
 

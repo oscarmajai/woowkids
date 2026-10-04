@@ -11,6 +11,7 @@ export interface BackendUser {
   permissions: string[]
   /** C1: solo /auth/me lo trae poblado; login/refresh lo dejan en false. */
   tiene_pin?: boolean
+  debe_cambiar_password?: boolean
 }
 
 export interface BackendLoginResponse {

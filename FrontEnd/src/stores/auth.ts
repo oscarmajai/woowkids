@@ -167,6 +167,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Tras cambiar la contraseña obligatoria, deja pasar al resto de la app. */
+  function marcarPasswordCambiada(): void {
+    if (!user.value) return
+    user.value = { ...user.value, debeCambiarPassword: false }
+    sessionStorage.save(user.value)
+  }
+
   function updateToken(newToken: string): void {
     token.value = newToken
     tokenMemory.set(newToken)
@@ -213,6 +220,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     restoreSession,
     tryRefresh,
+    marcarPasswordCambiada,
     updateToken,
     clearError,
     // Helper DEV: inyecta usuario y token sin pasar por el backend

@@ -5,7 +5,7 @@
 # Valores genéricos por defecto (admin / admin1234): cámbialos antes de producción
 # copiando .env.example a .env.
 # App: http://localhost:8080  ·  API: http://localhost:8000/docs  ·  MinIO: http://localhost:9001
-# Entrar: admin@woowkids.com / admin1234. Empezar de cero: docker compose down -v
+# Entrar: admin@woowkids.com / admin1234 (pide cambiarla al entrar). Empezar de cero: docker compose down -v
 #
 # ¿Un solo contenedor con todo? Ver Dockerfile.allinone (imagen ghcr.io/oscarmajai/woowkids).
 
@@ -57,7 +57,8 @@ services:
     image: woowkids-backend:local
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin1234}@db:5432/${POSTGRES_DB:-woowkids}
-      SECRET_KEY: ${SECRET_KEY:-woowkids-secret-key-cambiar-en-produccion}
+      # Vacía: el arranque genera una propia de la instalación y la guarda en la BD.
+      SECRET_KEY: ${SECRET_KEY:-}
       CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-8080}"]'
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
@@ -70,6 +71,9 @@ services:
       SEED_DEMO: ${SEED_DEMO:-false}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@woowkids.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+    volumes:
+      # Para el respaldo que se hace antes de aplicar migraciones.
+      - ${BACKUP_HOST_DIR:-respaldos}:/respaldos
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -77,6 +81,30 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Respaldos automáticos de la BD y de MinIO cada BACKUP_CADA_HORAS horas
+  # (BackEnd/scripts/respaldos.py). Con BACKUP_HOST_DIR=/ruta/del/equipo quedan
+  # en una carpeta del equipo en vez de un volumen de Docker.
+  respaldos:
+    image: woowkids-backend:local
+    entrypoint: ["/app/docker/respaldos.sh"]
+    command: ["programado"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin1234}@db:5432/${POSTGRES_DB:-woowkids}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-admin1234}
+      MINIO_BUCKET: ${MINIO_BUCKET:-woowkids}
+      BACKUP_CADA_HORAS: ${BACKUP_CADA_HORAS:-6}
+      BACKUP_DIAS_CONSERVAR: ${BACKUP_DIAS_CONSERVAR:-14}
+    volumes:
+      - ${BACKUP_HOST_DIR:-respaldos}:/respaldos
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
   frontend:
@@ -96,3 +124,4 @@ services:
 volumes:
   db_data:
   minio_data:
+  respaldos:

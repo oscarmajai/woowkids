@@ -98,3 +98,10 @@ class CambiarMiPinRequest(BaseModel):
 class CambiarMiPinResponse(BaseModel):
     ok: bool
     tiene_pin: bool = True
+
+
+class CambiarMiPasswordRequest(BaseModel):
+    """PUT /usuarios/me/password — el usuario cambia su propia contraseña."""
+
+    actual: str = Field(..., min_length=1)
+    nueva: PasswordNueva

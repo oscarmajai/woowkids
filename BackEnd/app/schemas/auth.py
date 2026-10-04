@@ -34,6 +34,9 @@ class UserOut(BaseModel):
     # usuarios:ver (que el Cajero no tiene). B3: login, refresh y /auth/me lo
     # calculan a partir de pin_hash.
     tiene_pin: bool = False
+    # El administrador inicial y quien entra con la contraseña de fábrica deben
+    # cambiarla antes de usar el sistema (ver deps.get_current_user).
+    debe_cambiar_password: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -66,6 +69,7 @@ class TokenData(BaseModel):
     permissions: list[str] = []
     jti: str
     exp: datetime
+    debe_cambiar_password: bool = False
 
 
 class WsTicketResponse(BaseModel):

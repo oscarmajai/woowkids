@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useCancelarComanda } from '../useCancelarComanda'
-import { cancelarComanda } from '@/services/comandaService'
+import { cancelarComanda, devolverComanda } from '@/services/comandaService'
 import { turnoParaAutorizacion } from '@/utils/autorizacionAdmin'
 import type { ApiError } from '@/types/auth'
 
-vi.mock('@/services/comandaService', () => ({ cancelarComanda: vi.fn() }))
+vi.mock('@/services/comandaService', () => ({
+  cancelarComanda: vi.fn(),
+  devolverComanda: vi.fn(),
+}))
 vi.mock('@/components/historial/AutorizacionAdminDialog.vue', () => ({ default: {} }))
 
 // Resultado que "elige" el usuario en el diálogo del PIN: un token o desistir.
@@ -26,6 +29,7 @@ const dialog = vi.fn(() => {
 vi.mock('quasar', () => ({ useQuasar: () => ({ dialog }) }))
 
 const mockCancelar = vi.mocked(cancelarComanda)
+const mockDevolver = vi.mocked(devolverComanda)
 
 const requiereAutorizacion: ApiError = {
   statusCode: 403,
@@ -95,6 +99,54 @@ describe('useCancelarComanda', () => {
     const { cancelarComanda: cancelar } = useCancelarComanda()
 
     await expect(cancelar('c1', 'Otro')).rejects.toBe(turnoCerrado)
+    expect(dialog).not.toHaveBeenCalled()
+  })
+})
+
+describe('useCancelarComanda().devolverComanda (A4: orden entregada)', () => {
+  beforeEach(() => {
+    mockDevolver.mockReset()
+    dialog.mockClear()
+    respuestaDialogo = 'cancelar'
+  })
+
+  it('pide el PIN con los textos de la devolución y reintenta con el token', async () => {
+    mockDevolver.mockRejectedValueOnce(requiereAutorizacion).mockResolvedValueOnce()
+    respuestaDialogo = { token: 'tok-9' }
+    const { devolverComanda: devolver } = useCancelarComanda()
+
+    await expect(devolver('c1', 'Pedido equivocado')).resolves.toBe(true)
+    expect(mockDevolver).toHaveBeenNthCalledWith(1, 'c1', 'Pedido equivocado', undefined)
+    expect(mockDevolver).toHaveBeenLastCalledWith('c1', 'Pedido equivocado', 'tok-9')
+    expect(dialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        componentProps: expect.objectContaining({
+          turnoId: 'turno-1',
+          botonLabel: 'Autorizar devolución',
+          aviso: expect.stringContaining('no regresa al inventario'),
+        }),
+      }),
+    )
+  })
+
+  it('no devuelve si el usuario cierra el diálogo del PIN', async () => {
+    mockDevolver.mockRejectedValueOnce(requiereAutorizacion)
+    const { devolverComanda: devolver } = useCancelarComanda()
+
+    await expect(devolver('c1', 'Otro')).resolves.toBe(false)
+    expect(mockDevolver).toHaveBeenCalledTimes(1)
+  })
+
+  it('relanza los demás errores (p. ej. ya devuelta)', async () => {
+    const yaDevuelta: ApiError = {
+      statusCode: 409,
+      code: 'DEVOLUCION_NO_APLICA',
+      message: 'La orden ya está cancelada o devuelta; no se puede devolver otra vez.',
+    }
+    mockDevolver.mockRejectedValueOnce(yaDevuelta)
+    const { devolverComanda: devolver } = useCancelarComanda()
+
+    await expect(devolver('c1', 'Otro')).rejects.toBe(yaDevuelta)
     expect(dialog).not.toHaveBeenCalled()
   })
 })

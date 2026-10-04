@@ -34,7 +34,7 @@ from app.repositories.reservaciones_repository import obtener_evento_mas_cercano
 from app.repositories.tutores import get_tutores_by_phone, tutor_create
 from app.schemas.registros import OnboardingRequest
 from app.schemas.reservaciones import EventoDelDiaOut
-from app.services import lealtad_service, turnos_caja_service
+from app.services import lealtad_service, privacidad_service, turnos_caja_service
 from app.services.padres_service import emitir_codigo_acceso
 from app.services.pagos_estancia import validar_referencias_pago
 from app.services.tramos_estancia import precio_por_hora, tramos_de_producto
@@ -118,6 +118,11 @@ async def create_estancia(
     usuario_id: UUID,
     apertura_caja_id: str,
 ) -> dict[str, Any]:
+    # LFPDPPP: sin el aviso de privacidad vigente aceptado no se guarda ningún
+    # dato del tutor ni de los niños (ni la INE ni las fotos).
+    version_aviso = await privacidad_service.exigir_aceptacion(
+        conn, data.aceptaAvisoPrivacidad, data.versionAvisoPrivacidad
+    )
     ids_efectivo = await metodos_pago_repository.obtener_ids_por_tipo(conn, "E")
     cambio = data.cambio.quantize(Decimal("0.01"))
     validar_cambio(
@@ -138,7 +143,15 @@ async def create_estancia(
     subidos: list[str] = []
     try:
         resultado, registro_id = await _crear_estancia_tx(
-            conn, data, data_ine, data_llegadas, usuario_id, apertura_caja_id, cambio, subidos
+            conn,
+            data,
+            data_ine,
+            data_llegadas,
+            usuario_id,
+            apertura_caja_id,
+            cambio,
+            subidos,
+            version_aviso,
         )
     except BaseException:
         await delete_objects(subidos)
@@ -167,6 +180,7 @@ async def _crear_estancia_tx(
     apertura_caja_id: str,
     cambio: Decimal,
     subidos: list[str],
+    version_aviso: int,
 ) -> tuple[dict[str, Any], UUID]:
     """Toda la escritura del check-in en una transacción. `subidos` se va
     llenando con las llaves que ya se subieron a MinIO, para que el llamador
@@ -177,7 +191,9 @@ async def _crear_estancia_tx(
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
         if data.reservacionId is not None:
-            evento_dict = await obtener_evento_mas_cercano(conn, data.sucursalId)
+            evento_dict = await obtener_evento_mas_cercano(
+                conn, data.sucursalId, data.reservacionId
+            )
             if evento_dict is None:
                 raise HTTPException(404, "Evento no encontrado")
 
@@ -203,6 +219,8 @@ async def _crear_estancia_tx(
                 usuario_id,
                 data.nombreSegundoTutor,
                 evento.id,
+                aviso_privacidad_version=version_aviso,
+                acepta_finalidades_secundarias=data.aceptaFinalidadesSecundarias,
             )
 
             # 3. fotos (solo las filas; los archivos se suben al final)
@@ -285,7 +303,14 @@ async def _crear_estancia_tx(
 
             # 2. registro (Un solo INSERT limpio)
             await registro_create(
-                conn, registro_id, data.sucursalId, tutor_id, usuario_id, data.nombreSegundoTutor
+                conn,
+                registro_id,
+                data.sucursalId,
+                tutor_id,
+                usuario_id,
+                data.nombreSegundoTutor,
+                aviso_privacidad_version=version_aviso,
+                acepta_finalidades_secundarias=data.aceptaFinalidadesSecundarias,
             )
 
             total = Decimal(0)
@@ -351,6 +376,17 @@ async def _crear_estancia_tx(
 
             # 4.5 canje de puntos de lealtad (opcional, sobre el subtotal ya calculado)
             if data.puntosARedimir > 0:
+                if not data.aceptaFinalidadesSecundarias:
+                    raise HTTPException(
+                        422,
+                        detail={
+                            "code": "LEALTAD_RECHAZADA",
+                            "message": (
+                                "El tutor se negó a que sus datos se usen para el programa "
+                                "de lealtad: en este registro no se pueden canjear puntos."
+                            ),
+                        },
+                    )
                 if not celular_lealtad:
                     raise HTTPException(
                         400, "El teléfono del tutor debe tener 10 dígitos para canjear puntos."
@@ -424,7 +460,9 @@ async def _crear_estancia_tx(
             # total_pagado: ese puede incluir el cambio que se le devolvió al
             # cliente. Mismo criterio que pago_service, que otorga sobre
             # body.total_final.
-            if celular_lealtad and total > 0:
+            # Si el tutor se negó a las finalidades voluntarias del aviso de
+            # privacidad, su celular no se usa para el programa de lealtad.
+            if celular_lealtad and total > 0 and data.aceptaFinalidadesSecundarias:
                 await lealtad_service.otorgar_puntos(
                     conn,
                     data.sucursalId,

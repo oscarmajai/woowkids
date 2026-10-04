@@ -28,6 +28,7 @@ from app.api.routers import (
     paquetes,
     permissions,
     presentaciones_insumo,
+    privacidad,
     producto_insumos,
     productos,
     proveedores,
@@ -35,6 +36,7 @@ from app.api.routers import (
     reservacion_extras,
     reservacion_productos,
     reservaciones,
+    sistema,
     tipos_evento,
     turnos_caja,
     unidades_medida,
@@ -121,3 +123,5 @@ app.include_router(movimientos_inventario.router)
 app.include_router(padres.router)
 app.include_router(compras.router)
 app.include_router(lealtad.router)
+app.include_router(sistema.router)
+app.include_router(privacidad.router)

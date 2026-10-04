@@ -25,13 +25,21 @@ _COLUMNAS_NECESARIAS_PARA_ESTANCIA = """
 
 _SELECT = f"SELECT {_COLUMNS} FROM reservaciones"
 
+# Eventos de la sucursal ($1) que están por empezar o en curso, con la fecha y
+# la hora de la sucursal. Antes comparaba con CURRENT_DATE, que la BD calcula en
+# UTC: desde las 18:00 de México ya era "mañana" y el check-in de los eventos de
+# la tarde respondía "Evento no encontrado".
 _SELECT_ESTANCIA = (
+    "WITH ahora AS ("
+    "  SELECT (NOW() AT TIME ZONE zona_horaria) AS momento"
+    "  FROM sucursales WHERE id = $1"
+    ") "
     f"SELECT {_COLUMNAS_NECESARIAS_PARA_ESTANCIA} "
-    "FROM reservaciones "
-    "WHERE fecha_evento = CURRENT_DATE "
-    "AND hora_inicio < ((CURRENT_TIME AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::time "
-    f"+ INTERVAL '{TIME_FOR_CHECK_RESERVATIONS}') "
-    "AND hora_fin > (CURRENT_TIME AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City')::time "
+    "FROM reservaciones, ahora "
+    "WHERE sucursal_id = $1 "
+    "AND fecha_evento = ahora.momento::date "
+    f"AND hora_inicio < (ahora.momento::time + INTERVAL '{TIME_FOR_CHECK_RESERVATIONS}') "
+    "AND hora_fin > ahora.momento::time "
     # saldo_pendiente ya descuenta todos los pagos (migración 075); <= 0 cubre
     # un sobrepago, que también es un evento liquidado.
     "AND saldo_pendiente <= 0 "
@@ -100,9 +108,19 @@ async def obtener(conn: asyncpg.Connection, reservacion_id: UUID) -> dict[str, A
 
 
 async def obtener_evento_mas_cercano(
-    conn: asyncpg.Connection, sucursal_id: UUID
+    conn: asyncpg.Connection, sucursal_id: UUID, reservacion_id: UUID | None = None
 ) -> dict[str, Any] | None:
-    row = await conn.fetchrow(_SELECT_ESTANCIA + " AND sucursal_id = $1", sucursal_id)
+    """El evento de hoy en la sucursal que está por empezar o en curso. Si hay
+    dos a la vez, el que empieza antes; con ``reservacion_id``, solo ese (el
+    check-in liga los niños al evento que eligió la recepción, no a otro)."""
+    if reservacion_id is None:
+        row = await conn.fetchrow(
+            _SELECT_ESTANCIA + " ORDER BY hora_inicio, folio LIMIT 1", sucursal_id
+        )
+    else:
+        row = await conn.fetchrow(
+            _SELECT_ESTANCIA + " AND id = $2 LIMIT 1", sucursal_id, reservacion_id
+        )
     return dict(row) if row else None
 
 

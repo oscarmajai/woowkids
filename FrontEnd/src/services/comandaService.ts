@@ -25,6 +25,18 @@ export async function cancelarComanda(
   return comandasApi.cambiarEstado(comandaId, 'C', { motivoCancelacion, tokenPinAdmin })
 }
 
+/**
+ * A4: devuelve el dinero de una comanda ya entregada, sin regresar su stock.
+ * Exige el token de PIN de un administrador (ver useCancelarComanda).
+ */
+export async function devolverComanda(
+  comandaId: string,
+  motivo: string,
+  tokenPinAdmin?: string,
+): Promise<void> {
+  return comandasApi.devolver(comandaId, motivo, tokenPinAdmin)
+}
+
 export async function crearComanda(
   payload: CrearComandaRequest,
   signal?: AbortSignal,

@@ -30,6 +30,13 @@
                 <span class="arqueo-table__meta">
                   Esperado {{ fmt(fila.esperado) }} · Declarado {{ fmt(fila.declarado) }}
                 </span>
+                <span
+                  v-if="fila.devoluciones > 0"
+                  class="arqueo-table__meta arqueo-table__meta--dev"
+                  data-test="arqueo-devoluciones-metodo"
+                >
+                  {{ textoDevolucionesMetodo(fila) }} (ya restadas del esperado)
+                </span>
               </div>
               <span class="arqueo-table__diff" :class="claseDiferencia(fila.diferencia)">
                 {{ signo(fila.diferencia) }}{{ fmt(fila.diferencia) }}
@@ -46,14 +53,17 @@
                   {{ fmt(totalesPorMetodo.declarado) }}
                 </span>
               </div>
-              <span class="arqueo-table__diff" :class="claseDiferencia(totalesPorMetodo.diferencia)">
+              <span
+                class="arqueo-table__diff"
+                :class="claseDiferencia(totalesPorMetodo.diferencia)"
+              >
                 {{ signo(totalesPorMetodo.diferencia) }}{{ fmt(totalesPorMetodo.diferencia) }}
               </span>
             </div>
           </div>
           <p v-if="turno.balancePorMetodo.length" class="arqueo-table__hint">
-            Comparativo informativo por método de pago — el resumen general de abajo suma todos
-            los métodos, ya que cada uno representa dinero real del sistema.
+            Comparativo informativo por método de pago — el resumen general de abajo suma todos los
+            métodos, ya que cada uno representa dinero real del sistema.
           </p>
 
           <dl class="arqueo-totals">
@@ -68,6 +78,10 @@
             <div v-if="(turno.totalIngresos || 0) > 0">
               <dt>Ingresos de efectivo</dt>
               <dd>+{{ fmt(turno.totalIngresos) }}</dd>
+            </div>
+            <div v-if="devolucionesTotales > 0" data-test="arqueo-devoluciones-total">
+              <dt>Devoluciones a clientes</dt>
+              <dd>−{{ fmt(devolucionesTotales) }}</dd>
             </div>
             <div>
               <dt>Total esperado</dt>
@@ -244,6 +258,7 @@ import BaseDialog from '@/components/ui/BaseDialog.vue'
 import { turnoCajaService } from '@/services/turnoCajaService'
 import { mensajeDeError } from '@/utils/errorHandler'
 import { filtrarTeclaEntero } from '@/utils/validacionNumerica'
+import { textoDevolucionesMetodo, totalDevoluciones } from '@/utils/devoluciones'
 
 const $q = useQuasar()
 const router = useRouter()
@@ -298,6 +313,10 @@ function claseDiferencia(diferencia: number): string {
 // sobre efectivo (ver comentario arriba). Este total es el que pidió el negocio
 // para ver de un vistazo si el cajero tiene una diferencia grande en algún
 // método que no sea efectivo (ej. tarjeta).
+// A4: lo devuelto a clientes en el turno (cancelaciones y órdenes entregadas
+// devueltas), ya restado del esperado de cada método.
+const devolucionesTotales = computed(() => totalDevoluciones(turno.balancePorMetodo))
+
 const totalesPorMetodo = computed(() => {
   const esperado = turno.balancePorMetodo.reduce((suma, fila) => suma + fila.esperado, 0)
   const declarado = turno.balancePorMetodo.reduce((suma, fila) => suma + fila.declarado, 0)
@@ -308,10 +327,7 @@ async function confirmarPinCajero() {
   if (pinCajero.value.length !== 4 || !turno.turnoId) return
   cargandoPinCajero.value = true
   try {
-    const { ok, tokenPin } = await turnoCajaService.validarPinCajero(
-      turno.turnoId,
-      pinCajero.value,
-    )
+    const { ok, tokenPin } = await turnoCajaService.validarPinCajero(turno.turnoId, pinCajero.value)
     if (ok) {
       pinCajeroConfirmado.value = true
       tokenPinCajero.value = tokenPin
@@ -347,6 +363,7 @@ async function confirmarPinAdmin() {
       turno.turnoId,
       adminEmail,
       pinAdmin.value,
+      'cerrar',
     )
     if (ok) {
       pinAdminConfirmado.value = true
@@ -654,6 +671,10 @@ async function ejecutarCierreExtraordinario() {
   &__meta {
     font-size: 12px;
     color: var(--text-secondary);
+
+    &--dev {
+      color: var(--tone-bad-fg);
+    }
   }
 
   &__diff {

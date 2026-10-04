@@ -41,6 +41,7 @@ from app.schemas.caja import (
 from app.services import alcance_service, turnos_caja_service
 from app.services.pdf_service import generar_pdf_arqueo
 from app.services.permission_service import has_permission
+from app.services.pin_caja_service import PROPOSITO_CANCELAR
 from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
@@ -282,9 +283,13 @@ async def validar_pin_admin(
     current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
+    """Devuelve un `token_pin` de un solo uso que solo sirve para `proposito`
+    (A16): `"cerrar"` (POST /confirmar) o `"cancelar"` (cancelar o devolver
+    una orden cobrada). Sin `proposito` se emite para `"cancelar"`."""
     turno_id = body.get("turno_id", "")
     admin_email = str(body.get("admin_email", "") or "")
     pin = str(body.get("pin", "") or "")
+    proposito = str(body.get("proposito") or PROPOSITO_CANCELAR)
     return await turnos_caja_service.validar_pin_admin(
         conn,
         turno_id,
@@ -292,6 +297,7 @@ async def validar_pin_admin(
         pin,
         user_id=current_user.sub,
         solicitante=current_user,
+        proposito=proposito,
     )
 
 

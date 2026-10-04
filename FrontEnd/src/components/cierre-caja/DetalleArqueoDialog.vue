@@ -32,6 +32,13 @@
             <span class="arq-list__meta">
               Declarado {{ formatMXN(fila.declarado) }} · esperado {{ formatMXN(fila.esperado) }}
             </span>
+            <span
+              v-if="fila.devoluciones > 0"
+              class="arq-list__meta arq-list__meta--dev"
+              data-test="arqueo-devoluciones-metodo"
+            >
+              {{ textoDevolucionesMetodo(fila) }} (ya restadas del esperado)
+            </span>
           </div>
           <span class="arq-list__diff" :class="claseDiferencia(fila.diferencia)">
             {{ formatDiferencia(fila.diferencia) }}
@@ -99,6 +106,13 @@
         <p v-for="ingreso in detalle.ingresos" :key="ingreso.id">{{ textoIngreso(ingreso) }}</p>
       </div>
 
+      <div v-if="detalle.devoluciones?.length" class="arq-notes" data-test="arqueo-devoluciones">
+        <span class="field-label">Devoluciones a clientes</span>
+        <p v-for="devolucion in detalle.devoluciones" :key="devolucion.id">
+          {{ textoDevolucion(devolucion) }}
+        </p>
+      </div>
+
       <div v-if="detalle.observacionesApertura" class="arq-notes" data-test="arqueo-notas-apertura">
         <span class="field-label">Notas de apertura</span>
         <p>{{ detalle.observacionesApertura }}</p>
@@ -118,6 +132,7 @@ import { computed, ref, watch } from 'vue'
 import { formatMXN, formatEntero, formatDiferencia, claseDiferencia } from '@/utils/formatoMoneda'
 import { turnoCajaService } from '@/services/turnoCajaService'
 import { mensajeDeError } from '@/utils/errorHandler'
+import { textoDevolucion, textoDevolucionesMetodo } from '@/utils/devoluciones'
 import type { DetalleArqueo } from '@/types/turnoCaja'
 
 /**
@@ -254,6 +269,10 @@ function formatFecha(iso: string): string {
   &__meta {
     font-size: 12px;
     color: var(--text-secondary);
+
+    &--dev {
+      color: var(--tone-bad-fg);
+    }
   }
 
   &__diff {

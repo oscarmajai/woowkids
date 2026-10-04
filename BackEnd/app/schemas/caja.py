@@ -72,6 +72,9 @@ class FilaBalance(BaseModel):
     declarado: Decimal
     esperado: Decimal
     diferencia: Decimal
+    # A4: lo devuelto a clientes con este método en el turno. Ya va restado
+    # de `esperado`; viene aparte para que el arqueo lo muestre.
+    devoluciones: Decimal = Decimal("0")
 
 
 class AbrirTurnoPayload(BaseModel):
@@ -195,8 +198,9 @@ class IngresoDetalle(BaseModel):
 
 
 class DevolucionDetalle(BaseModel):
-    """A4: devolución al cliente por cancelar una comanda cobrada. Las de
-    efectivo (es_efectivo) restan del efectivo esperado del turno."""
+    """A4: devolución al cliente de una comanda cobrada, al cancelarla
+    (origen 'cancelacion') o al devolver una ya entregada ('entregada', sin
+    regresar stock). Cada una resta del esperado de su método en el turno."""
 
     id: str
     comanda_id: str
@@ -206,6 +210,9 @@ class DevolucionDetalle(BaseModel):
     monto: Decimal
     autorizado_por_nombre: str | None = None
     creado: datetime
+    origen: str = "cancelacion"
+    motivo: str | None = None
+    creado_por_nombre: str | None = None
 
 
 class IngresoEfectivoCreate(BaseModel):

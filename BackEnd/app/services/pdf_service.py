@@ -212,6 +212,84 @@ def _bloque_firmas(tipo_cierre: str) -> KeepTogether:
     )
 
 
+# A4: de dónde salió cada devolución a un cliente.
+_ORIGEN_DEVOLUCION = {
+    "cancelacion": "Cancelación",
+    "entregada": "Devolución de orden entregada",
+}
+
+
+def _fmt_devolucion(valor: Any) -> str:
+    """Lo devuelto con un método (resta del esperado); "—" si no hubo."""
+    return f"-{_fmt_moneda(valor)}" if float(valor) > 0 else "—"
+
+
+def _tabla_devoluciones(detalle: DetalleArqueoResponse) -> Table:
+    """A4: cada devolución del turno con su orden, tipo y motivo, método,
+    monto, quién la autorizó y la hora."""
+    data: list[list[Any]] = [
+        [
+            Paragraph("Orden", _ESTILO_TABLA_HEADER),
+            Paragraph("Tipo / motivo", _ESTILO_TABLA_HEADER),
+            Paragraph("Método", _ESTILO_TABLA_HEADER),
+            Paragraph("Monto", _ESTILO_TABLA_HEADER),
+            Paragraph("Autorizó", _ESTILO_TABLA_HEADER),
+            Paragraph("Hora", _ESTILO_TABLA_HEADER),
+        ]
+    ]
+    total = 0.0
+    for devolucion in detalle.devoluciones:
+        tipo = _ORIGEN_DEVOLUCION.get(devolucion.origen, devolucion.origen)
+        if devolucion.motivo:
+            tipo = f"{tipo}: {devolucion.motivo}"
+        metodo = devolucion.metodo_pago_nombre or ("Efectivo" if devolucion.es_efectivo else "—")
+        data.append(
+            [
+                Paragraph(escape(devolucion.ticket_numero or "—"), _ESTILO_TABLA_CELDA),
+                Paragraph(escape(tipo), _ESTILO_TABLA_CELDA),
+                Paragraph(escape(metodo), _ESTILO_TABLA_CELDA),
+                Paragraph(_fmt_moneda(devolucion.monto), _ESTILO_TABLA_CELDA),
+                Paragraph(escape(devolucion.autorizado_por_nombre or "—"), _ESTILO_TABLA_CELDA),
+                Paragraph(_fmt_fecha(str(devolucion.creado)), _ESTILO_TABLA_CELDA),
+            ]
+        )
+        total += float(devolucion.monto)
+    data.append(
+        [
+            "",
+            "",
+            Paragraph("Total", _ESTILO_TABLA_CELDA_BOLD),
+            Paragraph(_fmt_moneda(total), _ESTILO_TABLA_CELDA_BOLD),
+            "",
+            "",
+        ]
+    )
+    tabla = Table(
+        data,
+        colWidths=[
+            _CONTENT_WIDTH * 0.12,
+            _CONTENT_WIDTH * 0.3,
+            _CONTENT_WIDTH * 0.13,
+            _CONTENT_WIDTH * 0.13,
+            _CONTENT_WIDTH * 0.16,
+            _CONTENT_WIDTH * 0.16,
+        ],
+        repeatRows=1,
+    )
+    tabla.setStyle(
+        TableStyle(
+            [
+                ("LINEBELOW", (0, 0), (-1, 0), 0.75, colors.black),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    return tabla
+
+
 def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -309,11 +387,14 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
     story.append(_separador())
 
     # ── Desglose por método de pago ─────────────────────────────────────
+    # A4: la columna "Devoluciones" es lo devuelto a clientes con cada método;
+    # ya va restado del esperado de ese método.
     story.append(Paragraph("Desglose por Método de Pago", _ESTILO_SECCION))
     if detalle.balance_por_metodo:
         data = [
             [
                 Paragraph("Método", _ESTILO_TABLA_HEADER),
+                Paragraph("Devoluciones", _ESTILO_TABLA_HEADER),
                 Paragraph("Esperado (sistema)", _ESTILO_TABLA_HEADER),
                 Paragraph("Declarado (cajero)", _ESTILO_TABLA_HEADER),
                 Paragraph("Diferencia", _ESTILO_TABLA_HEADER),
@@ -321,10 +402,12 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
         ]
         total_esperado_metodos = 0.0
         total_declarado_metodos = 0.0
+        total_devoluciones_metodos = 0.0
         for fila_balance in detalle.balance_por_metodo:
             data.append(
                 [
                     Paragraph(escape(fila_balance.label), _ESTILO_TABLA_CELDA),
+                    Paragraph(_fmt_devolucion(fila_balance.devoluciones), _ESTILO_TABLA_CELDA),
                     Paragraph(_fmt_moneda(fila_balance.esperado), _ESTILO_TABLA_CELDA),
                     Paragraph(_fmt_moneda(fila_balance.declarado), _ESTILO_TABLA_CELDA),
                     _celda_diferencia(float(fila_balance.diferencia)),
@@ -332,9 +415,11 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
             )
             total_esperado_metodos += float(fila_balance.esperado)
             total_declarado_metodos += float(fila_balance.declarado)
+            total_devoluciones_metodos += float(fila_balance.devoluciones)
         data.append(
             [
                 Paragraph("Total", _ESTILO_TABLA_CELDA_BOLD),
+                Paragraph(_fmt_devolucion(total_devoluciones_metodos), _ESTILO_TABLA_CELDA_BOLD),
                 Paragraph(_fmt_moneda(total_esperado_metodos), _ESTILO_TABLA_CELDA_BOLD),
                 Paragraph(_fmt_moneda(total_declarado_metodos), _ESTILO_TABLA_CELDA_BOLD),
                 _celda_diferencia(total_declarado_metodos - total_esperado_metodos, negrita=True),
@@ -343,10 +428,11 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
         tabla_metodos = Table(
             data,
             colWidths=[
-                _CONTENT_WIDTH * 0.3,
-                _CONTENT_WIDTH * 0.23,
-                _CONTENT_WIDTH * 0.23,
                 _CONTENT_WIDTH * 0.24,
+                _CONTENT_WIDTH * 0.18,
+                _CONTENT_WIDTH * 0.2,
+                _CONTENT_WIDTH * 0.2,
+                _CONTENT_WIDTH * 0.18,
             ],
             repeatRows=1,
         )
@@ -466,6 +552,16 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
     else:
         story.append(
             Paragraph("No se registraron ingresos de efectivo en este turno.", _ESTILO_VACIO)
+        )
+    story.append(_separador())
+
+    # ── Devoluciones a clientes (A4) ─────────────────────────────────────
+    story.append(Paragraph("Devoluciones a Clientes", _ESTILO_SECCION))
+    if detalle.devoluciones:
+        story.append(_tabla_devoluciones(detalle))
+    else:
+        story.append(
+            Paragraph("No se registraron devoluciones a clientes en este turno.", _ESTILO_VACIO)
         )
     story.append(_separador())
 
