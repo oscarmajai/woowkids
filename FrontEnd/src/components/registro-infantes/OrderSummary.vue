@@ -65,6 +65,7 @@
           :subtitulo="store.tutor.fullName"
           :total-to-pay="store.total"
           :celular-prellenado="store.tutor.phone"
+          :permitir-lealtad="!store.rechazaFinalidadesSecundarias"
           :metodos-pago="metodosPagoDisponibles"
           @pago-exitoso="onPagoExitoso"
         />
@@ -77,11 +78,14 @@
           label="Finalizar registro"
           icon-right="arrow_forward"
           :loading="store.isSubmitting"
-          :disable="!store.allChildrenHaveBracelet"
+          :disable="!store.allChildrenHaveBracelet || !store.avisoAceptado"
           @click="store.completeRegistration()"
         />
         <span v-if="!store.allChildrenHaveBracelet" class="summary__hint">
           Asigna una pulsera a cada niño registrado
+        </span>
+        <span v-else-if="!store.avisoAceptado" class="summary__hint">
+          El tutor debe aceptar el aviso de privacidad
         </span>
       </template>
     </footer>
