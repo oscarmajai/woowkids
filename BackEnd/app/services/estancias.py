@@ -177,7 +177,9 @@ async def _crear_estancia_tx(
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
         if data.reservacionId is not None:
-            evento_dict = await obtener_evento_mas_cercano(conn, data.sucursalId)
+            evento_dict = await obtener_evento_mas_cercano(
+                conn, data.sucursalId, data.reservacionId
+            )
             if evento_dict is None:
                 raise HTTPException(404, "Evento no encontrado")
 

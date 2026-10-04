@@ -305,6 +305,20 @@ async def buscar_clientes(
     return [dict(r) for r in rows]
 
 
+# Los filtros desde/hasta son días de la sucursal ($1), no de UTC: comparar
+# `creado` con una fecha sola la toma como medianoche UTC (las 18:00 de México)
+# y lo de la tarde-noche caía en el día siguiente.
+_ZONA_SUCURSAL = "(SELECT zona_horaria FROM public.sucursales WHERE id = $1)"
+
+
+def _inicio_del_dia(n: int) -> str:
+    return f"(${n}::date::timestamp AT TIME ZONE {_ZONA_SUCURSAL})"
+
+
+def _fin_del_dia(n: int) -> str:
+    return f"((${n}::date + 1)::timestamp AT TIME ZONE {_ZONA_SUCURSAL})"
+
+
 async def reporte_agregado(
     conn: asyncpg.Connection,
     sucursal_id: UUID,
@@ -322,10 +336,10 @@ async def reporte_agregado(
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
-        condiciones.append(f"creado >= ${len(params)}")
+        condiciones.append(f"creado >= {_inicio_del_dia(len(params))}")
     if hasta is not None:
         params.append(hasta)
-        condiciones.append(f"creado < ${len(params)}::date + interval '1 day'")
+        condiciones.append(f"creado < {_fin_del_dia(len(params))}")
     filtro_fecha = " AND ".join(condiciones)
 
     row = await conn.fetchrow(
@@ -362,10 +376,10 @@ async def top_clientes(
     params: list[Any] = [sucursal_id]
     if desde is not None:
         params.append(desde)
-        condiciones.append(f"mp.creado >= ${len(params)}")
+        condiciones.append(f"mp.creado >= {_inicio_del_dia(len(params))}")
     if hasta is not None:
         params.append(hasta)
-        condiciones.append(f"mp.creado < ${len(params)}::date + interval '1 day'")
+        condiciones.append(f"mp.creado < {_fin_del_dia(len(params))}")
     params.append(limit)
     filtro_fecha = " AND ".join(condiciones)
 
@@ -400,10 +414,10 @@ async def listar_movimientos(
     params: list[Any] = [sucursal_id, celular]
     if desde is not None:
         params.append(desde)
-        conditions.append(f"creado >= ${len(params)}")
+        conditions.append(f"creado >= {_inicio_del_dia(len(params))}")
     if hasta is not None:
         params.append(hasta)
-        conditions.append(f"creado < ${len(params)}::date + interval '1 day'")
+        conditions.append(f"creado < {_fin_del_dia(len(params))}")
 
     where_clause = " AND ".join(conditions)
     rows = await conn.fetch(
