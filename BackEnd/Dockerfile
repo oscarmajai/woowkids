@@ -16,10 +16,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Sin privilegios de root en tiempo de ejecución.
+# Sin privilegios de root en tiempo de ejecución. /respaldos ya existe con su
+# dueño para que un volumen nuevo montado ahí herede los permisos.
 RUN useradd --create-home --uid 10001 woowkids \
-    && chmod +x docker/entrypoint.sh \
-    && chown -R woowkids:woowkids /app
+    && chmod +x docker/entrypoint.sh docker/respaldos.sh \
+    && ln -s /app/docker/respaldos.sh /usr/local/bin/respaldos \
+    && mkdir -p /respaldos \
+    && chown -R woowkids:woowkids /app /respaldos
 USER woowkids
 
 EXPOSE 8000

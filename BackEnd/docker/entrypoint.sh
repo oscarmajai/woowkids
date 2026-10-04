@@ -46,6 +46,22 @@ registrar() {
 # falla, no queda aplicada a medias ni marcada como hecha, y el contenedor no
 # arranca (el error queda en los logs). Las migraciones no deben traer su
 # propio BEGIN/COMMIT.
+# Antes de migrar una BD que ya tenía datos se guarda un respaldo de la base
+# (scripts/respaldos.py): si la versión nueva sale mal, se puede volver atrás.
+respaldar_antes_de_migrar() {
+    pendientes=0
+    for archivo in $(migraciones); do
+        hecha=$(psql "$DATABASE_URL" -tAc \
+            "SELECT 1 FROM public.schema_migraciones WHERE archivo = '$archivo'")
+        [ "$hecha" = "1" ] || pendientes=$((pendientes + 1))
+    done
+    [ "$pendientes" -eq 0 ] && return 0
+    echo "[entrypoint] $pendientes migraciones pendientes: respaldando la BD antes de aplicarlas"
+    if ! python scripts/respaldos.py respaldar --motivo antes-de-migrar --solo-bd; then
+        echo "[entrypoint] AVISO: no se pudo respaldar antes de migrar; se continúa." >&2
+    fi
+}
+
 aplicar_migraciones() {
     aplicadas=0
     for archivo in $(migraciones); do
@@ -92,6 +108,7 @@ elif [ "$con_control" = "f" ]; then
     done
 fi
 
+[ "$existe" = "t" ] && respaldar_antes_de_migrar
 aplicar_migraciones
 
 # Clave con la que se firman los tokens. Con la de fábrica (pública en el repo)

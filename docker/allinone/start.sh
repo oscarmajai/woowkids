@@ -5,9 +5,16 @@ set -eu
 PG_BIN=$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)
 export PG_BIN
 
-mkdir -p /data/postgres /data/minio
+mkdir -p /data/postgres /data/minio /data/respaldos
 chown -R postgres:postgres /data/postgres
 chmod 700 /data/postgres
+# Respaldos automáticos: en /respaldos si se montó una carpeta del equipo ahí
+# (recomendado: así sobreviven a la pérdida del volumen); si no, en /data.
+for dir in /data/respaldos /respaldos; do
+    [ "$dir" = /respaldos ] && ! grep -qs ' /respaldos ' /proc/mounts && continue
+    mkdir -p "$dir/bd" "$dir/archivos"
+    chown woowkids "$dir" "$dir/bd" "$dir/archivos" 2>/dev/null || true
+done
 
 # Primera vez: inicializa el cluster de PostgreSQL con el usuario y la BD de la app.
 if [ ! -s /data/postgres/PG_VERSION ]; then

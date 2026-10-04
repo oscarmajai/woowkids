@@ -34,7 +34,8 @@ COPY --from=minio /usr/bin/minio /usr/local/bin/minio
 COPY docker/allinone/nginx.conf /etc/nginx/conf.d/woowkids.conf
 COPY docker/allinone/supervisord.conf /etc/woowkids/supervisord.conf
 COPY docker/allinone/start.sh /etc/woowkids/start.sh
-RUN chmod +x /etc/woowkids/start.sh
+RUN chmod +x /etc/woowkids/start.sh \
+    && ln -sf /etc/woowkids/supervisord.conf /etc/supervisord.conf
 
 # Valores genéricos por defecto: cámbialos con -e al correr el contenedor.
 # SECRET_KEY no tiene valor por defecto: si no se pasa, el arranque genera una
@@ -52,9 +53,13 @@ ENV POSTGRES_USER=admin \
     SEED_DEMO=false \
     ADMIN_EMAIL=admin@woowkids.com \
     ADMIN_PASSWORD=admin1234 \
-    CORS_ORIGINS='["http://localhost:8080"]'
+    CORS_ORIGINS='["http://localhost:8080"]' \
+    BACKUP_CADA_HORAS=6 \
+    BACKUP_DIAS_CONSERVAR=14
 
 VOLUME ["/data"]
+# Opcional: monta una carpeta del equipo en /respaldos (-v C:\WoowKids\respaldos:/respaldos)
+# para que los respaldos automáticos queden fuera del volumen de datos.
 # 80: app y API (/api). 9001: consola de MinIO (opcional).
 EXPOSE 80 9001
 
