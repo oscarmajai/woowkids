@@ -134,6 +134,15 @@ describe('registro de entrada: validación de pulsera escaneada (B14)', () => {
     expect(fetchEstadoPulsera).not.toHaveBeenCalled()
   })
 
+  it('al terminar el registro se sigue mostrando el código de la pulsera, no su id', async () => {
+    const store = await storeConNinos()
+    await store.asignarPulseraEscaneada(store.children[0].id, 'WK-0000001')
+    // Al completar, la pulsera sale de las disponibles (descartarPulseras).
+    useAccessControlStore().descartarPulseras(['p1'])
+
+    expect(store.etiquetaPulsera('p1')).toBe('WK-0000001')
+  })
+
   it('una pulsera en uso por otro niño se reporta como asignada, no como inexistente', async () => {
     vi.mocked(fetchEstadoPulsera).mockResolvedValue({
       id: 'p9',

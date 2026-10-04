@@ -353,6 +353,11 @@ export const useRegistrationStore = defineStore('registration', () => {
     }
   }
 
+  // Código impreso de cada pulsera asignada (WK-0000001). Al terminar el
+  // registro la pulsera sale de las disponibles y ya no se encontraría ahí:
+  // el resumen mostraba su id interno.
+  const etiquetasPulsera = ref<Record<string, string>>({})
+
   /** Valida y, si procede, asigna la pulsera escaneada al niño. */
   async function asignarPulseraEscaneada(
     childId: string,
@@ -362,8 +367,18 @@ export const useRegistrationStore = defineStore('registration', () => {
     if (resultado.ok) {
       const child = children.value.find((c) => c.id === childId)
       if (child) child.rfidBracelet = resultado.pulseraId
+      etiquetasPulsera.value[resultado.pulseraId] = rfidEscaneado.trim()
     }
     return resultado
+  }
+
+  /** Código de la pulsera para mostrarlo (su id interno solo si no se conoce). */
+  function etiquetaPulsera(pulseraId: string): string {
+    return (
+      etiquetasPulsera.value[pulseraId] ??
+      pulseras.value.find((p) => p.id === pulseraId)?.pulseraRfid ??
+      pulseraId
+    )
   }
 
   const allChildrenHaveBracelet = computed(
@@ -696,6 +711,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     cargarDatosIniciales,
     validarPulseraEscaneada,
     asignarPulseraEscaneada,
+    etiquetaPulsera,
     cargarEventoProximo,
     cambiarModo,
     seleccionarEvento,
