@@ -53,7 +53,7 @@ from app.repositories.caja_repository import (
     resetear_conteo_apertura,
     resumen_historial_cierres,
     sumar_cambio_apertura,
-    sumar_devoluciones_efectivo_apertura,
+    sumar_devoluciones_por_metodo_apertura,
     sumar_ingresos_por_apertura,
     sumar_retiros_por_apertura,
     sumar_total_ventas_apertura,
@@ -649,28 +649,38 @@ async def _calcular_balance(
       sumar_ventas_efectivo_apertura) + ingresos de efectivo - retiros -
       cambio dado - devoluciones en efectivo (A4) — contra lo que el cajero contó físicamente
       (desglose_efectivo.total en conteo_json). Cada otro método compara lo
-      que el sistema registró contra lo que el cajero declaró para ese
-      método específico.
+      que el sistema registró, menos lo devuelto a clientes con ese método
+      (A4), contra lo que el cajero declaró para ese método específico.
+      Cada renglón trae aparte sus devoluciones para mostrarlas.
     - Totales generales (esperado/declarado/diferencia): todos los métodos de
       pago cuentan como dinero real del sistema (cupones, lealtad, vouchers
       incluidos) — es la suma de todos los movimientos del turno + fondo
       inicial + ingresos de efectivo - retiros - cambio dado - devoluciones
-      en efectivo, comparada
+      de todos los métodos, comparada
       contra la suma de todo lo que el cajero declaró, independientemente
       del método."""
     monto_inicial = Decimal(str(apertura["fondo_inicial"]))
     total_retiros = await sumar_retiros_por_apertura(conn, turno_id)
     total_cambio = await sumar_cambio_apertura(conn, turno_id)
     total_ingresos = await sumar_ingresos_por_apertura(conn, turno_id)
-    # A4: efectivo devuelto a clientes por comandas canceladas en este turno.
-    total_devoluciones = await sumar_devoluciones_efectivo_apertura(conn, turno_id)
+    # A4: lo devuelto a clientes desde este turno (comandas canceladas o
+    # devueltas ya entregadas), por método. Antes solo restaba el efectivo y
+    # cada devolución con tarjeta dejaba un sobrante falso en su renglón.
+    devoluciones = await sumar_devoluciones_por_metodo_apertura(conn, turno_id)
+    devoluciones_efectivo = sum(
+        (Decimal(str(d["total"])) for d in devoluciones if d["es_efectivo"]), Decimal("0")
+    )
+    devoluciones_otros: dict[str, dict[str, Any]] = {
+        str(d["metodo_pago_id"]): d for d in devoluciones if not d["es_efectivo"]
+    }
+    total_devoluciones = sum((Decimal(str(d["total"])) for d in devoluciones), Decimal("0"))
     total_esperado_efectivo = (
         monto_inicial
         + await sumar_ventas_efectivo_apertura(conn, turno_id)
         + total_ingresos
         - total_retiros
         - total_cambio
-        - total_devoluciones
+        - devoluciones_efectivo
     )
 
     conteo = json.loads(apertura["conteo_json"]) if apertura["conteo_json"] else {}
@@ -693,27 +703,40 @@ async def _calcular_balance(
             declarado=declarado_efectivo,
             esperado=total_esperado_efectivo,
             diferencia=diferencia_neta_efectivo,
+            devoluciones=devoluciones_efectivo,
         )
     ]
+    vistos: set[str] = set()
+
+    def fila_metodo(nombre: str, total_ventas: Decimal, metodo_pago_id: str) -> FilaBalance:
+        nombre_met = nombre.lower()
+        vistos.add(nombre_met)
+        devuelto = Decimal(str(devoluciones_otros.pop(metodo_pago_id, {}).get("total", 0)))
+        esperado = total_ventas - devuelto
+        declarado = declarados_por_metodo.get(nombre_met, Decimal("0"))
+        return FilaBalance(
+            metodo=nombre_met,
+            label=nombre,
+            declarado=declarado,
+            esperado=esperado,
+            diferencia=declarado - esperado,
+            devoluciones=devuelto,
+        )
 
     movs = await obtener_movimientos_por_metodo(conn, turno_id)
-    vistos: set[str] = set()
     for m in movs:
         if m["metodo_tipo"] == "E":
             continue
-        nombre_met = m["metodo_nombre"].lower()
-        vistos.add(nombre_met)
-        esperado = Decimal(str(m["total_ventas"]))
-        declarado = declarados_por_metodo.get(nombre_met, Decimal("0"))
         balance.append(
-            FilaBalance(
-                metodo=nombre_met,
-                label=m["metodo_nombre"],
-                declarado=declarado,
-                esperado=esperado,
-                diferencia=declarado - esperado,
+            fila_metodo(
+                m["metodo_nombre"], Decimal(str(m["total_ventas"])), str(m["metodo_pago_id"])
             )
         )
+
+    # Métodos con devoluciones en este turno pero sin cobros (la venta se cobró
+    # en otro turno): su esperado queda en negativo por lo devuelto.
+    for metodo_pago_id, d in list(devoluciones_otros.items()):
+        balance.append(fila_metodo(str(d["metodo_nombre"]), Decimal("0"), metodo_pago_id))
 
     # Métodos que el cajero declaró pero el sistema no tiene registrados para este turno.
     for nombre_met, declarado in declarados_por_metodo.items():

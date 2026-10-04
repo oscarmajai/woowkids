@@ -1,7 +1,8 @@
 """A2 / M27 / A4 contra PostgreSQL real, por HTTP: máquina de estados de las
 comandas, cancelación sin "zombies" ni doble reversión de stock, una sola
 emisión WebSocket por cambio, y la cancelación de comandas cobradas con PIN de
-administrador y devolución en el arqueo.
+administrador y devolución en el arqueo (de cada método, no solo el
+efectivo).
 
 Usa una BD desechable con sql/schema_maestro.sql cargado (TEST_DATABASE_URL);
 se salta si no está definida. Cada prueba siembra su propia sucursal, usuarios,
@@ -594,3 +595,83 @@ async def test_cancelar_sin_pagos_no_pide_pin(esc: Esc) -> None:
     r = await _cancelar(esc.cocina, cid)
     assert r.status_code == 200, r.text
     assert await _devoluciones(esc, cid) == []
+
+
+# ── A4: cada devolución baja el esperado de SU método ────────────────────────
+
+
+async def _balance(e: Esc) -> tuple[Decimal, dict[str, Any]]:
+    """(total esperado general, renglones del arqueo por método)."""
+    from app.repositories.caja_repository import get_apertura_por_id
+    from app.services import turnos_caja_service
+
+    async with e.pool.acquire() as conn:
+        fila = await get_apertura_por_id(conn, str(e.apertura))
+        assert fila is not None
+        total, _, _, balance = await turnos_caja_service._calcular_balance(
+            conn, fila, str(e.apertura)
+        )
+    return total, {b.metodo: b for b in balance}
+
+
+async def _nombre_tarjeta(e: Esc) -> str:
+    async with e.pool.acquire() as conn:
+        return str(
+            await conn.fetchval("SELECT lower(nombre) FROM metodos_pago WHERE id = $1", e.tarjeta)
+        )
+
+
+async def test_cancelar_pagada_con_tarjeta_baja_el_esperado_de_tarjeta(esc: Esc) -> None:
+    cid = await _cobrada(
+        esc,
+        pagos=[{"metodo_pago_id": str(esc.tarjeta), "monto": "70.00", "notas_pago": "Folio: 1"}],
+    )
+    tarjeta = await _nombre_tarjeta(esc)
+    total_antes, filas = await _balance(esc)
+    assert filas[tarjeta].esperado == Decimal("70.00")
+    assert filas[tarjeta].devoluciones == Decimal("0")
+
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+
+    total, filas = await _balance(esc)
+    # Antes quedaba esperado 70 en tarjeta: una diferencia falsa en el arqueo.
+    assert filas[tarjeta].esperado == Decimal("0.00")
+    assert filas[tarjeta].devoluciones == Decimal("70.00")
+    assert filas["efectivo"].esperado == Decimal("1000.00")
+    assert filas["efectivo"].devoluciones == Decimal("0")
+    assert total == total_antes - Decimal("70.00")
+
+
+async def test_cancelar_pago_mixto_baja_cada_metodo(esc: Esc) -> None:
+    cid = await _cobrada(
+        esc,
+        pagos=[
+            {"metodo_pago_id": str(esc.efectivo), "monto": "40.00", "notas_pago": ""},
+            {"metodo_pago_id": str(esc.tarjeta), "monto": "30.00", "notas_pago": "Folio: 2"},
+        ],
+    )
+    tarjeta = await _nombre_tarjeta(esc)
+    total_antes, filas = await _balance(esc)
+    assert filas["efectivo"].esperado == Decimal("1040.00")
+    assert filas[tarjeta].esperado == Decimal("30.00")
+
+    r = await _cancelar(esc.cajero, cid, token_pin_admin=await _token_admin(esc))
+    assert r.status_code == 200, r.text
+
+    devs = await _devoluciones(esc, cid)
+    assert [(d["es_efectivo"], d["monto"]) for d in devs] == [
+        (True, Decimal("40.00")),
+        (False, Decimal("30.00")),
+    ]
+    total, filas = await _balance(esc)
+    assert (filas["efectivo"].esperado, filas["efectivo"].devoluciones) == (
+        Decimal("1000.00"),
+        Decimal("40.00"),
+    )
+    assert (filas[tarjeta].esperado, filas[tarjeta].devoluciones) == (
+        Decimal("0.00"),
+        Decimal("30.00"),
+    )
+    assert total == total_antes - Decimal("70.00")
+    assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))

@@ -72,6 +72,9 @@ class FilaBalance(BaseModel):
     declarado: Decimal
     esperado: Decimal
     diferencia: Decimal
+    # A4: lo devuelto a clientes con este método en el turno. Ya va restado
+    # de `esperado`; viene aparte para que el arqueo lo muestre.
+    devoluciones: Decimal = Decimal("0")
 
 
 class AbrirTurnoPayload(BaseModel):
