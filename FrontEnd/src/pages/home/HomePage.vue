@@ -11,6 +11,7 @@ import { usePaquetesStore } from '@/stores/paquetes'
 import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { obtenerComandas } from '@/services/comandaService'
 import { authService } from '@/services/authService'
+import { sistemaService } from '@/services/sistemaService'
 import { formatMXN } from '@/utils/formatoMoneda'
 import { saludoPorHora } from '@/utils/saludo'
 import { tituloAlertasStock } from '@/utils/inventario'
@@ -99,6 +100,20 @@ async function cargarTienePin() {
   }
 }
 
+// Los respaldos automáticos corren fuera de la app: si fallan o dejan de
+// hacerse, solo AdministradorSistema puede enterarse (y avisar a soporte).
+const avisoRespaldos = ref<string | null>(null)
+
+async function cargarAvisoRespaldos() {
+  if (!auth.isSistema) return
+  try {
+    const estado = await sistemaService.estadoRespaldos()
+    avisoRespaldos.value = estado.alerta ? estado.mensaje : null
+  } catch {
+    // No bloqueante: si falla la consulta no se muestra el aviso.
+  }
+}
+
 // Al cerrar el diálogo (tras guardar el PIN) se vuelve a consultar /auth/me
 // para que el aviso desaparezca sin recargar la página.
 watch(showCambiarPin, (abierto) => {
@@ -106,6 +121,7 @@ watch(showCambiarPin, (abierto) => {
 })
 
 onMounted(async () => {
+  void cargarAvisoRespaldos()
   const tareas: Promise<unknown>[] = []
   if (puede.estancias.value) {
     tareas.push(acceso.loadActivos())
@@ -352,6 +368,13 @@ const sinModulos = computed(
       />
     </div>
     <CambiarPinDialog v-model="showCambiarPin" />
+
+    <div v-if="avisoRespaldos" class="pin-alert" role="alert">
+      <q-icon name="backup" size="22px" />
+      <span class="pin-alert__text">
+        {{ avisoRespaldos }} Sin respaldos, una falla del equipo puede borrar la información.
+      </span>
+    </div>
 
     <div v-if="!sinModulos" class="kpi-row">
       <KpiCard
