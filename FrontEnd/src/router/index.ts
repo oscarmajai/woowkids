@@ -61,6 +61,20 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
+  // Público (sin sesión): lo enlazan el login, el registro de entrada y el
+  // portal de padres; es la dirección que se pone en el aviso simplificado.
+  {
+    path: '/aviso-de-privacidad',
+    component: () => import('@/layouts/PublicLayout.vue'),
+    children: [
+      {
+        path: '',
+        name: 'aviso-privacidad',
+        component: () => import('@/pages/AvisoPrivacidadPage.vue'),
+        meta: { title: 'Aviso de privacidad' },
+      },
+    ],
+  },
   {
     path: '/padres',
     component: () => import('@/layouts/PadresLayout.vue'),

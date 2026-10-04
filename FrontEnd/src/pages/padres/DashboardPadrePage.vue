@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePadresAuthStore } from '@/stores/padres/padresAuthStore'
 import HijoCard from '@/components/padres/HijoCard.vue'
+import { RUTA_AVISO_PRIVACIDAD } from '@/utils/avisoPrivacidad'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,11 +98,27 @@ onBeforeUnmount(() => {
         <h2 class="padres-section__title padres-section__title--muted">Visitas finalizadas</h2>
         <HijoCard v-for="nino in store.terminatedChildren" :key="nino.id" :nino="nino" />
       </section>
+
+      <footer class="padres-foot">
+        <router-link :to="RUTA_AVISO_PRIVACIDAD" class="padres-foot__link">
+          Aviso de privacidad
+        </router-link>
+      </footer>
     </div>
   </q-page>
 </template>
 
 <style scoped lang="scss">
+.padres-foot {
+  text-align: center;
+  font-size: 12.5px;
+
+  &__link {
+    color: var(--text-secondary);
+    font-weight: 700;
+  }
+}
+
 .padres {
   min-height: 100vh;
   background: var(--bg-main);
