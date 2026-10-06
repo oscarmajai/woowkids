@@ -1,22 +1,20 @@
-# CLAUDE.md — Monorepo Woow Kids
-
-Reglas para trabajar en este repositorio. Tienen prioridad sobre las secciones de Git de `FrontEnd/CLAUDE.md` y `BackEnd/CLAUDE.md`. Esos dos archivos siguen siendo la referencia de stack, arquitectura y convenciones de cada parte.
+# Cómo contribuir
 
 ## Estructura
-- `FrontEnd/`: Vue 3 + Quasar. Ver `FrontEnd/CLAUDE.md`.
-- `BackEnd/`: FastAPI + PostgreSQL. Ver `BackEnd/CLAUDE.md`.
+- `FrontEnd/`: Vue 3 + Quasar. Ver [`FrontEnd/SETUP.md`](FrontEnd/SETUP.md).
+- `BackEnd/`: FastAPI + PostgreSQL. Ver [`BackEnd/SETUP.md`](BackEnd/SETUP.md).
 - En la raíz:
   - `docker-compose.yml` (stack separado) y `Dockerfile.allinone` + `docker/allinone/` (contenedor único);
   - `.github/` (CI/CD);
-  - documentación general (`SAD.md`, reportes E2E).
+  - documentación general (`SAD.md`).
 
 ## Git
-- **No hagas `git push` por tu cuenta.** Solo cuando el usuario lo pida explícitamente. **Nunca pushees directo a `main`.**
+- Nunca se pushea directo a `main`.
 - Git Flow:
   - `main`: producción. Cada llegada a `main` publica un release.
   - `develop`: integración. Toda rama sale de `develop` y vuelve a `develop` por Pull Request.
-  - Ramas: `feature/<issue>-<desc>`, `fix/<issue>-<desc>`, `hotfix/<desc>` (sobre `main`; pide confirmación), `release/<version>`.
-- Un cambio que toca frontend y backend a la vez va en **una sola rama y un solo PR**: es la ventaja del monorepo.
+  - Ramas: `feature/<issue>-<desc>`, `fix/<issue>-<desc>`, `hotfix/<desc>` (sobre `main`), `release/<version>`.
+- Un cambio que toca frontend y backend a la vez va en **una sola rama y un solo PR**.
 - Commits: Conventional Commits **sin scope** (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `style:`, `test:`, `perf:`, `build:`, `ci:`, `revert:`), en minúscula e imperativo, atómicos. Referencia issues con `Refs #N` / `Closes #N`.
 - La versión la calcula el release a partir de los commits desde el último tag:
   - `feat` sube la versión menor;

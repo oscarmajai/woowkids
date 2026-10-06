@@ -2,9 +2,14 @@
 .env
 .env.docker
 
-# Configuración local de Claude Code
-.claude/settings.local.json
-.claude/worktrees/
+# Herramientas locales de asistentes de IA
+CLAUDE.md
+.claude/
+.agents/
+skills-lock.json
+
+# Cachés de herramientas
+.ruff_cache/
 
 # Respaldos de los repos separados anteriores
 .git-anteriores/
