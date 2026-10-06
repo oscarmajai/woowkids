@@ -4,9 +4,9 @@ import type { Branch } from '@/types/branch'
 import type { UserListItem } from '@/types/user'
 
 /**
- * UX administración: el detalle de la sucursal no contaba al administrador
- * entre sus usuarios, el KPI "Administrador" mostraba el correo de la
- * sucursal y el administrador de sucursal veía "Desactivar" sin permiso.
+ * Detalle de la sucursal: el administrador cuenta entre sus usuarios, el KPI
+ * "Administrador" muestra su correo (no el de la sucursal) y "Desactivar"
+ * solo se ofrece con sucursales:eliminar.
  */
 
 const permisos = new Set<string>()

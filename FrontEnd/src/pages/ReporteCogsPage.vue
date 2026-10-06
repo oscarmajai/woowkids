@@ -99,7 +99,7 @@ import { fechaEnZona, primerDiaDelMesEnZona } from '@/utils/fechaZona'
 const $q = useQuasar()
 const authStore = useAuthStore()
 
-// Fecha local (no UTC: después de las 18:00 en México ya sería mañana, M4).
+// Fecha local (no UTC: después de las 18:00 en México ya sería mañana).
 const hoy = fechaEnZona()
 const primeroDeMes = primerDiaDelMesEnZona()
 const desde = ref(primeroDeMes)
@@ -109,7 +109,7 @@ const exportando = ref(false)
 const renglones = ref<CogsRenglon[]>([])
 const resumen = ref<ResumenCogs | null>(null)
 
-// M24: la merma incluye el faltante de los conteos físicos.
+// La merma incluye el faltante de los conteos físicos.
 const notaMerma = computed(() =>
   resumen.value
     ? `manual ${formatMXN(resumen.value.mermaManual)} · conteo ${formatMXN(resumen.value.mermaConteo)}`

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 065_catalogos_producto_proveedor.sql
--- WP B6, pendientes 4 y 5: código único de producto (por sucursal) y datos
+-- Código único de producto (por sucursal) y datos
 -- fiscales/logísticos de proveedor.
 -- =============================================================================
 

@@ -1,4 +1,4 @@
-"""Tramos de precio de la estancia (issue #32)."""
+"""Tramos de precio de la estancia."""
 
 from decimal import Decimal
 

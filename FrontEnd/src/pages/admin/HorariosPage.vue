@@ -282,7 +282,7 @@ const $q = useQuasar()
 const auth = useAuthStore()
 const sucursalesStore = useSucursalesStore()
 
-// M19: cada sucursal tiene sus horarios y además ve los globales (sucursalId
+// Cada sucursal tiene sus horarios y además ve los globales (sucursalId
 // null). Un horario nuevo se crea en la sucursal de la sesión (el
 // AdministradorSistema sin sucursal elegida crea uno global). Los globales
 // solo los modifica el AdministradorSistema.

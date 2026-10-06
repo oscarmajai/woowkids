@@ -1,8 +1,8 @@
-"""Ola 4, caja. Sin BD.
+"""Turno de caja: turno activo opcional, retiros e ingresos. Sin BD.
 
-- B4: GET /turnos-caja/activo?opcional=true responde null en vez de 404.
-- B17: el rechazo de un retiro dice cuánto hay disponible.
-- UX: el ingreso de efectivo guarda su motivo."""
+- GET /turnos-caja/activo?opcional=true responde null en vez de 404.
+- El rechazo de un retiro dice cuánto hay disponible.
+- El ingreso de efectivo guarda su motivo."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -33,7 +33,7 @@ def _token(role: str) -> TokenData:
     )
 
 
-# ── B4: turno activo opcional ────────────────────────────────────────────────
+# ── Turno activo opcional ────────────────────────────────────────────────────
 
 
 async def test_turno_activo_opcional_responde_null_sin_turno() -> None:
@@ -61,7 +61,7 @@ async def test_turno_activo_sin_opcional_sigue_respondiendo_404() -> None:
     assert exc_info.value.status_code == 404
 
 
-# ── B17: el mensaje del retiro rechazado dice cuánto hay ─────────────────────
+# ── El mensaje del retiro rechazado dice cuánto hay ──────────────────────────
 
 
 def test_efectivo_insuficiente_dice_el_disponible_con_formato() -> None:

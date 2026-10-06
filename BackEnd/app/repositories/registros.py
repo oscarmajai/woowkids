@@ -110,7 +110,7 @@ async def get_registro_alcance(
     conn: asyncpg.Connection, registro_id: UUID
 ) -> dict[str, Any] | None:
     """Sucursal y estado de un registro activo (no borrado), para autorizar el
-    acceso a sus archivos (C6). None si no existe o está desactivado."""
+    acceso a sus archivos. None si no existe o está desactivado."""
     row = await conn.fetchrow(
         """
         SELECT id, sucursal_id, estado
@@ -193,7 +193,7 @@ async def obtener_saldo_para_cobro(
 async def get_registro_para_comprobante(
     conn: asyncpg.Connection, registro_id: UUID
 ) -> dict[str, Any] | None:
-    """N5 — encabezado del comprobante de un registro (tutor, sucursal, quién
+    """Encabezado del comprobante de un registro (tutor, sucursal, quién
     lo registró, total). Bloquea la fila del registro (FOR UPDATE) para que la
     reimpresión no se cruce con el checkout del último niño, que revoca el
     código del QR. Llamar dentro de una transacción."""
@@ -218,8 +218,8 @@ async def get_registro_para_comprobante(
 async def get_ninos_en_estancia_de_registro(
     conn: asyncpg.Connection, registro_id: UUID
 ) -> list[dict[str, Any]]:
-    """N5 — niños del registro que siguen dentro (sin salida), con sus notas /
-    alergias (M26), para el comprobante reimpreso."""
+    """Niños del registro que siguen dentro (sin salida), con sus notas /
+    alergias, para el comprobante reimpreso."""
     rows = await conn.fetch(
         """
         SELECT n.nombre_completo AS nombre, n.edad, n.notas,

@@ -1,6 +1,6 @@
 """Pruebas unitarias de _build_nino_activo (app/services/padres_service.py):
 agrega cargoExtra en visitas activas e importe/puntosGanados en terminadas,
-sin tocar la base de datos (ver B2 #1 -- dict de fila simulado)."""
+sin tocar la base de datos (dict de fila simulado)."""
 
 from datetime import UTC, datetime
 from decimal import Decimal

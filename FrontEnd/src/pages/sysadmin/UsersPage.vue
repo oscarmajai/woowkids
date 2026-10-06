@@ -94,7 +94,7 @@ async function fetchUsers(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    // A10: se piden activos e inactivos; los chips filtran en el cliente.
+    // Se piden activos e inactivos; los chips filtran en el cliente.
     allUsers.value = await userService.listUsers('todos')
   } catch {
     error.value = 'No se pudieron cargar los usuarios.'

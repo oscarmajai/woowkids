@@ -18,7 +18,7 @@ class DetalleCompraItem(BaseModel):
     insumo_id: UUID
     unidad_medida_id: UUID | None = None
     presentacion_id: UUID | None = None
-    # M3: acotadas a la columna (cantidad numeric(12,3), costo numeric(14,6));
+    # Acotadas a la columna (cantidad numeric(12,3), costo numeric(14,6));
     # antes 1e12 o 0.0004 respondían 500.
     cantidad: Decimal = Field(..., gt=0, le=MAX_CANTIDAD, decimal_places=DECIMALES_CANTIDAD)
     costo_unitario: Decimal = Field(
@@ -77,7 +77,7 @@ class CompraEditar(BaseModel):
 
 class LineaRecepcion(BaseModel):
     detalle_id: UUID
-    # 0 = esta línea no llegó en esta vuelta (A12: el cliente la manda explícita).
+    # 0 = esta línea no llegó en esta vuelta (el cliente la manda explícita).
     cantidad: Decimal = Field(..., ge=0, le=MAX_CANTIDAD, decimal_places=DECIMALES_CANTIDAD)
 
 
@@ -87,9 +87,9 @@ class RecibirCompraRequest(BaseModel):
     - Sin `lineas` (campo ausente o null, body vacío): se recibe todo lo
       pendiente de todas las líneas ("recibir completa").
     - Con `lineas` (aunque sea una lista vacía): solo se recibe lo indicado; una
-      línea de la compra que no aparezca en la lista cuenta como 0 (A12). Una
+      línea de la compra que no aparezca en la lista cuenta como 0. Una
       cantidad mayor a lo pendiente, un `detalle_id` ajeno a la compra o
-      repetido responden 422 RECEPCION_INVALIDA (M23)."""
+      repetido responden 422 RECEPCION_INVALIDA."""
 
     lineas: list[LineaRecepcion] | None = None
 

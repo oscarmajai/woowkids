@@ -1,6 +1,6 @@
 """Manejadores globales de excepciones de la app FastAPI.
 
-Red de seguridad para los datos que PostgreSQL rechaza (M3): un INSERT/UPDATE
+Red de seguridad para los datos que PostgreSQL rechaza: un INSERT/UPDATE
 que viola una llave foránea, un índice único o un CHECK, o un valor fuera de
 rango o con formato inválido, responde 409/422 con el formato de error del
 backend (``{"detail": {"code", "message"}}``) en lugar de un 500. La validación

@@ -28,7 +28,7 @@ _INVALID_TOKEN = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
-# A11: el token es válido, pero la cuenta se desactivó o se eliminó después
+# El token es válido, pero la cuenta se desactivó o se eliminó después
 # del login. 401 para que el front intente renovar (también falla) y cierre
 # la sesión.
 _CUENTA_INACTIVA = HTTPException(
@@ -87,7 +87,7 @@ async def _resolve_token_data(token: str, conn: asyncpg.Connection) -> TokenData
         # Una caída/latencia de la conexión a BD (ej. Tailscale) no es lo mismo que un
         # token inválido — antes ambos casos se reportaban igual como 401, lo cual
         # confundía al usuario haciéndolo pensar en un problema de validación de datos.
-        # A11: además de la lista de revocados, el usuario debe seguir
+        # Además de la lista de revocados, el usuario debe seguir
         # existiendo y activo (antes solo /auth/me lo revisaba y un empleado
         # dado de baja conservaba acceso hasta que caducara el token). Es la
         # misma consulta por petición de antes, ahora con las dos cosas. La
@@ -163,7 +163,7 @@ async def resolve_ws_auth(
     ticket: str | None,
     token: str | None,
 ) -> TokenData:
-    """QA #32 — punto único de autenticación del handshake WS: prioriza el
+    """Punto único de autenticación del handshake WS: prioriza el
     ticket efímero de un solo uso; si no vino, cae al JWT crudo mientras
     settings.WS_ACEPTA_JWT siga activo (clientes viejos). Lanza _INVALID_TOKEN
     si no hay nada usable."""
@@ -180,7 +180,7 @@ async def resolve_ws_auth(
 
 
 async def get_current_user_ws_ticket(ticket: str, conn: asyncpg.Connection) -> TokenData:
-    """QA #32 — autentica el handshake de un WebSocket con un ticket efímero
+    """Autentica el handshake de un WebSocket con un ticket efímero
     de un solo uso (?ticket=...) en vez del JWT crudo en la URL. El ticket se
     canjea por los claims guardados al emitirlo (ver POST /auth/ws-ticket)."""
     from app.core.security import hash_ws_ticket
@@ -244,7 +244,7 @@ def require_any_permission(
 
 def exigir_permiso(current_user: TokenData, code: str) -> None:
     """403 si el rol no tiene el permiso. Para cuando el permiso depende del
-    contenido de la petición (p. ej. desactivar por PATCH, M20)."""
+    contenido de la petición (p. ej. desactivar por PATCH)."""
     from app.services.permission_service import has_permission
 
     if not has_permission(current_user.role, code):

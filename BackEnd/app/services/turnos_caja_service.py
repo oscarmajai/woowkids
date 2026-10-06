@@ -129,7 +129,7 @@ def _pesos(monto: Decimal) -> str:
 
 class EfectivoInsuficienteError(HTTPException):
     def __init__(self, efectivo_disponible: Decimal):
-        # B17: el front muestra este mensaje tal cual; `disponible` va aparte
+        # El front muestra este mensaje tal cual; `disponible` va aparte
         # para quien quiera el número.
         super().__init__(
             status_code=status.HTTP_409_CONFLICT,
@@ -145,7 +145,7 @@ class EfectivoInsuficienteError(HTTPException):
 
 
 class CredencialesAdminInvalidasError(PinInvalidoError):
-    """A5: 403 (no 401) para que el front no lo confunda con la sesión vencida."""
+    """403 (no 401) para que el front no lo confunda con la sesión vencida."""
 
     def __init__(self, mensaje: str = "Credenciales de administrador incorrectas."):
         super().__init__(mensaje, code="CREDENCIALES_INVALIDAS")
@@ -208,7 +208,7 @@ class CajaOcupadaError(HTTPException):
 def _asegurar_dueno_o_autorizador(
     apertura: dict[str, Any], user_id: str, solicitante: TokenData | None
 ) -> None:
-    """A15: solo el cajero dueño del turno, o quien puede autorizar cierres
+    """Solo el cajero dueño del turno, o quien puede autorizar cierres
     (permiso turnos_caja:confirmar) en la sucursal del turno, opera sobre él.
     Sin ``solicitante`` (llamadas internas) solo pasa el dueño."""
     if str(apertura["cajero_id"]) == str(user_id):
@@ -252,7 +252,7 @@ async def obtener_cajas(
 def horario_vigente(
     hora_inicio: time, hora_fin: time, dias: list[int] | None, ahora: datetime
 ) -> bool:
-    """M8: True si `ahora` (hora de pared de la sucursal) cae dentro del
+    """True si `ahora` (hora de pared de la sucursal) cae dentro del
     horario, con los extremos incluidos y a nivel de minuto (un horario que
     termina a las 23:59 vale hasta las 23:59:59). Un horario que cruza la
     medianoche (22:00-06:00) vale después del inicio y antes del fin; en la
@@ -279,9 +279,9 @@ async def obtener_turnos(
     sucursal_id: str | None = None,
     ahora: datetime | None = None,
 ) -> list[TurnoResponse]:
-    """Horarios activos de la sucursal más los globales (todos si None, M19).
+    """Horarios activos de la sucursal más los globales (todos si None).
     `ahora` es la hora local de la sucursal (sin zona); con ella se marca cuál
-    está vigente (M8). Sin ella, ninguno."""
+    está vigente. Sin ella, ninguno."""
     rows = await listar_turnos(conn, sucursal_id)
     return [
         TurnoResponse(
@@ -307,15 +307,15 @@ async def abrir_turno(
 ) -> TurnoActivoResponse:
     """Abre el turno del cajero autenticado.
 
-    B15: el PIN se valida SIEMPRE, antes de mirar si ya hay un turno abierto.
+    El PIN se valida SIEMPRE, antes de mirar si ya hay un turno abierto.
     Si el cajero ya tiene uno abierto:
     - en otra sucursal → 409 TURNO_ACTIVO_OTRA_SUCURSAL;
     - con la misma caja, turno horario y fondo (reintento de la misma apertura,
       p. ej. tras un timeout o un doble clic) → se devuelve el existente;
     - con otros datos → 409 TURNO_YA_ABIERTO (antes devolvía 201 con el
       existente, ignorando la caja y el fondo pedidos).
-    N2: dos aperturas simultáneas chocaban con los índices únicos
-    (uq_apertura_cajero_activo / uq_apertura_caja_activa) y daban 500; ahora
+    Dos aperturas simultáneas chocan con los índices únicos
+    (uq_apertura_cajero_activo / uq_apertura_caja_activa); en vez de un 500,
     se resuelven con la misma regla (existente o 409)."""
     sucursal = branch_id or payload.sucursal_id
     if not sucursal:
@@ -327,7 +327,7 @@ async def abrir_turno(
             },
         )
 
-    # C1/A16: el cajero valida su PIN (o su contraseña solo si aún no tiene PIN),
+    # El cajero valida su PIN (o su contraseña solo si aún no tiene PIN),
     # con límite de intentos.
     if not payload.pin:
         raise HTTPException(
@@ -387,8 +387,8 @@ async def abrir_turno(
             detail={"code": "TURNO_REQUERIDO", "message": "Debes seleccionar un turno de trabajo."},
         )
     turno_id = payload.turno_id
-    # M19: el horario debe ser global o de la sucursal de la caja (antes se
-    # aceptaba el de cualquier sucursal, y uno inexistente reventaba con 500).
+    # El horario debe ser global o de la sucursal de la caja; uno de
+    # otra sucursal o inexistente se rechaza.
     if not await turno_disponible_en_sucursal(conn, turno_id, sucursal):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -423,7 +423,7 @@ async def abrir_turno(
             observaciones_apertura=(payload.observaciones_apertura or "").strip() or None,
         )
     except asyncpg.UniqueViolationError as exc:
-        # N2: otra petición abrió entre la verificación y el INSERT. Si fue
+        # Otra petición abrió entre la verificación y el INSERT. Si fue
         # del mismo cajero (cualquiera de los dos índices puede saltar
         # primero), se aplica la regla del turno existente.
         if exc.constraint_name not in ("uq_apertura_cajero_activo", "uq_apertura_caja_activa"):
@@ -463,7 +463,7 @@ async def _turno_existente(
     payload: AbrirTurnoPayload,
     activa: dict[str, Any],
 ) -> TurnoActivoResponse:
-    """B15: con turno ya abierto, solo se devuelve si la petición es la misma
+    """Con turno ya abierto, solo se devuelve si la petición es la misma
     apertura (misma caja, turno horario y fondo); si no, 409."""
     if str(activa["sucursal_id"]) != str(sucursal):
         raise HTTPException(
@@ -509,7 +509,7 @@ async def obtener_turno_activo(
         for r in movs_raw
     ]
 
-    # M7: efectivo esperado en vivo (misma fórmula que el arqueo) y lo
+    # Efectivo esperado en vivo (misma fórmula que el arqueo) y lo
     # cobrado por método, con el efectivo neto del cambio.
     efectivo_esperado = await calcular_efectivo_disponible(conn, apertura_id, fondo_inicial)
     ventas_por_metodo = [
@@ -533,7 +533,7 @@ async def obtener_turno_activo(
     # llenando, o ya autenticó un admin?) se infiere de monto_declarado/token_admin_jti.
     # Sin esto, recargar la página después de enviar el conteo mostraba otra vez el
     # formulario vacío en vez del modal de espera del administrador, y recargar tras
-    # BALANCE_REVELADO perdía el balance (quedaba solo en sessionStorage, QA #8).
+    # BALANCE_REVELADO perdía el balance (quedaba solo en sessionStorage).
     admin_email: str | None = None
     balance_por_metodo: list[FilaBalance] = []
     if activa["estado"] != "EN_CORTE":
@@ -561,7 +561,7 @@ async def obtener_turno_activo(
         observaciones_apertura=activa.get("observaciones_apertura"),
         total_ventas=total_ventas,
         numero_ventas=numero_ventas,
-        # M6: lo aplicado (neto del cambio), no el efectivo recibido.
+        # Lo aplicado (neto del cambio), no el efectivo recibido.
         total_vendido=total_ventas - total_cambio,
         total_cambio=total_cambio,
         total_retiros=total_retiros,
@@ -576,7 +576,7 @@ async def obtener_turno_activo(
 
 
 def _conteo_guardado(apertura: dict[str, Any]) -> ConteoGuardado | None:
-    """B23: el conteo que el cajero ya envió, tal como quedó congelado."""
+    """El conteo que el cajero ya envió, tal como quedó congelado."""
     if apertura.get("monto_declarado") is None or not apertura.get("conteo_json"):
         return None
     try:
@@ -593,7 +593,7 @@ def _conteo_guardado(apertura: dict[str, Any]) -> ConteoGuardado | None:
 async def iniciar_conteo(
     conn: asyncpg.Connection, user_id: str, turno_id: str
 ) -> TurnoActivoResponse:
-    # C4: la validación del estado y la transición van bajo el bloqueo de la
+    # La validación del estado y la transición van bajo el bloqueo de la
     # apertura, igual que retiros/ingresos, para que nada entre en medio.
     async with conn.transaction():
         apertura = await bloquear_apertura(conn, turno_id)
@@ -618,7 +618,7 @@ async def enviar_conteo(
             "metodos_pago": [m.model_dump(mode="json") for m in payload.metodos_pago],
         }
     )
-    # C4: con el bloqueo, un segundo envío simultáneo ve el conteo ya guardado
+    # Con el bloqueo, un segundo envío simultáneo ve el conteo ya guardado
     # y se rechaza en vez de sobrescribirlo.
     async with conn.transaction():
         apertura = await bloquear_apertura(conn, payload.turno_id)
@@ -651,10 +651,10 @@ async def _calcular_balance(
     - `balance` (por método): el renglón "efectivo" compara el dinero físico —
       fondo inicial + ventas en efectivo (o sin método aún, ver
       sumar_ventas_efectivo_apertura) + ingresos de efectivo - retiros -
-      cambio dado - devoluciones en efectivo (A4) — contra lo que el cajero contó físicamente
+      cambio dado - devoluciones en efectivo — contra lo que el cajero contó físicamente
       (desglose_efectivo.total en conteo_json). Cada otro método compara lo
-      que el sistema registró, menos lo devuelto a clientes con ese método
-      (A4), contra lo que el cajero declaró para ese método específico.
+      que el sistema registró, menos lo devuelto a clientes con ese método,
+      contra lo que el cajero declaró para ese método específico.
       Cada renglón trae aparte sus devoluciones para mostrarlas.
     - Totales generales (esperado/declarado/diferencia): todos los métodos de
       pago cuentan como dinero real del sistema (cupones, lealtad, vouchers
@@ -667,7 +667,7 @@ async def _calcular_balance(
     total_retiros = await sumar_retiros_por_apertura(conn, turno_id)
     total_cambio = await sumar_cambio_apertura(conn, turno_id)
     total_ingresos = await sumar_ingresos_por_apertura(conn, turno_id)
-    # A4: lo devuelto a clientes desde este turno (comandas canceladas o
+    # Lo devuelto a clientes desde este turno (comandas canceladas o
     # devueltas ya entregadas), por método. Antes solo restaba el efectivo y
     # cada devolución con tarjeta dejaba un sobrante falso en su renglón.
     devoluciones = await sumar_devoluciones_por_metodo_apertura(conn, turno_id)
@@ -792,11 +792,11 @@ async def _verificar_credenciales_usuario(
     intentado_por: str | None = None,
     dueno_turno_id: str | None = None,
 ) -> dict[str, Any]:
-    """Revisión del administrador (A16): el autorizador debe poder revisar
+    """Revisión del administrador: el autorizador debe poder revisar
     arqueos (turnos_caja:revision_admin) en la sucursal del turno —o ser
     AdministradorSistema—, no puede ser el dueño del turno, y su credencial se
     valida con límite de intentos: con PIN configurado solo vale el PIN; sin
-    PIN, su contraseña (C1). Lanza AutorizadorNoValidoError (403),
+    PIN, su contraseña. Lanza AutorizadorNoValidoError (403),
     AutorizadorEsDuenoTurnoError (403), CredencialesAdminInvalidasError (403)
     o PinBloqueadoError (429)."""
     autorizador = await pin_caja_service.buscar_autorizador(
@@ -854,11 +854,11 @@ async def autenticar_admin_revision(
         payload.admin_password,
         str(previa["sucursal_id"]) if previa.get("sucursal_id") else None,
         intentado_por=user_id,
-        # A16: nadie autoriza el cierre de su propio turno.
+        # Nadie autoriza el cierre de su propio turno.
         dueno_turno_id=str(previa["cajero_id"]),
     )
 
-    # 3. Calcular montos esperados reales para el turno. C4: bajo el bloqueo de
+    # 3. Calcular montos esperados reales para el turno. Bajo el bloqueo de
     # la apertura, para no autorizar un conteo que otra petición está cancelando.
     async with conn.transaction():
         apertura = await bloquear_apertura(conn, payload.turno_id)
@@ -869,7 +869,7 @@ async def autenticar_admin_revision(
             raise TransicionInvalidaError("Este turno ya fue cerrado anteriormente.")
 
         # La sucursal del administrador y que no sea el dueño del turno ya se
-        # validaron en _verificar_credenciales_usuario (A16).
+        # validaron en _verificar_credenciales_usuario.
 
         if apertura["monto_declarado"] is None:
             raise TransicionInvalidaError("El cajero aún no ha enviado su declaración de conteo.")
@@ -910,8 +910,8 @@ _OPERACION_POR_PROPOSITO = {
 async def _emitir_token_pin(
     conn: asyncpg.Connection, usuario_id: str, turno_id: str, rol: str, proposito: str
 ) -> str:
-    """QA #14: token de un solo uso con vigencia de 5 minutos, emitido al
-    validar el PIN del cajero o del administrador. A16: solo sirve para su
+    """Token de un solo uso con vigencia de 5 minutos, emitido al
+    validar el PIN del cajero o del administrador. Solo sirve para su
     ``proposito`` (cerrar / cancelar)."""
     token = secrets.token_urlsafe(32)
     expira = get_mexico_now() + timedelta(minutes=5)
@@ -928,7 +928,7 @@ async def _validar_y_consumir_token_pin(
     if not fila:
         raise PinTokenRequeridoError(f"El token de PIN de {rol} no es válido para este turno.")
     if fila["proposito"] != proposito:
-        # A16: un token emitido para cancelar una orden no cierra la caja, ni al revés.
+        # Un token emitido para cancelar una orden no cierra la caja, ni al revés.
         emitido = _OPERACION_POR_PROPOSITO.get(fila["proposito"], fila["proposito"])
         raise PinTokenPropositoError(
             f"La autorización con PIN de {rol} se emitió para {emitido}; no sirve para "
@@ -948,8 +948,8 @@ async def consumir_token_pin_admin(
     turno_id: str,
     proposito: str = PROPOSITO_CANCELAR,
 ) -> str:
-    """A4: consume el token de un solo uso que emite /validar-pin-admin para
-    `turno_id` y devuelve el id del administrador que validó su PIN. A16: el
+    """Consume el token de un solo uso que emite /validar-pin-admin para
+    `turno_id` y devuelve el id del administrador que validó su PIN. El
     token debe haberse emitido para ``proposito`` (por omisión ``cancelar``:
     cancelaciones y devoluciones de órdenes cobradas). El llamador debe estar
     en una transacción para que el token no quede consumido si la operación
@@ -969,7 +969,7 @@ async def validar_pin_cajero(
     apertura = await get_apertura_por_id(conn, turno_id)
     if not apertura:
         raise TurnoNoEncontradoError()
-    # A16: solo el dueño del turno (o un autorizador de la sucursal) puede
+    # Solo el dueño del turno (o un autorizador de la sucursal) puede
     # probar el PIN de ese cajero.
     _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
@@ -977,7 +977,7 @@ async def validar_pin_cajero(
     if not cajero_row or not cajero_row["activo"]:
         raise PinInvalidoError("Usuario cajero no encontrado.")
 
-    # A16: con PIN configurado solo vale el PIN; límite de intentos por cajero
+    # Con PIN configurado solo vale el PIN; límite de intentos por cajero
     # y sucursal.
     await pin_caja_service.verificar_con_limite(
         conn,
@@ -1013,11 +1013,11 @@ async def validar_pin_admin(
     proposito: str = PROPOSITO_CANCELAR,
 ) -> dict[str, Any]:
     """Valida el PIN de un administrador y emite un token de un solo uso para
-    ``turno_id`` que solo sirve para ``proposito`` (A16): ``cerrar`` (cierre
+    ``turno_id`` que solo sirve para ``proposito``: ``cerrar`` (cierre
     de caja) o ``cancelar`` (cancelar o devolver una orden cobrada; es el
-    valor por omisión, el de los llamadores anteriores a A16).
+    valor por omisión, el de los llamadores que no indican propósito).
 
-    A16: el administrador se busca solo entre los usuarios de la sucursal del
+    El administrador se busca solo entre los usuarios de la sucursal del
     turno con permiso de autorizar cierres (turnos_caja:confirmar) —o
     AdministradorSistema—; con PIN configurado solo vale el PIN, y hay límite
     de intentos. Para ``cerrar``, el administrador no puede ser el dueño del
@@ -1057,14 +1057,14 @@ async def cancelar_conteo(
     *,
     solicitante: TokenData | None = None,
 ) -> TurnoActivoResponse:
-    # C4: bajo el bloqueo de la apertura, para que una revisión del admin que
+    # Bajo el bloqueo de la apertura, para que una revisión del admin que
     # llega al mismo tiempo no quede autorizada sobre un conteo ya cancelado.
     async with conn.transaction():
         apertura = await bloquear_apertura(conn, turno_id)
         if not apertura:
             raise TurnoNoEncontradoError()
 
-        # A15: una cajera no puede revertir el conteo de otra. Solo el dueño o
+        # Una cajera no puede revertir el conteo de otra. Solo el dueño o
         # quien autoriza cierres en esa sucursal.
         _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
@@ -1096,7 +1096,7 @@ async def obtener_apertura_operando_id(conn: asyncpg.Connection, user_id: str) -
 
 
 async def bloquear_turno_para_cobro(conn: asyncpg.Connection, apertura_caja_id: str) -> None:
-    """N1: la validación de obtener_apertura_operando_id corre fuera de
+    """La validación de obtener_apertura_operando_id corre fuera de
     cualquier bloqueo, así que un cobro podía entrar justo cuando empezaba el
     conteo o el cierre. Esta función se llama al principio de la transacción
     del cobro: toma un bloqueo compartido de la apertura (los cobros del
@@ -1116,7 +1116,7 @@ async def verificar_turno_abierto(conn: asyncpg.Connection, user_id: str) -> Non
 async def crear_retiro(
     conn: asyncpg.Connection, user_id: str, payload: RetiroParcialCreate
 ) -> RetiroParcialResponse:
-    # C4: bloquear la apertura ANTES de calcular el disponible. Sin el bloqueo,
+    # Bloquear la apertura ANTES de calcular el disponible. Sin el bloqueo,
     # dos retiros simultáneos leían el mismo disponible, ambos pasaban la
     # validación y la caja quedaba en negativo. Con él, el segundo espera a que
     # el primero confirme y calcula el disponible ya descontado.
@@ -1222,7 +1222,7 @@ async def listar_retiros(conn: asyncpg.Connection, turno_id: str) -> list[Retiro
 async def crear_ingreso(
     conn: asyncpg.Connection, user_id: str, payload: IngresoEfectivoCreate
 ) -> IngresoEfectivoResponse:
-    # C4: mismo bloqueo que crear_retiro, para que un ingreso no entre después de
+    # Mismo bloqueo que crear_retiro, para que un ingreso no entre después de
     # que otra petición pasó el turno a conteo.
     async with conn.transaction():
         apertura = await bloquear_apertura(conn, payload.apertura_caja_id)
@@ -1259,7 +1259,7 @@ async def confirmar_cierre(
     *,
     solicitante: TokenData | None = None,
 ) -> ConfirmarCierreResponse:
-    # C4: todo el cierre bajo el bloqueo de la apertura y en una sola transacción.
+    # Todo el cierre bajo el bloqueo de la apertura y en una sola transacción.
     # Dos confirmaciones simultáneas: la segunda espera, ve el turno CERRADA y
     # recibe 409 (antes chocaba con el índice único de cierre_caja y daba 500).
     # Si algo falla a medias, no queda un cierre_caja sin la apertura cerrada ni
@@ -1269,7 +1269,7 @@ async def confirmar_cierre(
         if not apertura:
             raise TurnoNoEncontradoError()
 
-        # A15/A16: solo el dueño del turno o un autorizador de la sucursal.
+        # Solo el dueño del turno o un autorizador de la sucursal.
         _asegurar_dueno_o_autorizador(apertura, user_id, solicitante)
 
         if apertura["estado"] == "CERRADA":
@@ -1283,14 +1283,14 @@ async def confirmar_cierre(
                 "Aún no se ha autorizado la revisión de un administrador."
             )
 
-        # A16: nadie autoriza el cierre de su propio turno (la revisión ya lo
+        # Nadie autoriza el cierre de su propio turno (la revisión ya lo
         # rechaza; esto cubre una revisión hecha antes de la regla).
         dueno_id = str(apertura["cajero_id"])
         if pin_caja_service.es_dueno_turno(apertura["token_admin_jti"], dueno_id):
             raise AutorizadorEsDuenoTurnoError()
 
-        # QA #14: exige y consume los tokens de un solo uso de cajero y admin,
-        # emitidos para cerrar (A16: uno de cancelar una orden no sirve).
+        # Exige y consume los tokens de un solo uso de cajero y admin,
+        # emitidos para cerrar (uno de cancelar una orden no sirve).
         if settings.exigir_pin_token:
             if not payload.token_pin_cajero or not payload.token_pin_admin:
                 raise PinTokenRequeridoError()
@@ -1412,8 +1412,7 @@ async def listar_historial(
 async def resumen_historial(
     conn: asyncpg.Connection, filtros: FiltrosHistorial
 ) -> ResumenHistorialArqueosOut:
-    """KPIs del periodo filtrado completo, no solo la página cargada
-    (B7 pendiente #2)."""
+    """KPIs del periodo filtrado completo, no solo la página cargada."""
     data = await resumen_historial_cierres(
         conn,
         sucursal_id=filtros.sucursal_id,
@@ -1434,7 +1433,7 @@ async def listar_historial_completo(
     conn: asyncpg.Connection, filtros: FiltrosHistorial
 ) -> list[ArqueoResumen]:
     """Todos los arqueos que cumplen los filtros, sin paginar (para
-    exportar a CSV: B7 pendiente #4)."""
+    exportar a CSV)."""
     items_raw = await listar_historial_cierres(
         conn,
         sucursal_id=filtros.sucursal_id,

@@ -188,7 +188,7 @@ async def listar_vencidas_sin_liquidar(
 
     "Siguen debiendo" es el saldo real (`saldo_pendiente`, que desde la
     migración 075 descuenta todos los pagos), no `anticipo < precio_total`:
-    con eso se cancelaban eventos ya liquidados después del anticipo (C3).
+    con eso se cancelaban eventos ya liquidados después del anticipo.
 
     El "hoy" es la fecha local de la sucursal (`zona_horaria`), la misma que
     usa el alta para exigir la liquidación a 7 días o menos
@@ -298,7 +298,7 @@ async def cancelar_por_falta_de_pago(
                END,
                modificado = NOW()
          WHERE id = $1
-           -- Una reservación cerrada o ya cancelada no se vuelve a cancelar (A8).
+           -- Una reservación cerrada o ya cancelada no se vuelve a cancelar.
            AND estado IN ('pendiente', 'confirmada')
         """,
         reservacion_id,

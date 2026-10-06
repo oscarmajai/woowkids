@@ -1,4 +1,4 @@
-"""Intentos fallidos de PIN de caja (A16, migración 081).
+"""Intentos fallidos de PIN de caja (migración 081).
 
 La llave del límite es (usuario dueño del PIN, sucursal). Todas las funciones
 asumen que el llamador ya está dentro de ``conn.transaction()`` y que tomó el

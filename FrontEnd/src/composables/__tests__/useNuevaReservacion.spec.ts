@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useNuevaReservacion } from '@/composables/useNuevaReservacion'
 
 /**
- * M10: el asistente decía al Administrador "Tu rol no opera caja" aunque desde
- * la migración 073 abre y cierra su propio turno (y el guard lo deja entrar a
- * /pos/cierre). Ahora decide por el permiso de abrir caja, no por el rol.
+ * El asistente decide por el permiso de abrir caja, no por el rol: desde la
+ * migración 073 el Administrador abre y cierra su propio turno (y el guard lo
+ * deja entrar a /pos/cierre), así que no debe decirle "Tu rol no opera caja".
  */
 
 const push = vi.fn()

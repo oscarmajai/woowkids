@@ -331,7 +331,7 @@ const pagosMes = computed(() =>
   pagosStore.pagos_reservacion.filter((p) => new Date(p.fecha_pago) >= inicioMes),
 )
 const cobradoMes = computed(() => pagosMes.value.reduce((s, p) => s + parseFloat(p.monto), 0))
-// Reservaciones con pagos que aún deben algo; las canceladas no cuentan (N13).
+// Reservaciones con pagos que aún deben algo; las canceladas no cuentan.
 const resumenCobro = computed(() =>
   resumenPorCobrar(
     pagosStore.pagos_reservacion
@@ -389,7 +389,7 @@ const saldoDeReservacion = (reservacionId: string): number =>
 
 /**
  * Reservaciones ofrecidas en el diálogo: sólo las vigentes que deben algo. Una
- * cancelada no tiene adeudo que cobrar aunque su saldo no sea cero (Bug 18).
+ * cancelada no tiene adeudo que cobrar aunque su saldo no sea cero.
  *
  * Registrar un pago sobre un evento liquidado no tiene sentido —el saldo ya es
  * cero y la BD rechazaría un anticipo mayor que el total—, así que no se

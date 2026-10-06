@@ -122,7 +122,7 @@ const $q = useQuasar()
 onMounted(() => {
   // La validación de turno (y la espera de su carga async) ya la hace el
   // guard de ruta (`requiresTurno`, ver router/guards.ts) antes de entrar aquí.
-  // Tarifas y pulseras se cargan aquí mismo (A14): la página debe funcionar
+  // Tarifas y pulseras se cargan aquí mismo: la página debe funcionar
   // aunque se abra por URL o tras F5, sin pasar por Control de Acceso.
   void store.cargarDatosIniciales()
 })

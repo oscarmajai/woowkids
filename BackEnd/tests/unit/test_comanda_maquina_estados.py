@@ -1,4 +1,4 @@
-"""A2: máquina de estados de las comandas (lógica pura). Los casos con BD
+"""Máquina de estados de las comandas (lógica pura). Los casos con BD
 (zombie, C → T → C, concurrencia, devolución) están en
 tests/db/test_comandas_estados_cancelacion_pg.py."""
 

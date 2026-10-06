@@ -1,4 +1,4 @@
-"""A16 (prueba E2E 2026-10-03): segregación de funciones en el cierre de caja.
+"""Segregación de funciones en el cierre de caja.
 
 Reglas que decidió el dueño del producto:
 - Nadie autoriza el cierre de su propio turno: si el dueño del turno es un
@@ -7,7 +7,7 @@ Reglas que decidió el dueño del producto:
 - El token del PIN de administrador se separa por propósito: uno emitido para
   cancelar (o devolver) una orden no sirve para cerrar la caja, ni al revés.
 - En la revisión del cierre, un administrador con PIN configurado solo entra
-  con su PIN; sin PIN se sigue aceptando su contraseña (C1).
+  con su PIN; sin PIN se sigue aceptando su contraseña.
 """
 
 from __future__ import annotations
@@ -149,7 +149,7 @@ async def test_validar_pin_admin_emite_el_token_con_su_proposito(
 async def test_validar_pin_admin_sin_proposito_emite_para_cancelar(
     monkeypatch: pytest.MonkeyPatch, pin_admin: AsyncMock
 ) -> None:
-    """Retrocompatibilidad: los llamadores anteriores a A16 eran las
+    """Retrocompatibilidad: los llamadores anteriores a la separación por propósito eran las
     cancelaciones de órdenes cobradas (el cierre ya manda ``cerrar``)."""
     _buscar(monkeypatch, _autorizador())
     await turnos_caja_service.validar_pin_admin(

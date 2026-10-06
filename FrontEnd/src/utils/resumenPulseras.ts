@@ -1,7 +1,7 @@
 import type { PulseraAdmin } from '@/types/pulsera'
 
 /**
- * Pulseras de la sucursal para la tarjeta de Inicio (UX de la ola 4).
+ * Pulseras de la sucursal para la tarjeta de Inicio.
  *
  * Las pulseras son de un solo uso (`repositories/pulseras.py`): una vez
  * asignada a un niño ya no vuelve a estar libre. Antes la tarjeta decía

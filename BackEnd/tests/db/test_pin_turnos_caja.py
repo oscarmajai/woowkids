@@ -1,4 +1,4 @@
-"""A16 / N2 / B15 contra PostgreSQL real.
+"""PIN de caja y apertura de turnos contra PostgreSQL real.
 
 - Límite de intentos de PIN persistido en BD: N validaciones simultáneas con
   PIN equivocado (cada una con su conexión, como varios workers) registran
@@ -6,7 +6,7 @@
   correcto pasa.
 - El administrador que autoriza se busca solo en la sucursal del turno y debe
   tener permiso de autorizar cierres.
-- N2: aperturas simultáneas ya no dan 500 por los índices únicos.
+- Aperturas simultáneas no dan 500 por los índices únicos.
 """
 
 import asyncio
@@ -144,7 +144,7 @@ async def test_un_acierto_limpia_los_fallos(pool: asyncpg.Pool, escenario: Escen
         for _ in range(pin_caja_service.MAX_FALLOS - 1):
             with pytest.raises(PinInvalidoError):
                 await turnos_caja_service.validar_pin_cajero(conn, user_id, apertura_id, "0000")
-        # La contraseña tampoco vale: el cajero ya tiene PIN (A16). Cuenta como fallo.
+        # La contraseña tampoco vale: el cajero ya tiene PIN. Cuenta como fallo.
         with pytest.raises(PinInvalidoError):
             await turnos_caja_service.validar_pin_cajero(
                 conn, user_id, apertura_id, "contraseña-larga"
@@ -320,7 +320,7 @@ async def test_cajeros_distintos_abriendo_la_misma_caja_dan_una_y_409(
 async def test_abrir_con_turno_abierto_valida_pin_y_rechaza_otra_caja(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
-    """B15: antes devolvía 201 con el turno existente sin validar PIN ni caja."""
+    """No devuelve 201 con el turno existente sin validar PIN ni caja."""
     await _poner_pin(pool, escenario.usuario_id)
     caja1, _, turno_id = await _caja_y_turno(pool, escenario.sucursal_id)
     caja2, _, _ = await _caja_y_turno(pool, escenario.sucursal_id)

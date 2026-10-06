@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 076_codigos_acceso_padres.sql
--- A17: el código del QR del portal de padres era el UUID del registro, impreso
+-- El código del QR del portal de padres era el UUID del registro, impreso
 -- en el comprobante y sin caducidad. Ahora es un código opaco y aleatorio que
 -- se emite al registrar la entrada. Solo se guarda su sha256 (nunca el código
 -- en claro). Deja de valer cuando:

@@ -1,7 +1,7 @@
 -- 021_productos_combo.sql
 -- FIX urgente: app/repositories/producto_repository.py y
--- app/repositories/combo_repository.py (mergeados en develop vía PR #3,
--- "feat: migrar almacenamiento de archivos a MinIO + productos combo")
+-- app/repositories/combo_repository.py (llegaron junto con el
+-- almacenamiento de archivos en MinIO y los productos combo)
 -- ya leen/escriben productos.es_combo y la tabla producto_combo, pero
 -- ninguna migración las había creado — cualquier alta/edición de producto
 -- rompe con UndefinedColumnError desde ese merge. Esta migración cierra

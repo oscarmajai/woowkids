@@ -1,5 +1,5 @@
 /**
- * Fechas de calendario en la zona horaria de la sucursal (M4).
+ * Fechas de calendario en la zona horaria de la sucursal.
  *
  * `new Date().toISOString()` da la fecha UTC: en México, después de las 18:00
  * ya es "mañana" y los reportes de "hoy" se quedaban sin las ventas del día.
@@ -33,7 +33,7 @@ export function primerDiaDelMesEnZona(zona?: string, momento: Date = new Date())
 }
 
 /**
- * B1: true si `desde` es posterior a `hasta` (fechas AAAA-MM-DD). Con alguna
+ * `true` si `desde` es posterior a `hasta` (fechas AAAA-MM-DD). Con alguna
  * vacía no se considera invertido.
  */
 export function rangoFechasInvertido(desde?: string | null, hasta?: string | null): boolean {

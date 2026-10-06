@@ -56,7 +56,7 @@ beforeEach(() => {
   iniciarSesion()
 })
 
-describe('registro de entrada: carga propia de pulseras (A14)', () => {
+describe('registro de entrada: carga propia de pulseras', () => {
   it('sin estado previo (URL directa / F5) carga pulseras y tarifas por sí mismo', async () => {
     const store = useRegistrationStore()
     expect(store.pulseras).toHaveLength(0)
@@ -111,7 +111,7 @@ describe('registro de entrada: carga propia de pulseras (A14)', () => {
   })
 })
 
-describe('registro de entrada: validación de pulsera escaneada (B14)', () => {
+describe('registro de entrada: validación de pulsera escaneada', () => {
   async function storeConNinos() {
     const store = useRegistrationStore()
     await store.cargarDatosIniciales()

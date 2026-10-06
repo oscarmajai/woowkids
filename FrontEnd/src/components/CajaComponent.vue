@@ -309,15 +309,15 @@ const {
   nombreCliente,
 } = useTicketComanda()
 
-// Mesa del pedido (B9 B.2), opcional: igual que nombreCliente, vive en el
+// Mesa del pedido, opcional: igual que nombreCliente, vive en el
 // componente (no en el carrito) porque no afecta el cálculo del ticket.
 const mesa = ref('')
 
 const { comandasActivas, productos, refrescarComandas } = useCajaMetrics()
 
-// disponible_estimado (C1 #3) viene directo del catálogo de venta (cada
+// disponible_estimado viene directo del catálogo de venta (cada
 // producto), no de /insumos/estimaciones -- ese endpoint exige inventario:ver
-// y el Cajero no lo tiene, así que nunca veía la estimación aquí.
+// y el Cajero no lo tiene, así que no vería la estimación aquí.
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -358,7 +358,7 @@ const notasDialog = ref(false)
 const itemEditando = ref<ItemTicket | null>(null)
 const notasTemp = ref('')
 
-// La caja muestra A (Alimento), B (Bebida), S (Servicio, M14) y combos.
+// La caja muestra A (Alimento), B (Bebida), S (Servicio) y combos.
 const listaCategorias: { value: TipoProducto | 'Todos'; label: string }[] = [
   { value: 'Todos', label: 'Todos' },
   { value: 'A', label: 'Alimentos' },
@@ -663,15 +663,15 @@ const procesarPago = async (
     const totalFinal = redondear2(totalBruto - descuentoPuntos)
 
     const payload: PagoCompletoRequest = {
-      // QA #21: el backend asigna el folio secuencial por sucursal; ya no se
-      // genera ticket_numero aquí.
+      // El backend asigna el folio secuencial por sucursal; ticket_numero no se
+      // genera aquí.
       total_final: totalFinal,
       detalles_comanda: detalles,
       pagos: pagos.map((p) => ({
         metodo_pago_id: mapearMetodoPago(p.method),
         monto: p.amount,
         // Métodos con referencia obligatoria (transferencia, etc.): el folio
-        // viaja en authCode; el backend la exige (M11).
+        // viaja en authCode; el backend la exige.
         notas_pago: p.cardType ? `${p.cardType} - Folio: ${p.authCode ?? ''}` : (p.authCode ?? ''),
         ...(p.ultimos4 ? { ultimos4: p.ultimos4 } : {}),
       })),
@@ -732,7 +732,7 @@ const procesarPago = async (
   }
 }
 
-// C2: el backend cobra con el catálogo y rechaza (409/422, sin cobrar) un
+// El backend cobra con el catálogo y rechaza (409/422, sin cobrar) un
 // pedido con precios viejos o productos que ya no están. Se muestra su
 // mensaje, se recarga el catálogo y se actualiza el pedido para que el cajero
 // revise el total nuevo y vuelva a cobrar.

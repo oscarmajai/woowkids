@@ -62,7 +62,7 @@ function montar() {
   return { wrapper, store: useRegistrationStore() }
 }
 
-describe('RegistrationPage: abierta por URL o tras F5 (A14)', () => {
+describe('RegistrationPage: abierta por URL o tras F5', () => {
   beforeEach(() => {
     vi.mocked(fetchPulseras).mockReset()
     vi.mocked(productosApi.obtenerPreciosEstancia)

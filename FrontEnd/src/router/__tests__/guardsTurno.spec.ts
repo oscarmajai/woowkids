@@ -4,8 +4,8 @@ import type { RouteLocationNormalized, Router } from 'vue-router'
 import { setupRouterGuards } from '@/router/guards'
 
 /**
- * B4: GET /turnos-caja/activo se pedía en cada página para roles que no pueden
- * consultarlo (error en consola). El guard ya no lo pide sin el permiso.
+ * El guard no pide GET /turnos-caja/activo en cada página a los roles que no
+ * pueden consultarlo (solo daría un error en consola).
  */
 
 const permisos = new Set<string>()
@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('guard de turno (B4)', () => {
+describe('guard de turno', () => {
   it('sin turnos_caja:ver_activo no consulta el turno', async () => {
     const resultado = await guard()(ruta({ requiresTurno: true }))
 

@@ -1,4 +1,4 @@
-"""Q6 (UX de administración de usuarios): nadie se elimina a sí mismo, el
+"""UX de administración de usuarios: nadie se elimina a sí mismo, el
 usuario trae las sucursales de un Administrador y la sucursal el correo de su
 administrador (no solo el suyo)."""
 

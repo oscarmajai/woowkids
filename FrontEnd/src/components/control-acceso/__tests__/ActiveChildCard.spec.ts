@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActiveChild } from '@/stores/accessControl'
 
 /**
- * B21: "Checkout" sin turno mandaba a Apertura y Cierre; un rol sin
- * pos:acceder (atención de niños) rebotaba de ahí a Inicio sin explicación.
+ * "Checkout" sin turno: a un rol sin pos:acceder (atención de niños) no se le
+ * manda a Apertura y Cierre, porque de ahí rebotaría a Inicio sin explicación.
  */
 
 const notify = vi.fn()

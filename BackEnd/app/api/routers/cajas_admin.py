@@ -69,7 +69,7 @@ _CAJA_CON_TURNO = HTTPException(
 
 
 async def _asegurar_sin_turno_activo(conn: asyncpg.Connection, caja_id: str) -> None:
-    """M9: una caja con turno ABIERTA o EN_CORTE no se desactiva (dejaba al
+    """Una caja con turno ABIERTA o EN_CORTE no se desactiva (dejaría al
     cajero operando una caja que ya no existe para el resto del sistema).
     Debe correr dentro de una transacción: bloquea la caja para que una
     apertura en curso termine antes de revisar."""
@@ -87,7 +87,7 @@ def _branch_id(current_user: TokenData) -> str:
 def _asegurar_caja_editable(current_user: TokenData, caja: dict[str, Any] | None) -> None:
     """404 si la caja no existe o no es de la sucursal de la sesión.
 
-    N14: el AdministradorSistema edita cualquier caja con la sucursal de la
+    El AdministradorSistema edita cualquier caja con la sucursal de la
     propia caja (antes exigía una sucursal en la sesión: 400 SIN_SUCURSAL en la
     vista "Todas las sucursales")."""
     if caja is None:
@@ -99,9 +99,9 @@ def _asegurar_caja_editable(current_user: TokenData, caja: dict[str, Any] | None
 
 
 def _resolver_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> str | None:
-    """D1.1: AdministradorSistema puede consultar cualquier sucursal vía el
+    """AdministradorSistema puede consultar cualquier sucursal vía el
     parámetro opcional; el resto solo la suya (403 si pide otra). Sin el
-    parámetro, la sucursal de la sesión; N14: el AdministradorSistema sin
+    parámetro, la sucursal de la sesión; el AdministradorSistema sin
     sucursal elegida ve las de todas (None)."""
     if sucursal_id is None:
         if current_user.role == ROL_SISTEMA and current_user.branch_id is None:

@@ -1,10 +1,10 @@
-"""A5 / A15 / A16 (pruebas E2E 2026-10-03): validación de PIN de caja.
+"""Validación de PIN de caja.
 
-- A5: un PIN mal escrito responde 403 (PIN_INVALIDO / CREDENCIALES_INVALIDAS),
+- Un PIN mal escrito responde 403 (PIN_INVALIDO / CREDENCIALES_INVALIDAS),
   nunca 401, que el front reserva para la sesión vencida.
-- A15: cancelar (y el resto del cierre) solo lo hace el dueño del turno o
+- Cancelar (y el resto del cierre) solo lo hace el dueño del turno o
   quien autoriza cierres en esa sucursal.
-- A16: validar-pin-* exigen permiso de caja; con PIN configurado no vale la
+- validar-pin-* exigen permiso de caja; con PIN configurado no vale la
   contraseña; límite de intentos; el administrador se busca solo en la
   sucursal del turno y debe tener permiso de autorizar.
 """
@@ -114,7 +114,7 @@ def test_hash_invalido_no_revienta() -> None:
 
 
 def test_errores_de_pin_no_son_401() -> None:
-    """A5: el 401 dispara refresh + reenvío + logout en el interceptor del front."""
+    """El 401 dispara refresh + reenvío + logout en el interceptor del front."""
     assert PinInvalidoError().status_code == 403
     assert PinInvalidoError().detail["code"] == "PIN_INVALIDO"
     assert turnos_caja_service.CredencialesAdminInvalidasError().status_code == 403
@@ -359,7 +359,7 @@ async def test_validar_pin_cajero_rechaza_la_contraseña_y_turnos_ajenos(
     assert limite.tipos == ["cajero"]
 
 
-# ── A15: cancelar el conteo de otra cajera ──────────────────────────────────
+# ── Cancelar el conteo de otra cajera ───────────────────────────────────────
 
 
 @pytest.fixture

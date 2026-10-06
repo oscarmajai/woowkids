@@ -1,8 +1,8 @@
-"""Reglas de precio y cobro de reservaciones calculadas en el servidor (C2/C3).
+"""Reglas de precio y cobro de reservaciones calculadas en el servidor.
 
-Los casos con números reales salen de las reservaciones de las pruebas E2E del
-2026-10-03 (R-0008 y R-0009): el cálculo del servidor debe dar exactamente lo
-que cobró el asistente de alta del frontend."""
+Los casos con números reales salen de reservaciones de ejemplo (R-0008 y
+R-0009): el cálculo del servidor debe dar exactamente lo que cobra el
+asistente de alta del frontend."""
 
 from datetime import time
 from decimal import Decimal
@@ -70,7 +70,7 @@ def test_desglose_r0009_premium_cuatro_horas() -> None:
     assert desglose.precio_total == Decimal("13815.00")
 
 
-def test_m15_extra_por_persona_se_cobra_por_cada_invitado() -> None:
+def test_extra_por_persona_se_cobra_por_cada_invitado() -> None:
     # R-0008: "Bolsita de dulces" ($35 por persona) para 12 niños = $420, no $35.
     desglose = rp.calcular_desglose(
         _paquete(),
@@ -84,7 +84,7 @@ def test_m15_extra_por_persona_se_cobra_por_cada_invitado() -> None:
     assert desglose.precio_total == Decimal("8000.00")
 
 
-def test_m15_extra_por_hora_se_cobra_por_cada_hora_facturable() -> None:
+def test_extra_por_hora_se_cobra_por_cada_hora_facturable() -> None:
     # R-0009: "Animador adicional" ($350 por hora) en un evento de 4 h = $1,400.
     desglose = rp.calcular_desglose(
         _paquete(precio_base=Decimal("6900.00"), precio_hora_pulsera=Decimal("60.00")),
@@ -105,7 +105,7 @@ def test_cantidad_extra_segun_unidad(unidad: str | None, actual: int, esperado: 
     assert rp.cantidad_extra(unidad, 12, 3, actual) == esperado
 
 
-def test_m15_recalcular_extras_al_cambiar_invitados_y_horas() -> None:
+def test_recalcular_extras_al_cambiar_invitados_y_horas() -> None:
     extras = [
         rp.ExtraCobrado(id="bolsita", unidad="persona", precio_unitario=Decimal("35"), cantidad=12),
         rp.ExtraCobrado(id="animador", unidad="hora", precio_unitario=Decimal("350"), cantidad=3),

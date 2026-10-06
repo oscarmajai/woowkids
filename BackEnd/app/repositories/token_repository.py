@@ -29,7 +29,7 @@ async def is_token_revoked(conn: asyncpg.Connection, jti: str) -> bool:
 async def get_estado_sesion(
     conn: asyncpg.Connection, jti: str, usuario_id: UUID | None
 ) -> tuple[bool, bool, bool]:
-    """A11: en una sola consulta, si el token está revocado y si su usuario
+    """En una sola consulta, si el token está revocado y si su usuario
     existe y sigue activo. ``usuario_id=None`` (sesión de padre, cuyo ``sub``
     no es un usuario) no consulta usuarios y lo da por activo.
 

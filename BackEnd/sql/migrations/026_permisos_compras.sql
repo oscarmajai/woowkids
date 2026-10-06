@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 026_permisos_compras.sql
--- Completa el permiso de inventario que faltaba desde fase 1 (§3.3 de
--- INVENTARIO_DISENO.md): gestionar órdenes de compra a proveedor.
+-- Completa el permiso de inventario que faltaba desde la fase 1: gestionar
+-- órdenes de compra a proveedor.
 -- =============================================================================
 
 INSERT INTO public.permisos (codigo, nombre, modulo) VALUES

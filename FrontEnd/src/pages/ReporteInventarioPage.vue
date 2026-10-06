@@ -215,7 +215,7 @@ const valorInventario = computed(() =>
   ),
 )
 
-// B6: las parciales también tienen mercancía por llegar.
+// Las parciales también tienen mercancía por llegar.
 const comprasPendientes = computed(() =>
   comprasStore.compras.filter((c) => compraPorRecibir(c.estado)),
 )

@@ -1,4 +1,4 @@
-"""Regresiones encontradas al poblar una sucursal completa por la API."""
+"""Casos de borde al dar de alta una sucursal completa por la API."""
 
 import json
 from decimal import Decimal

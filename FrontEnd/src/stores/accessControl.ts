@@ -112,7 +112,7 @@ export const useAccessControlStore = defineStore('accessControl', () => {
     if (!ok && puedeVerPulseras.value) error.value ??= 'No se pudo cargar la lista de pulseras.'
   }
 
-  // ── Pulseras libres (A14) ────────────────────────────────────────────────
+  // ── Pulseras libres ──────────────────────────────────────────────────────
   // El registro de entrada las necesita aunque se abra por URL o tras F5, sin
   // pasar antes por Control de Acceso o Inicio. `pulserasCargadas` dice si la
   // lista actual viene del servidor (y de qué sucursal), para no volver a

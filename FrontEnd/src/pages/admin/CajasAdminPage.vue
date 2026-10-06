@@ -270,7 +270,7 @@ import type { FilterChip } from '@/types/ui'
 const $q = useQuasar()
 const auth = useAuthStore()
 
-// N14: el AdministradorSistema sin sucursal elegida ve y edita las cajas de
+// El AdministradorSistema sin sucursal elegida ve y edita las cajas de
 // todas las sucursales; para crear una necesita elegir la sucursal.
 const vistaTodas = computed(() => auth.isSistema && !auth.currentBranchId)
 const puedeCrear = computed(() => auth.hasPermission('cajas:crear') && !vistaTodas.value)

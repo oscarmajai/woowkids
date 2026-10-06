@@ -1,4 +1,4 @@
-"""Tramos de precio de la estancia infantil (issue #32).
+"""Tramos de precio de la estancia infantil.
 
 El producto de estancia (tipo 'E') define sus precios en `config_estancia`:
 una lista de tramos `{min_horas, max_horas, precio}`. El precio de un tramo es
@@ -10,7 +10,7 @@ Si un producto no tiene tramos configurados (config_estancia NULL o vacío) pero
 sí un `precio_unitario` mayor a cero, se usa un tramo único por hora con ese
 precio, en lugar de impedir el check-in de toda la sucursal.
 
-Tramos contiguos (UX de la ola 4): la pantalla de productos ya acepta rangos
+Tramos contiguos: la pantalla de productos ya acepta rangos
 que comparten un extremo ("0-1 h" y "1-2 h"), porque los compara como
 semiabiertos. Para que el precio no dependa del orden en que se guardaron, la
 búsqueda recorre los tramos ordenados por `min_horas` y toma el primero que

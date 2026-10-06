@@ -1,5 +1,5 @@
 -- 049_pagos_idempotencia.sql
--- Soporta el header Idempotency-Key de POST /pagos/completar (QA #20).
+-- Soporta el header Idempotency-Key de POST /pagos/completar.
 -- Si la clave ya existe con el mismo hash de payload, el backend devuelve la
 -- comanda original sin volver a cobrar; si existe con otro hash, 409.
 

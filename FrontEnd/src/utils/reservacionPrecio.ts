@@ -24,10 +24,10 @@ export function fechaLimiteLiquidacionTexto(fechaEvento: string): string {
 }
 
 /**
- * Aviso del comprobante cuando queda saldo. N-A2 (prueba E2E de v1.2.0): decía
- * "El saldo se liquida el día del evento", pero el sistema cancela la
- * reservación si sigue debiendo una semana antes; el cliente confiaba en el
- * papel y llegaba a una fiesta cancelada.
+ * Aviso del comprobante cuando queda saldo. Nombra la fecha límite y la
+ * cancelación: el sistema cancela la reservación si sigue debiendo una semana
+ * antes del evento, así que el aviso no puede decir que el saldo se liquida el
+ * día del evento.
  */
 export function avisoLiquidacion(fechaLimite?: string | null): string {
   const cuando = fechaLimite
@@ -49,7 +49,7 @@ export const PORCENTAJE_ANTICIPO_MINIMO = 30
 
 /**
  * Porcentaje mínimo de anticipo de un paquete: el 30 % del negocio o el del
- * paquete si es mayor (M16). Misma regla que valida el servidor.
+ * paquete si es mayor. Misma regla que valida el servidor.
  */
 export function porcentajeAnticipoMinimo(
   anticipoPorcentajePaquete?: string | number | null,
@@ -82,7 +82,7 @@ export function diasParaEvento(fechaEvento: string, hoy = new Date()): number {
 /**
  * A 7 días o menos del evento ya no hay plazo para "liquidar después": se cobra
  * el 100 % al reservar. Si no, la reservación se cancelaría sola por falta de
- * pago en menos de una hora (C3). El servidor aplica la misma regla.
+ * pago en menos de una hora. El servidor aplica la misma regla.
  */
 export function exigeLiquidacionAlReservar(dias: number): boolean {
   return dias <= DIAS_LIMITE_LIQUIDACION
@@ -127,7 +127,7 @@ export function calcularPulseras(
 }
 
 /**
- * Desglose del cargo de pulseras guardado en `precio_personas_extra` (B19):
+ * Desglose del cargo de pulseras guardado en `precio_personas_extra`:
  * "12 × 3 h a $70.00". La columna conserva su nombre por compatibilidad, pero
  * desde la migración 034 es tarifa por hora × invitados × horas, no un cargo
  * por "personas extra". La tarifa se deduce del importe para no depender de la
@@ -149,7 +149,7 @@ export function detallePulseras(
 export type UnidadExtra = 'evento' | 'persona' | 'hora'
 
 /**
- * Veces que se cobra un extra según su unidad (M15): "persona" una por
+ * Veces que se cobra un extra según su unidad: "persona" una por
  * invitado, "hora" una por hora del evento (mínimo 1) y "evento" (o una unidad
  * desconocida) se conserva `actual`, que en el alta es 1. Misma regla que el
  * servidor (`cantidad_extra` en `reservacion_precio.py`).
@@ -202,7 +202,7 @@ export interface CambioReservacion {
  * manda: si no coincide, el PATCH responde 409 con el precio real.
  *
  * `extras`: los extras guardados de la reservación con su unidad. Los que se
- * cobran por persona o por hora cambian con invitados u horas (M15), igual que
+ * cobran por persona o por hora cambian con invitados u horas, igual que
  * en el servidor. Si no se pasan (o no hay), se conserva `precio_extras`.
  *
  * Devuelve también `anticipoExcede`: si el total nuevo queda por debajo de lo
@@ -272,10 +272,10 @@ export function faltanPulserasHoy(
 }
 
 /**
- * Lo que falta por cobrar de un conjunto de reservaciones, una vez cada una
- * (N13). Una reservación cancelada no tiene adeudo que cobrar aunque tenga
+ * Lo que falta por cobrar de un conjunto de reservaciones, una vez cada una.
+ * Una reservación cancelada no tiene adeudo que cobrar aunque tenga
  * pagos y su saldo no sea cero, así que no cuenta (igual que en el diálogo de
- * Registrar pago, B16).
+ * Registrar pago).
  */
 export function resumenPorCobrar(
   reservaciones: Pick<Reservaciones, 'id' | 'estado' | 'saldo_pendiente'>[],

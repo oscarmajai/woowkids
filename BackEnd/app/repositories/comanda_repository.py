@@ -134,7 +134,7 @@ async def crear_comanda_con_detalles(
             detalles_procesados if detalles_procesados is not None else comanda_in.detalles_comanda
         )
 
-        # M13: cada hijo de combo apunta a su renglón padre. Los ids se generan
+        # Cada hijo de combo apunta a su renglón padre. Los ids se generan
         # antes de insertar para poder enlazarlos. Se respeta el orden del
         # pedido (el que ven cocina y el ticket), salvo un hijo que llegó antes
         # que su padre: va al final, porque la FK no es diferible.
@@ -205,7 +205,7 @@ async def bloquear_comanda(conn: asyncpg.Connection, comanda_id: str) -> dict[st
     """Como get_estado_comanda, pero con la fila bloqueada (FOR UPDATE) hasta
     el fin de la transacción en curso (el llamador DEBE estar dentro de
     `conn.transaction()`). Serializa los cambios de estado: dos cancelaciones
-    simultáneas no pueden revertir el stock dos veces (A2)."""
+    simultáneas no pueden revertir el stock dos veces."""
     row = await conn.fetchrow(_SELECT_ESTADO + " FOR UPDATE", uuid.UUID(comanda_id))
     return dict(row) if row else None
 
@@ -263,7 +263,7 @@ async def modificar_comanda_parcial(
 ) -> Comanda | None:
     """Elimina productos específicos de una comanda en estado 'P'.
 
-    B5: si viene `modificado_esperado` y la comanda (ya bloqueada) tiene otro
+    Si viene `modificado_esperado` y la comanda (ya bloqueada) tiene otro
     `modificado`, lanza ComandaModificadaError sin tocar nada.
 
     Si tras eliminar los productos seleccionados no quedan detalles activos,

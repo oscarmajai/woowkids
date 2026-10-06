@@ -1,8 +1,9 @@
-"""A12 / M23: recepción parcial de compras contra PostgreSQL real.
+"""Recepción parcial de compras contra PostgreSQL real.
 
-A12: una línea en 0 (o ausente de la lista) se recibía completa porque el back
-interpretaba "línea ausente" como "todo lo pendiente".
-M23: pedir más de lo pendiente recibía lo pendiente en silencio; ahora 422."""
+- Una línea en 0 (o ausente de la lista) no se recibe: "línea ausente" no
+  significa "todo lo pendiente".
+- Pedir más de lo pendiente responde 422 en vez de recibir lo pendiente en
+  silencio."""
 
 import uuid
 from decimal import Decimal

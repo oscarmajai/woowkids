@@ -398,7 +398,7 @@ onMounted(() => {
   // El precio por hora de la pulsera vive en el paquete, no en la reservación:
   // hace falta para recalcular al agregar horas o cambiar invitados.
   paquetesStore.cargar(authStore.currentBranchId)
-  // La unidad de cada extra (por persona / por hora) vive en el catálogo (M15).
+  // La unidad de cada extra (por persona / por hora) vive en el catálogo.
   extrasStore.cargar(authStore.currentBranchId)
 })
 
@@ -443,7 +443,7 @@ const horasEdit = ref(1)
 
 const sinTarifaPulsera = computed(() => parseFloat(tarifaPulsera(seleccionada.value)) <= 0)
 
-// ── Extras de la reservación elegida (M15) ───────────────────────────────────
+// ── Extras de la reservación elegida ─────────────────────────────────────────
 // Los extras por persona o por hora cambian con invitados u horas, así que la
 // vista previa necesita los que tiene guardados la reservación. Si no se pueden
 // cargar, la vista previa conserva el precio de extras actual y el servidor
@@ -500,7 +500,7 @@ const desgloseHoras = computed(() => {
 
   const n = (v: string) => parseFloat(v) || 0
   const totalDespues = Number(nuevo.precio_total)
-  // Todo lo cobrado (anticipo + abonos - cambio), no solo el anticipo (C3).
+  // Todo lo cobrado (anticipo + abonos - cambio), no solo el anticipo.
   const pagado = n(r.monto_pagado)
   const ajuste = nuevo.horas_reservadas - r.horas_reservadas
 

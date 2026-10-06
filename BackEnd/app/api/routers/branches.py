@@ -222,7 +222,8 @@ async def exportar_indicadores_endpoint(
     current_user: TokenData = Depends(require_permission("sucursales:ver")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> StreamingResponse:
-    """Mismos indicadores de `/indicadores` (B5/C2), como descarga CSV (patrón B7)."""
+    """Mismos indicadores de `/indicadores`, como descarga CSV (mismo patrón
+    que los demás reportes)."""
     try:
         fila, nombre = await exportar_indicadores(conn, sucursal_id, desde, hasta, current_user)
     except BranchNotFoundError:

@@ -6,9 +6,9 @@ import AutenticacionAdminForm from '@/components/cierre-caja/AutenticacionAdminF
 import BaseDialog from '@/components/ui/BaseDialog.vue'
 
 /**
- * UX caja: el "Cancelar" del diálogo "Autorización de administrador" llamaba a
- * cancelarConteo() y tiraba todo el conteo enviado. Ahora solo cierra el
- * diálogo; el aviso de espera sigue ofreciendo "Cancelar y corregir conteo".
+ * El "Cancelar" del diálogo "Autorización de administrador" solo cierra el
+ * diálogo: no llama a cancelarConteo() ni tira el conteo enviado. El aviso de
+ * espera sigue ofreciendo "Cancelar y corregir conteo".
  */
 
 const turno = reactive({

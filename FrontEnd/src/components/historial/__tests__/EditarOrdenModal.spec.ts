@@ -86,7 +86,7 @@ describe('EditarOrdenModal', () => {
     mockDetalle.mockResolvedValue(structuredClone(ORDEN))
   })
 
-  it('M13 + B5: quita solo el combo elegido con sus productos y manda la versión leída', async () => {
+  it('quita solo el combo elegido con sus productos y manda la versión leída', async () => {
     mockModificar.mockResolvedValueOnce({} as never)
     await quitarSegundoCombo()
 
@@ -95,7 +95,7 @@ describe('EditarOrdenModal', () => {
     })
   })
 
-  it('B5: si la orden cambió en otra pestaña, la recarga y avisa', async () => {
+  it('si la orden cambió en otra pestaña, la recarga y avisa', async () => {
     mockModificar.mockRejectedValueOnce({
       statusCode: 409,
       code: 'COMANDA_MODIFICADA',

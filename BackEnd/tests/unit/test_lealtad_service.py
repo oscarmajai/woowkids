@@ -1,5 +1,5 @@
 """Pruebas unitarias de app.services.lealtad_service con mocks del
-repository (sin BD). Cubren el ajuste manual de puntos (WP B4), el mínimo de
+repository (sin BD). Cubren el ajuste manual de puntos, el mínimo de
 canje y el KPI de puntos por vencer."""
 
 from datetime import UTC, datetime

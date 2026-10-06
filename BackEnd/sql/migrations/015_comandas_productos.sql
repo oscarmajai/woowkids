@@ -1,9 +1,7 @@
 -- 015_comandas_productos.sql
 -- Esquema del módulo comandas (productos, comandas, detalles_comanda).
--- No existe ninguna migración versionada para este módulo en el historial del
--- repo (ni en integration/develop ni en ninguna feature branch); se infiere de
--- las columnas que asumen app/repositories/producto_repository.py, productos.py
--- y comanda_repository.py. Revisar contra la BD compartida real si difiere.
+-- Se infiere de las columnas que asumen app/repositories/producto_repository.py,
+-- productos.py y comanda_repository.py.
 
 CREATE TABLE IF NOT EXISTS public.productos (
     id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),

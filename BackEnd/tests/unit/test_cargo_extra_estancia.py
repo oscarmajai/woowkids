@@ -1,6 +1,6 @@
 """Pruebas unitarias de _calcular_cargo_extra_sync (app/services/chekouts.py):
 función pura que calcula el excedente de una estancia, compartida por
-cotizar_checkout (caja) y por el portal de padres (B2 #1), para que ambos no
+cotizar_checkout (caja) y por el portal de padres, para que ambos no
 puedan desincronizarse de la misma fórmula."""
 
 from datetime import UTC, datetime, timedelta

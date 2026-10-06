@@ -1,4 +1,4 @@
-"""Shapes para POST /reservaciones/completa (QA #10): alta atómica de la
+"""Shapes para POST /reservaciones/completa: alta atómica de la
 reservación junto con sus extras, productos y pagos (anticipo) en una sola
 transacción -- mismo problema que resolvió pagos_reservacion.completar() para
 los cobros, pero para el alta completa."""
@@ -21,7 +21,7 @@ class ReservacionCompletaExtraItem(BaseModel):
     extra_id: UUID
     # El servidor cobra cada extra al precio de catálogo y con la cantidad que
     # marca su unidad: por persona = invitados, por hora = horas del evento,
-    # por evento = 1 (M15). Se aceptan por compatibilidad, pero no se usan.
+    # por evento = 1. Se aceptan por compatibilidad, pero no se usan.
     cantidad: int = Field(1, ge=1)
     precio_unitario: Decimal | None = Field(None, ge=0)
 
@@ -29,7 +29,7 @@ class ReservacionCompletaExtraItem(BaseModel):
 class ReservacionCompletaProductoItem(BaseModel):
     producto_id: UUID
     cantidad: int = Field(..., ge=1)
-    # Se ignora: el precio sale del catálogo del producto (C2).
+    # Se ignora: el precio sale del catálogo del producto.
     precio_unitario: Decimal | None = Field(None, ge=0)
     notas: str | None = None
 

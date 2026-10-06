@@ -47,7 +47,7 @@ async def crear_proveedor(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_proveedores")),
 ) -> ProveedorOut:
-    # C1: el proveedor se crea en la sucursal de la sesión; otra → 403.
+    # El proveedor se crea en la sucursal de la sesión; otra → 403.
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await proveedor_service.crear(conn, body, current_user)
 
@@ -59,7 +59,7 @@ async def actualizar_proveedor(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_proveedores")),
 ) -> ProveedorOut:
-    # M20: desactivar (activo=false) equivale a eliminar: exige el mismo
+    # Desactivar (activo=false) equivale a eliminar: exige el mismo
     # permiso que DELETE. Antes bastaba con el de gestionar.
     if body.activo is False:
         exigir_permiso(current_user, "inventario:eliminar_proveedor")

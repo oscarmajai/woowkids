@@ -1,11 +1,10 @@
-"""Extras y productos de una reservación ya levantada (N11), cantidad de los
-extras por persona / por hora (M15) y auditoría (M18), contra un PostgreSQL
-de verdad.
+"""Extras y productos de una reservación ya levantada, cantidad de los extras
+por persona / por hora y auditoría, contra un PostgreSQL de verdad.
 
-E2E: `POST/PATCH /reservacion-extras` y `/reservacion-productos` guardaban el
-precio del request y no movían el total; R-0008 cobró la "Bolsita de dulces"
-($35 por persona, 12 niños) como $35; `creado_por`/`modificado_por` quedaban
-en NULL. Requiere `TEST_DATABASE_URL`; sin ella se salta. Cada test crea y
+`POST/PATCH /reservacion-extras` y `/reservacion-productos` toman el precio del
+catálogo (no el del request) y mueven el total; un extra por persona ($35 por
+persona, 12 niños) se cobra por cada invitado, no como $35; `creado_por` y
+`modificado_por` se llenan. Requiere `TEST_DATABASE_URL`; sin ella se salta. Cada test crea y
 borra sus datos.
 """
 
@@ -52,7 +51,7 @@ async def esc(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO sucursales (id, nombre) VALUES ($1, $2)",
         ids["sucursal"],
-        f"QA partidas {ids['sucursal']}",
+        f"Prueba partidas {ids['sucursal']}",
     )
     await pg.execute(
         "INSERT INTO tipos_evento (id, nombre, sucursal_id) VALUES ($1, 'Cumpleaños', $2)",
@@ -68,9 +67,9 @@ async def esc(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     )
     await pg.execute(
         """INSERT INTO usuarios (id, email, password_hash, nombre_completo, rol)
-           VALUES ($1, $2, 'x', 'Cajera QA', 3)""",
+           VALUES ($1, $2, 'x', 'Cajera Prueba', 3)""",
         ids["usuario"],
-        f"{ids['usuario']}@qa.dev",
+        f"{ids['usuario']}@prueba.dev",
     )
     for clave, nombre, precio, unidad in (
         ("bolsita", "Bolsita de dulces", 35, "persona"),
@@ -88,7 +87,7 @@ async def esc(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
         )
     await pg.execute(
         "INSERT INTO productos (id, sucursal_id, nombre, precio_unitario, tipo) "
-        "VALUES ($1, $2, 'Pizza QA', 135, 'A')",
+        "VALUES ($1, $2, 'Pizza Prueba', 135, 'A')",
         ids["pizza"],
         ids["sucursal"],
     )
@@ -142,10 +141,10 @@ async def _reservacion(
 def _usuario(e: dict[str, Any]) -> TokenData:
     return TokenData(
         sub=str(e["usuario"]),
-        email="cajera@qa.dev",
+        email="cajera@prueba.dev",
         role="Cajero",
         branch_id=e["sucursal"],
-        jti="qa",
+        jti="prueba",
         exp=datetime.now(UTC) + timedelta(hours=1),
     )
 
@@ -158,10 +157,10 @@ async def _fila(pg: asyncpg.Connection, reservacion_id: uuid.UUID) -> asyncpg.Re
     )
 
 
-# ── N11 + M15: extras ────────────────────────────────────────────────────────
+# ── Extras ───────────────────────────────────────────────────────────────────
 
 
-async def test_n11_extra_toma_precio_de_catalogo_y_mueve_el_total(
+async def test_extra_toma_precio_de_catalogo_y_mueve_el_total(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc)
@@ -175,14 +174,14 @@ async def test_n11_extra_toma_precio_de_catalogo_y_mueve_el_total(
     # $35 de catálogo x 12 invitados, no $1 x 1 del request.
     assert out.precio_unitario == Decimal("35.00")
     assert out.cantidad == 12
-    assert out.creado_por == esc["usuario"]  # M18
+    assert out.creado_por == esc["usuario"]
     fila = await _fila(pg, rid)
     assert fila["precio_extras"] == Decimal("420.00")
     assert fila["precio_total"] == TOTAL_BASE + Decimal("420")
     assert fila["modificado_por"] == esc["usuario"]
 
 
-async def test_n11_extra_por_hora_y_actualizar_refresca_el_precio(
+async def test_extra_por_hora_y_actualizar_refresca_el_precio(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc)
@@ -202,7 +201,7 @@ async def test_n11_extra_por_hora_y_actualizar_refresca_el_precio(
     assert (await _fila(pg, rid))["precio_total"] == TOTAL_BASE + Decimal("1200")
 
 
-async def test_n11_total_del_cliente_que_no_coincide_responde_409_sin_guardar(
+async def test_total_del_cliente_que_no_coincide_responde_409_sin_guardar(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc)
@@ -232,7 +231,7 @@ async def test_n11_total_del_cliente_que_no_coincide_responde_409_sin_guardar(
     assert out.cantidad == 1
 
 
-async def test_n11_quitar_extra_recalcula_y_no_baja_de_lo_pagado(
+async def test_quitar_extra_recalcula_y_no_baja_de_lo_pagado(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc, pagado=TOTAL_BASE)
@@ -260,7 +259,7 @@ async def test_n11_quitar_extra_recalcula_y_no_baja_de_lo_pagado(
         ("confirmada", 5, "FUERA_DE_PLAZO"),
     ],
 )
-async def test_n11_respeta_estados_y_plazo(
+async def test_respeta_estados_y_plazo(
     pg: asyncpg.Connection, esc: dict[str, Any], estado: str, dias: int, code: str
 ) -> None:
     rid = await _reservacion(pg, esc, estado=estado, dias=dias)
@@ -279,10 +278,10 @@ async def test_n11_respeta_estados_y_plazo(
     assert exc.value.status_code == 409
 
 
-# ── N11: productos ───────────────────────────────────────────────────────────
+# ── Productos ────────────────────────────────────────────────────────────────
 
 
-async def test_n11_producto_toma_precio_de_catalogo_y_mueve_el_total(
+async def test_producto_toma_precio_de_catalogo_y_mueve_el_total(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc)
@@ -311,10 +310,10 @@ async def test_n11_producto_toma_precio_de_catalogo_y_mueve_el_total(
     assert (await _fila(pg, rid))["precio_total"] == TOTAL_BASE
 
 
-# ── M15: PATCH de invitados u horas ──────────────────────────────────────────
+# ── PATCH de invitados u horas ───────────────────────────────────────────────
 
 
-async def test_m15_patch_recalcula_extras_por_persona_y_por_hora(
+async def test_patch_recalcula_extras_por_persona_y_por_hora(
     pg: asyncpg.Connection, esc: dict[str, Any]
 ) -> None:
     rid = await _reservacion(pg, esc)
@@ -339,7 +338,7 @@ async def test_m15_patch_recalcula_extras_por_persona_y_por_hora(
     )
     assert out.precio_extras == Decimal("2375.00")
     assert out.precio_total == Decimal("10375.00")
-    assert out.modificado_por == esc["usuario"]  # M18
+    assert out.modificado_por == esc["usuario"]
     cantidades = dict(
         await pg.fetch(
             "SELECT extra_id, cantidad FROM reservacion_extras WHERE reservacion_id = $1", rid

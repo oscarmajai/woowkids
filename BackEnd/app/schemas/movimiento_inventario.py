@@ -10,8 +10,8 @@ from app.schemas.limites_inventario import DECIMALES_CANTIDAD, MAX_CANTIDAD
 
 class MovimientoManualCreate(BaseModel):
     tipo: Literal["E", "M"]  # E entrada manual | M merma
-    # M3: acotada a movimientos_inventario.cantidad numeric(12,3); antes 1e10 o
-    # 0.0004 respondían 500.
+    # Acotada a movimientos_inventario.cantidad numeric(12,3), para que valores
+    # como 1e10 o 0.0004 no respondan 500.
     cantidad: Decimal = Field(..., gt=0, le=MAX_CANTIDAD, decimal_places=DECIMALES_CANTIDAD)
     notas: str | None = None
 
@@ -34,10 +34,10 @@ class CogsRenglonOut(BaseModel):
 
 
 class ResumenCogsOut(BaseModel):
-    """KPIs agregados del reporte de costo de ventas (B7 pendiente #3).
+    """KPIs agregados del reporte de costo de ventas.
 
     `margen` = ventas - costo de ventas - merma. `merma` = merma manual +
-    faltante de conteos físicos (M24), con su desglose."""
+    faltante de conteos físicos, con su desglose."""
 
     ventas_totales: Decimal
     costo_ventas: Decimal

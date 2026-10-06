@@ -1,4 +1,4 @@
-"""A16 contra PostgreSQL real: segregación de funciones en el cierre de caja.
+"""Contra PostgreSQL real: segregación de funciones en el cierre de caja.
 
 - Un administrador que abrió caja no autoriza su propio cierre: lo autoriza
   otro administrador de la sucursal o un AdministradorSistema.
@@ -44,7 +44,7 @@ async def _usuario(
     pin_hash: str | None = PIN_HASH,
 ) -> tuple[uuid.UUID, str]:
     sufijo = uuid.uuid4().hex[:10]
-    email = f"a16.{rol}.{sufijo}@test.local"
+    email = f"segregacion.{rol}.{sufijo}@test.local"
     async with pool.acquire() as conn:
         usuario_id = await conn.fetchval(
             """
@@ -94,7 +94,7 @@ async def _otra_sucursal(pool: asyncpg.Pool) -> uuid.UUID:
     async with pool.acquire() as conn:
         return await conn.fetchval(  # type: ignore[no-any-return]
             "INSERT INTO public.sucursales (nombre) VALUES ($1) RETURNING id",
-            f"Otra sucursal A16 {uuid.uuid4().hex[:8]}",
+            f"Otra sucursal Segregacion {uuid.uuid4().hex[:8]}",
         )
 
 
@@ -161,7 +161,7 @@ async def test_revision_con_pin_configurado_no_acepta_la_contraseña(
         assert exc.value.status_code == 403
         assert "PIN configurado" in exc.value.detail["message"]
 
-        # C1: sin PIN se sigue aceptando la contraseña.
+        # Sin PIN se sigue aceptando la contraseña.
         resp = await _revisar(conn, apertura_id, dueno_id, sin_pin, PASSWORD)
         assert resp.autorizado is True  # type: ignore[attr-defined]
 
@@ -175,7 +175,7 @@ async def test_pin_admin_para_cerrar_no_lo_da_el_dueno_pero_si_para_cancelar(
             await turnos_caja_service.validar_pin_admin(
                 conn, apertura_id, dueno_email, PIN, proposito=PROPOSITO_CERRAR
             )
-        # La regla es del cierre; autorizar cancelaciones no cambia (fuera de A16).
+        # La regla es del cierre; autorizar cancelaciones no cambia.
         resp = await turnos_caja_service.validar_pin_admin(
             conn, apertura_id, dueno_email, PIN, proposito=PROPOSITO_CANCELAR
         )

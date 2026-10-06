@@ -1,11 +1,11 @@
-"""Estancias, ola 4 (paquete Q7), sin BD: los repositorios se simulan.
+"""Estancias, sin BD: los repositorios se simulan.
 
-- N4: el check-in sube la INE y las fotos de llegada a MinIO al final de la
+- El check-in sube la INE y las fotos de llegada a MinIO al final de la
   transacción; si algo falla antes no sube nada, y si falla después de subir
   (incluida la confirmación) borra lo subido.
-- N5: reimpresión del comprobante con un código nuevo del portal de padres.
-- N6: el check-in no acepta 0 horas.
-- N8: los cobros de estancia exigen la referencia si el método la pide (M11).
+- Reimpresión del comprobante con un código nuevo del portal de padres.
+- El check-in no acepta 0 horas.
+- Los cobros de estancia exigen la referencia si el método la pide.
 - Tramos contiguos: el precio no depende del orden de los tramos.
 """
 
@@ -140,10 +140,10 @@ async def _registrar(
     )
 
 
-# --- N4 ------------------------------------------------------------------------
+# --- Subida de fotos al final de la transacción --------------------------------
 
 
-async def test_n4_las_fotos_se_suben_despues_de_todos_los_insert(
+async def test_las_fotos_se_suben_despues_de_todos_los_insert(
     checkin: dict[str, Any],
 ) -> None:
     await _registrar(_onboarding())
@@ -159,7 +159,7 @@ async def test_n4_las_fotos_se_suben_despues_de_todos_los_insert(
     checkin["delete"].assert_not_awaited()
 
 
-async def test_n4_si_el_cobro_no_cuadra_no_sube_nada(checkin: dict[str, Any]) -> None:
+async def test_si_el_cobro_no_cuadra_no_sube_nada(checkin: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as exc:
         await _registrar(_onboarding(monto=1.0))
     assert exc.value.status_code == 409
@@ -168,7 +168,7 @@ async def test_n4_si_el_cobro_no_cuadra_no_sube_nada(checkin: dict[str, Any]) ->
     checkin["delete"].assert_awaited_once_with([])
 
 
-async def test_n4_si_la_transaccion_no_se_confirma_borra_lo_subido(
+async def test_si_la_transaccion_no_se_confirma_borra_lo_subido(
     checkin: dict[str, Any],
 ) -> None:
     with pytest.raises(_FalloAlConfirmarError):
@@ -179,7 +179,7 @@ async def test_n4_si_la_transaccion_no_se_confirma_borra_lo_subido(
     checkin["delete"].assert_awaited_once_with(subidas)
 
 
-async def test_n4_si_falla_una_subida_borra_las_anteriores(checkin: dict[str, Any]) -> None:
+async def test_si_falla_una_subida_borra_las_anteriores(checkin: dict[str, Any]) -> None:
     llamadas = 0
 
     async def falla_la_segunda(llave: str, *_args: Any) -> None:
@@ -195,24 +195,24 @@ async def test_n4_si_falla_una_subida_borra_las_anteriores(checkin: dict[str, An
     checkin["delete"].assert_awaited_once_with([primera])
 
 
-# --- N6 ------------------------------------------------------------------------
+# --- Horas del check-in --------------------------------------------------------
 
 
 @pytest.mark.parametrize("horas", [0, -1])
-def test_n6_el_checkin_no_acepta_cero_horas(horas: int) -> None:
+def test_el_checkin_no_acepta_cero_horas(horas: int) -> None:
     with pytest.raises(ValidationError):
         DetalleIn(nino=NinoIn(nombreCompleto="Leo", edad=5), cantidad=horas, pulseraId=uuid4())
 
 
-def test_n6_una_hora_es_valida() -> None:
+def test_una_hora_es_valida() -> None:
     detalle = DetalleIn(nino=NinoIn(nombreCompleto="Leo", edad=5), cantidad=1, pulseraId=uuid4())
     assert detalle.cantidad == 1
 
 
-# --- N8 ------------------------------------------------------------------------
+# --- Referencia del pago -------------------------------------------------------
 
 
-async def test_n8_checkin_con_tarjeta_sin_referencia_da_422(checkin: dict[str, Any]) -> None:
+async def test_checkin_con_tarjeta_sin_referencia_da_422(checkin: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as exc:
         await _registrar(_onboarding(metodo=TARJETA, referencia="   "))
     assert exc.value.status_code == 422
@@ -221,14 +221,14 @@ async def test_n8_checkin_con_tarjeta_sin_referencia_da_422(checkin: dict[str, A
     checkin["upload"].assert_not_awaited()
 
 
-async def test_n8_checkin_con_referencia_la_guarda(checkin: dict[str, Any]) -> None:
+async def test_checkin_con_referencia_la_guarda(checkin: dict[str, Any]) -> None:
     await _registrar(_onboarding(metodo=TARJETA, referencia=" A-123 "))
     args = checkin["pago_create"].await_args.args
     assert args[3] == TARJETA
     assert args[6] == "A-123"
 
 
-async def test_n8_checkin_con_metodo_inexistente_da_422(checkin: dict[str, Any]) -> None:
+async def test_checkin_con_metodo_inexistente_da_422(checkin: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as exc:
         await _registrar(_onboarding(metodo=uuid4()))
     assert exc.value.status_code == 422
@@ -258,7 +258,7 @@ def checkout(monkeypatch: pytest.MonkeyPatch, metodos: None) -> dict[str, AsyncM
     return mocks
 
 
-async def test_n8_checkout_con_tarjeta_sin_referencia_no_da_la_salida(
+async def test_checkout_con_tarjeta_sin_referencia_no_da_la_salida(
     checkout: dict[str, AsyncMock],
 ) -> None:
     with pytest.raises(HTTPException) as exc:
@@ -271,13 +271,13 @@ async def test_n8_checkout_con_tarjeta_sin_referencia_no_da_la_salida(
     checkout["pago_create"].assert_not_awaited()
 
 
-async def test_n8_checkout_guarda_la_referencia(checkout: dict[str, AsyncMock]) -> None:
+async def test_checkout_guarda_la_referencia(checkout: dict[str, AsyncMock]) -> None:
     pago = PagoIn(metodoPagoId=TARJETA, monto=100.0, referencia="VOUCHER-9")
     await chekouts.create_chekout(_conn(), uuid4(), uuid4(), [pago], str(uuid4()))
     assert checkout["pago_create"].await_args.args[6] == "VOUCHER-9"
 
 
-async def test_n8_pago_extra_con_tarjeta_sin_referencia_da_422(
+async def test_pago_extra_con_tarjeta_sin_referencia_da_422(
     monkeypatch: pytest.MonkeyPatch, metodos: None
 ) -> None:
     pago_create = AsyncMock()
@@ -298,7 +298,7 @@ async def test_n8_pago_extra_con_tarjeta_sin_referencia_da_422(
     pago_create.assert_not_awaited()
 
 
-# --- N5 ------------------------------------------------------------------------
+# --- Reimpresión del comprobante -----------------------------------------------
 
 
 def _registro(**cambios: Any) -> dict[str, Any]:
@@ -338,7 +338,7 @@ def reimpresion(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     return mocks
 
 
-async def test_n5_reimprimir_emite_un_codigo_nuevo_con_las_notas(
+async def test_reimprimir_emite_un_codigo_nuevo_con_las_notas(
     reimpresion: dict[str, AsyncMock],
 ) -> None:
     registro_id = uuid4()
@@ -353,7 +353,7 @@ async def test_n5_reimprimir_emite_un_codigo_nuevo_con_las_notas(
     assert datos["total"] == 240.0
 
 
-async def test_n5_registro_de_otra_sucursal_da_404(reimpresion: dict[str, AsyncMock]) -> None:
+async def test_registro_de_otra_sucursal_da_404(reimpresion: dict[str, AsyncMock]) -> None:
     reimpresion["registro"].return_value = _registro(sucursal_id=uuid4())
     with pytest.raises(HTTPException) as exc:
         await estancias.reimprimir_comprobante(_conn(), uuid4(), SUCURSAL, uuid4())
@@ -362,7 +362,7 @@ async def test_n5_registro_de_otra_sucursal_da_404(reimpresion: dict[str, AsyncM
 
 
 @pytest.mark.parametrize("estado", ["C", "P"])
-async def test_n5_registro_cerrado_no_se_reimprime(
+async def test_registro_cerrado_no_se_reimprime(
     reimpresion: dict[str, AsyncMock], estado: str
 ) -> None:
     reimpresion["registro"].return_value = _registro(estado=estado)
@@ -373,7 +373,7 @@ async def test_n5_registro_cerrado_no_se_reimprime(
     reimpresion["emitir"].assert_not_awaited()
 
 
-async def test_n5_sin_ninos_dentro_no_se_reimprime(reimpresion: dict[str, AsyncMock]) -> None:
+async def test_sin_ninos_dentro_no_se_reimprime(reimpresion: dict[str, AsyncMock]) -> None:
     reimpresion["ninos"].return_value = []
     with pytest.raises(HTTPException) as exc:
         await estancias.reimprimir_comprobante(_conn(), uuid4(), SUCURSAL, uuid4())
@@ -381,7 +381,7 @@ async def test_n5_sin_ninos_dentro_no_se_reimprime(reimpresion: dict[str, AsyncM
     reimpresion["emitir"].assert_not_awaited()
 
 
-def test_n5_la_ruta_exige_el_permiso_de_checkin() -> None:
+def test_la_ruta_exige_el_permiso_de_checkin() -> None:
     from app.main import app
 
     rutas = [

@@ -24,7 +24,7 @@ import { inactivityTimer } from '@/utils/inactivityTimer'
 const INACTIVITY_MS = 15 * 60 * 1000
 
 export function setupPlugins(app: App, router: Router): void {
-  // QA #32: el refresh ya no manda el refresh token -- viaja en la cookie HttpOnly.
+  // El refresh ya no manda el refresh token -- viaja en la cookie HttpOnly.
   configurarRefresh(() => authService.refresh())
   const pinia = createPinia()
   pinia.use(resetPlugin)
@@ -70,7 +70,7 @@ export function setupPlugins(app: App, router: Router): void {
     })
   }, INACTIVITY_MS)
 
-  // C3: restoreSession ahora es async (recupera el access token con un
+  // `restoreSession` ahora es async (recupera el access token con un
   // refresh vía la cookie HttpOnly, ya que al recargar vivía solo en
   // memoria). No se bloquea el arranque: el router guard (`requiresAuth`)
   // hace su propio `tryRefresh` si la navegación llega antes de que esto

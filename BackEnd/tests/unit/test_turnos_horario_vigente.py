@@ -1,4 +1,4 @@
-"""M8: qué horario está vigente a la hora local de la sucursal (GET
+"""Qué horario está vigente a la hora local de la sucursal (GET
 /turnos-caja/turnos marca `vigente`). Sin BD."""
 
 from datetime import datetime, time
@@ -11,7 +11,7 @@ from app.services import turnos_caja_service as svc
 SVC = "app.services.turnos_caja_service"
 
 
-# ── M8: horario vigente ──────────────────────────────────────────────────────
+# ── Horario vigente ──────────────────────────────────────────────────────────
 
 # 2026-10-03 es sábado (weekday 5).
 SABADO_0124 = datetime(2026, 10, 3, 1, 24)
@@ -21,7 +21,7 @@ SABADO_1600 = datetime(2026, 10, 3, 16, 0)
 @pytest.mark.parametrize(
     ("inicio", "fin", "dias", "ahora", "esperado"),
     [
-        # El caso del bug: a la 01:24 el Vespertino (15:00-23:59) no está vigente.
+        # A la 01:24 el Vespertino (15:00-23:59) no está vigente.
         (time(15, 0), time(23, 59), None, SABADO_0124, False),
         (time(15, 0), time(23, 59), None, SABADO_1600, True),
         (time(8, 0), time(15, 0), None, SABADO_1600, False),

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 097_costo_unitario_precision.sql
--- M21: insumos.costo_unitario era numeric(10,2). En insumos que se manejan en
+-- insumos.costo_unitario era numeric(10,2). En insumos que se manejan en
 -- gramos o mililitros el costo por unidad base es de centavos o fracciones
 -- (aceite $0.042692/ml se guardaba como 0.04, -6 %), así que el "Valor del
 -- inventario" y las entradas manuales (que se costean al promedio) salían mal.

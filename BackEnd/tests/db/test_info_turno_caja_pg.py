@@ -1,8 +1,8 @@
-"""Ola 4, información del turno de caja contra PostgreSQL real.
+"""Información del turno de caja contra PostgreSQL real.
 
-- M6: el turno cuenta tickets (un pago mixto es una venta) y lo vendido va
-  neto del cambio. M7: efectivo esperado y ventas por método.
-- B13 / UX: las notas de la apertura y el motivo del ingreso se guardan."""
+- El turno cuenta tickets (un pago mixto es una venta) y lo vendido va neto
+  del cambio. Efectivo esperado y ventas por método.
+- Las notas de la apertura y el motivo del ingreso se guardan."""
 
 import uuid
 from decimal import Decimal
@@ -21,7 +21,7 @@ async def pos(pool: asyncpg.Pool) -> Pos:
     return await crear_pos(pool)
 
 
-# ── M6 ────────────────────────────────────────────────────────────────────────
+# ── Ventas y efectivo del turno ───────────────────────────────────────────────
 
 
 async def test_el_turno_cuenta_tickets_y_lo_vendido_va_neto_del_cambio(
@@ -36,7 +36,7 @@ async def test_el_turno_cuenta_tickets_y_lo_vendido_va_neto_del_cambio(
     assert turno.numero_ventas == 2  # antes 3 (contaba pagos)
     assert turno.total_ventas == Decimal("245.00")  # recibido
     assert turno.total_vendido == Decimal("190.00")  # aplicado
-    # M7: 500 de fondo + 195 en efectivo - 55 de cambio.
+    # 500 de fondo + 195 en efectivo - 55 de cambio.
     assert turno.efectivo_esperado == Decimal("640.00")
     por_metodo = {v.metodo: v.total for v in turno.ventas_por_metodo}
     assert por_metodo["efectivo"] == Decimal("140.00")
@@ -90,7 +90,7 @@ async def test_pagos_de_una_reservacion_cuentan_como_una_venta(
         assert await caja_repository.contar_ventas_apertura(conn, pos.apertura) == 1
 
 
-# ── B13 / UX ──────────────────────────────────────────────────────────────────
+# ── Notas de apertura y motivo del ingreso ───────────────────────────────────
 
 
 async def test_se_guardan_las_notas_de_apertura_y_el_motivo_del_ingreso(

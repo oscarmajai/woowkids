@@ -1,5 +1,5 @@
-"""Disponibilidad por bloque de horario para una sucursal y fecha -- pendiente
-"Bloques de horario ocupados o libres" de docs/pendientes-backend.md."""
+"""Disponibilidad por bloque de horario para una sucursal y fecha: qué bloques de
+horario están ocupados y cuáles libres."""
 
 from datetime import date, time
 from typing import Any

@@ -1,5 +1,5 @@
-"""M24 contra PostgreSQL real: el faltante por conteo físico no aparecía en
-ningún KPI del Costo de Ventas y el margen no restaba la merma."""
+"""Contra PostgreSQL real: el faltante por conteo físico aparece en los KPI del
+Costo de Ventas y el margen resta la merma."""
 
 from decimal import Decimal
 
@@ -11,7 +11,7 @@ from tests.db.conftest import Escenario
 from tests.db.inventario_datos import crear_insumo
 
 
-async def test_m24_merma_por_conteo_fisico_entra_al_kpi_y_al_margen(
+async def test_merma_por_conteo_fisico_entra_al_kpi_y_al_margen(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:

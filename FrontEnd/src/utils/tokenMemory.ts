@@ -1,4 +1,4 @@
-// QA #32 / C3: el access token ya no se persiste en ningún storage del
+// El access token ya no se persiste en ningún storage del
 // navegador (localStorage es legible por cualquier XSS). Vive solo en una
 // variable de módulo, en memoria de la pestaña, y se pierde al recargar --
 // `authStore.restoreSession()` lo repone con un refresh vía la cookie

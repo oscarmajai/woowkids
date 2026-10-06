@@ -1,5 +1,5 @@
 """Pruebas unitarias de app.services.pulseras: con mocks del repository (sin
-DB). Cubre asignada_a (B2 #3), el nombre del nino o tutor que tiene la
+DB). Cubre asignada_a: el nombre del nino o tutor que tiene la
 pulsera cuando esta en uso."""
 
 from unittest.mock import AsyncMock, patch
@@ -56,7 +56,7 @@ async def test_listar_todas_asignada_a_nulo_cuando_esta_disponible():
     assert resultado[0].asignada_a is None
 
 
-# ── B14: consulta por RFID para distinguir "no existe" de "ya está en uso" ──
+# ── Consulta por RFID para distinguir "no existe" de "ya está en uso" ──
 
 
 @pytest.mark.asyncio

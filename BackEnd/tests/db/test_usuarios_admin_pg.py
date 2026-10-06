@@ -1,4 +1,4 @@
-"""Q6 contra PostgreSQL real: sucursales de un Administrador en el usuario y
+"""Contra PostgreSQL real: sucursales de un Administrador en el usuario y
 correo del administrador en la sucursal."""
 
 import uuid
@@ -15,7 +15,7 @@ async def _sucursal(conn: asyncpg.Connection, zona: str = "America/Mexico_City")
     sucursal_id: uuid.UUID = await conn.fetchval(
         "INSERT INTO public.sucursales (nombre, correo, zona_horaria) VALUES ($1, $2, $3) "
         "RETURNING id",
-        f"Sucursal Q6 {sufijo}",
+        f"Sucursal Usuarios Admin {sufijo}",
         f"sucursal.{sufijo}@test.local",
         zona,
     )
@@ -27,7 +27,7 @@ async def _usuario(conn: asyncpg.Connection, rol_id: int, nombre: str) -> uuid.U
     usuario_id: uuid.UUID = await conn.fetchval(
         "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
         "VALUES ($1, 'x', $2, $3) RETURNING id",
-        f"q6.{sufijo}@test.local",
+        f"usuarios.admin.{sufijo}@test.local",
         nombre,
         rol_id,
     )
@@ -66,5 +66,5 @@ async def test_administrador_trae_sus_sucursales_y_la_sucursal_su_correo(
     assert reg_cajero["sucursales_ids"] == [s1]
     assert sucursal["administrador_id"] == admin
     assert sucursal["administrador_email"] is not None
-    assert sucursal["administrador_email"].startswith("q6.")
+    assert sucursal["administrador_email"].startswith("usuarios.admin.")
     assert sucursal["administrador_email"] != sucursal["correo"]

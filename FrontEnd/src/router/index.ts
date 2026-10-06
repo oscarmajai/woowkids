@@ -499,7 +499,7 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  // B12: una ruta inexistente muestra un 404 dentro del layout. Sin sesión,
+  // Una ruta inexistente muestra un 404 dentro del layout. Sin sesión,
   // el guard manda al login (como antes).
   {
     path: '/:pathMatch(.*)*',

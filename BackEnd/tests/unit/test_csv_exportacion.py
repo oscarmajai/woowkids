@@ -1,4 +1,4 @@
-"""Q6: el CSV de indicadores dice de qué sucursal y periodo es, y el del
+"""El CSV de indicadores dice de qué sucursal y periodo es, y el del
 kardex trae el nombre de quien registró y la hora local de la sucursal."""
 
 from datetime import UTC, date, datetime

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 064_catalogos_metodo_pago_paquete.sql
--- WP B6, pendientes 1 y 3: campos de catálogo para paquetes y métodos de pago.
+-- Campos de catálogo para paquetes y métodos de pago.
 -- =============================================================================
 
 -- Método de pago: comisión (informativa, p. ej. para conciliar terminal

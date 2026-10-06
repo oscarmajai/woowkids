@@ -1,4 +1,4 @@
-"""N3: `recibir` bloquea de una vez los insumos de la recepción, en orden de
+"""`recibir` bloquea de una vez los insumos de la recepción, en orden de
 id, antes de mover stock. Antes cada UPDATE de stock tomaba el bloqueo en el
 orden de las líneas (por nombre) y dos recepciones podían trabarse. La prueba
 concurrente está en tests/db/test_recibir_orden_bloqueo_pg.py."""
@@ -22,7 +22,7 @@ class _Conn:
         return "SELECT 2"
 
 
-async def test_n3_bloquear_insumos_ordena_por_id_y_sin_repetidos() -> None:
+async def test_bloquear_insumos_ordena_por_id_y_sin_repetidos() -> None:
     conn = _Conn()
     a, b, c = sorted([uuid4(), uuid4(), uuid4()])
 
@@ -41,7 +41,7 @@ class _Tx:
         return False
 
 
-async def test_n3_recibir_bloquea_los_insumos_antes_de_mover_stock(
+async def test_recibir_bloquea_los_insumos_antes_de_mover_stock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Los insumos se bloquean de una vez (en orden de id) antes del primer

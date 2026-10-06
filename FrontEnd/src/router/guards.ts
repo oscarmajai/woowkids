@@ -12,7 +12,7 @@ function avisar(message: string): void {
 }
 
 /**
- * B21: al rebotar por falta de permiso se dice por qué, en vez de mandar a
+ * Al rebotar por falta de permiso se dice por qué, en vez de mandar a
  * Inicio en silencio.
  */
 export function mensajeSinPermiso(to: Pick<RouteLocationNormalized, 'meta'>): string {
@@ -78,12 +78,12 @@ export function setupRouterGuards(router: Router): void {
       return { name: 'home' }
     }
 
-    // B4: sin permiso para consultar su turno la consulta solo daba un error; se
+    // Sin permiso para consultar su turno la consulta solo daba un error; se
     // deja pasar igual que cuando la carga falla (la página resuelve qué mostrar).
     if (to.meta.requiresTurno && auth.hasPermission('turnos_caja:ver_activo')) {
       const turno = useTurnoCajaStore()
       // `asegurarTurnoCargado` nunca lanza: distingue "turno cargado" (resultado.ok)
-      // de "no se pudo cargar" (red/5xx/403), que no debe expulsar a nadie (#13, #17).
+      // de "no se pudo cargar" (red/5xx/403), que no debe expulsar a nadie.
       const resultado = await turno.asegurarTurnoCargado()
       if (resultado.ok && !turno.estaOperando) {
         if (auth.hasPermission('pos:acceder')) {
@@ -102,7 +102,7 @@ export function setupRouterGuards(router: Router): void {
 
     // El Administrador de sucursal no vende en mostrador (pos-caja), pero sí abre y
     // cierra su propio turno en pos-cierre: lo necesita para cobrar reservaciones y
-    // eventos (#13). AdministradorSistema puede ambas.
+    // eventos. AdministradorSistema puede ambas.
     const esAdminDeSucursal = auth.hasRole('Administrador') && !auth.hasRole('AdministradorSistema')
     if (esAdminDeSucursal && to.name === 'pos-caja') {
       return { name: 'pos-historial-arqueos' }
@@ -115,7 +115,7 @@ export function setupRouterGuards(router: Router): void {
       // siempre y lo bloquearía sin importar el inventario real). Solo se
       // exige el mínimo de 2 libres a roles que sí pueden verlo.
       // Si se entra por URL o tras F5 la lista aún no está cargada: se pide
-      // aquí (A14) en vez de rebotar a Control de Acceso. Si la carga falla
+      // aquí en vez de rebotar a Control de Acceso. Si la carga falla
       // se deja pasar y la página muestra el error con opción de reintentar.
       if (accessControlStore.puedeVerPulseras) {
         const cargadas = await accessControlStore.asegurarPulserasCargadas()
@@ -137,7 +137,7 @@ export function setupRouterGuards(router: Router): void {
       if (!turno.estaOperando) {
         if (auth.hasPermission('pos:acceder')) return { name: 'pos-cierre' }
         // Sin pos:acceder no puede abrir caja: rebotarlo a Apertura y Cierre
-        // terminaba en Inicio sin explicación (B21).
+        // terminaba en Inicio sin explicación.
         avisar(MENSAJE_SIN_TURNO_REGISTRO)
         // Entrando por URL no hay pantalla de la cual no moverse.
         return from.matched.length ? false : { name: 'estancias-control-acceso' }

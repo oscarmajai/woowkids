@@ -42,7 +42,7 @@ export class TransicionInvalidaError extends Error {
 
 export class CredencialesAdminInvalidasError extends Error {
   /**
-   * A16: el backend explica qué falló (p. ej. que el administrador ya tiene PIN
+   * El backend explica qué falló (p. ej. que el administrador ya tiene PIN
    * y no se acepta su contraseña); sin mensaje se usa el genérico.
    */
   constructor(mensaje?: string) {
@@ -51,7 +51,7 @@ export class CredencialesAdminInvalidasError extends Error {
   }
 }
 
-// A5: el backend responde 403 con estos códigos cuando el PIN/contraseña de
+// El backend responde 403 con estos códigos cuando el PIN/contraseña de
 // caja no coincide (antes 401, que el interceptor confundía con sesión vencida).
 const CODIGOS_CREDENCIAL_INVALIDA = new Set(['CREDENCIALES_INVALIDAS', 'PIN_INVALIDO'])
 
@@ -94,7 +94,7 @@ export const turnoCajaService = {
       return await turnoCajaApi.registrarRetiro(payload)
     } catch (err) {
       const apiErr = err as ApiError
-      // B17: el 409 puede ser "excede el efectivo disponible (disponible: $X)"
+      // El 409 puede ser "excede el efectivo disponible (disponible: $X)"
       // o "el turno está en conteo": se muestra lo que dice el backend.
       if (apiErr.statusCode === 409)
         throw new TransicionInvalidaError(
@@ -207,7 +207,7 @@ export const turnoCajaService = {
   },
 
   /**
-   * Valida el PIN de un administrador. A16: el token que devuelve solo sirve
+   * Valida el PIN de un administrador. El token que devuelve solo sirve
    * para `proposito` — `cerrar` en el cierre de caja, `cancelar` para cancelar
    * o devolver una orden cobrada.
    */

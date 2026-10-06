@@ -1,10 +1,10 @@
-"""Estancias, ola 4 (paquete Q7), contra PostgreSQL real. Usa TEST_DATABASE_URL
+"""Estancias contra PostgreSQL real. Usa TEST_DATABASE_URL
 (una BD desechable con sql/schema_maestro.sql cargado) y se salta si no existe.
 Todo corre dentro de una transacción que se revierte al terminar.
 
-- N5: reimprimir el comprobante revoca el código anterior del portal de padres.
-- N7: con dos productos de estancia activos se elige siempre el más reciente.
-- N8: la referencia del pago de estancia se guarda (migración 104) y sale en
+- Reimprimir el comprobante revoca el código anterior del portal de padres.
+- Con dos productos de estancia activos se elige siempre el más reciente.
+- La referencia del pago de estancia se guarda (migración 104) y sale en
   el detalle del historial.
 """
 
@@ -46,7 +46,7 @@ async def _sucursal(conn: asyncpg.Connection) -> UUID:
         INSERT INTO sucursales (nombre, direccion, telefono, correo, clave)
         VALUES ($1, 'x', '3310000099', $2, $3) RETURNING id
         """,
-        f"Prueba Q7 {uuid4().hex[:6]}",
+        f"Prueba Estancias {uuid4().hex[:6]}",
         f"{uuid4().hex[:8]}@prueba.dev",
         uuid4().hex[:6].upper(),
     )
@@ -122,7 +122,7 @@ async def _vigente(conn: asyncpg.Connection, codigo: str) -> bool:
     return fila is not None
 
 
-async def test_n7_con_dos_productos_de_estancia_usa_el_mas_reciente(
+async def test_con_dos_productos_de_estancia_usa_el_mas_reciente(
     conn_test: asyncpg.Connection,
 ) -> None:
     sucursal_id = await _sucursal(conn_test)
@@ -140,7 +140,7 @@ async def test_n7_con_dos_productos_de_estancia_usa_el_mas_reciente(
     assert fila is not None and fila["id"] != reciente
 
 
-async def test_n8_la_referencia_del_pago_se_guarda_y_sale_en_el_detalle(
+async def test_la_referencia_del_pago_se_guarda_y_sale_en_el_detalle(
     conn_test: asyncpg.Connection,
 ) -> None:
     from app.repositories import pago_repository
@@ -159,7 +159,7 @@ async def test_n8_la_referencia_del_pago_se_guarda_y_sale_en_el_detalle(
     assert [p["notas_pago"] for p in pagos] == ["VOUCHER-77"]
 
 
-async def test_n5_reimprimir_revoca_el_qr_anterior(conn_test: asyncpg.Connection) -> None:
+async def test_reimprimir_revoca_el_qr_anterior(conn_test: asyncpg.Connection) -> None:
     sucursal_id = await _sucursal(conn_test)
     registro_id, _ = await _registro_con_nino(conn_test, sucursal_id, "Asma, trae inhalador")
     codigo_original = await padres_service.emitir_codigo_acceso(conn_test, registro_id, None)
@@ -175,7 +175,7 @@ async def test_n5_reimprimir_revoca_el_qr_anterior(conn_test: asyncpg.Connection
     assert datos["total"] == 240.0
 
 
-async def test_n5_no_reimprime_si_todos_salieron_o_es_de_otra_sucursal(
+async def test_no_reimprime_si_todos_salieron_o_es_de_otra_sucursal(
     conn_test: asyncpg.Connection,
 ) -> None:
     sucursal_id = await _sucursal(conn_test)

@@ -14,7 +14,7 @@ vi.mock('@/api/paquetesTipoEventoApi', () => ({
 }))
 
 /**
- * M17: no había forma en la UI de asignar tipos de evento a un paquete, y Nueva
+ * No había forma en la UI de asignar tipos de evento a un paquete, y Nueva
  * reservación ofrecía todos los paquetes para cualquier tipo.
  */
 describe('paqueteSirveParaTipo', () => {

@@ -2,13 +2,13 @@
 export interface NinoComprobante {
   nombre: string
   edad: number | null
-  /** Notas / alergias (M26). */
+  /** Notas / alergias. */
   notas?: string | null
 }
 
 /**
  * Datos que pinta el ticket del comprobante de entrada (ComprobanteEstancia.vue),
- * tanto al terminar el registro como al reimprimirlo desde Control de Acceso (N5).
+ * tanto al terminar el registro como al reimprimirlo desde Control de Acceso.
  */
 export interface DatosComprobanteEstancia {
   sucursal: string

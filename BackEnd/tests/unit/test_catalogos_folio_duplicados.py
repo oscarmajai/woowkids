@@ -1,4 +1,4 @@
-"""Pruebas unitarias de B6 (catálogos): folio de orden de compra y mensaje de
+"""Pruebas unitarias de catálogos: folio de orden de compra y mensaje de
 producto duplicado. Sin DB: la conexión se simula."""
 
 from unittest.mock import AsyncMock, MagicMock

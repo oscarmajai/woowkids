@@ -1,6 +1,6 @@
 """
 app/utils/csv_export.py
-Utilidad compartida para exportar listados a CSV (B7: reportes y
+Utilidad compartida para exportar listados a CSV (reportes y
 exportación). No usa pandas ni librerías externas: solo el módulo `csv`
 de la librería estándar sobre un buffer en memoria, entregado como
 `StreamingResponse`.

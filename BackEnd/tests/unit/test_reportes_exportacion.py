@@ -1,6 +1,5 @@
 """
-tests/unit/test_b7_reportes_exportacion.py
-B7: Reportes, filtros y exportación. Cubre:
+Reportes, filtros y exportación. Cubre:
 - Filtros de caja_id/metodo_pago_id en el SQL del historial de ventas/pagos.
 - KPIs agregados del historial de arqueos (resumen_historial).
 - Export del historial de arqueos sin paginar (listar_historial_completo).
@@ -72,8 +71,8 @@ async def test_resumen_historial_agrega_kpis_del_periodo_completo(monkeypatch):
 
     assert resultado.total_arqueos == 7
     assert resultado.diferencia_neta == Decimal("20.00")
-    # El bug de fecha_desde/fecha_hasta nunca forwardeados al repository quedó
-    # corregido: debe llegar parseado como datetime, no como el string crudo.
+    # fecha_desde/fecha_hasta se reenvían al repository parseadas como
+    # datetime, no como el string crudo.
     _, kwargs = fake_resumen.call_args
     assert isinstance(kwargs["fecha_desde"], datetime)
 

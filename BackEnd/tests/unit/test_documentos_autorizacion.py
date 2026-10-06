@@ -1,4 +1,4 @@
-"""C6 — la INE y las fotos de llegada de un registro se autorizan por recurso:
+"""La INE y las fotos de llegada de un registro se autorizan por recurso:
 staff de la sucursal del registro con permiso de estancias, o el padre dueño
 del registro (sub del token). Cualquier otro caso responde 404, igual que un
 registro inexistente. Los repositories se mockean (sin BD)."""

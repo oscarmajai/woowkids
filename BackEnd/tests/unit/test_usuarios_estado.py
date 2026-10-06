@@ -1,4 +1,4 @@
-"""A10 — un usuario desactivado se lista (filtro `estado`) y se puede reactivar.
+"""Un usuario desactivado se lista (filtro `estado`) y se puede reactivar.
 
 Pruebas con BD real: tests/db/test_usuarios_sesion_db.py.
 """
@@ -39,7 +39,7 @@ def _token_data(role: str, branch_id=None) -> TokenData:
     )
 
 
-# ── A10: listado por estado y reactivación ─────────────────────────────────
+# ── Listado por estado y reactivación ──────────────────────────────────────
 
 
 @pytest.mark.asyncio

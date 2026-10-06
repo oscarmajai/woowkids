@@ -1,4 +1,4 @@
-"""Reportes de ventas contra un PostgreSQL real (A1, A3, M4, M5).
+"""Reportes de ventas contra un PostgreSQL real.
 
 Escenario del día 15 de septiembre de 2026 en una sucursal de Ciudad de México
 (UTC-6), con la BD en UTC:
@@ -46,7 +46,8 @@ def _local(hora: int, dia: date = DIA) -> datetime:
 def proceso_en_utc() -> Iterator[None]:
     """El contenedor del backend corre en UTC. asyncpg interpreta los datetime
     sin zona con la zona del proceso, así que en una máquina con hora de México
-    el bug M4 no se reproducía: se fuerza UTC durante cada prueba."""
+    un error de zona horaria pasaría inadvertido: se fuerza UTC durante cada
+    prueba."""
     anterior = os.environ.get("TZ")
     os.environ["TZ"] = "UTC"
     time.tzset()
@@ -154,13 +155,13 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO sucursales (id, nombre, zona_horaria) VALUES ($1, $2, 'America/Mexico_City')",
         ids["sucursal"],
-        f"QA reportes {ids['sucursal']}",
+        f"Prueba reportes {ids['sucursal']}",
     )
     await pg.execute(
         """INSERT INTO usuarios (id, email, password_hash, nombre_completo, rol)
-           VALUES ($1, $2, 'x', 'Cajera QA', 3)""",
+           VALUES ($1, $2, 'x', 'Cajera Prueba', 3)""",
         ids["usuario"],
-        f"{ids['usuario']}@qa.dev",
+        f"{ids['usuario']}@prueba.dev",
     )
     await pg.execute(
         "INSERT INTO cajas (id, sucursal_id, codigo, nombre) VALUES ($1, $2, 'C01', 'CAJA 01')",
@@ -170,7 +171,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO turnos (id, nombre, hora_inicio, hora_fin) VALUES ($1, $2, '00:00', '23:59')",
         ids["turno"],
-        f"QA {ids['turno']}"[:50],
+        f"Prueba {ids['turno']}"[:50],
     )
     await pg.execute(
         """INSERT INTO apertura_caja (id, caja_id, cajero_id, turno_id, fondo_inicial, estado)
@@ -269,7 +270,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     unidad = await pg.fetchval("SELECT id FROM unidades_medida WHERE codigo = 'g'")
     await pg.execute(
         """INSERT INTO insumos (id, sucursal_id, nombre, unidad_base_id, unidad_compra_id)
-           VALUES ($1, $2, 'Pan QA', $3, $3)""",
+           VALUES ($1, $2, 'Pan Prueba', $3, $3)""",
         ids["insumo"],
         ids["sucursal"],
         unidad,
@@ -336,7 +337,7 @@ async def test_historial_cuenta_cada_orden_una_vez_aunque_tenga_varios_pagos(
     e = escenario
     filas = await _historial(pg, e)
 
-    # A1: antes A salía con $322 y la reservación con $28,740 (4 pagos).
+    # Sin multiplicar por pago: A no sale con $322 ni la reservación con $28,740.
     assert filas[e["A"]].total_final == Decimal("161.00")
     assert filas[e["reservacion"]].total_final == Decimal("7185.00")
     # Lo cobrado por método sale de los pagos, uno por pago, sin duplicar.
@@ -370,7 +371,7 @@ async def test_historial_toma_el_dia_en_la_zona_de_la_sucursal(
 ) -> None:
     e = escenario
     filas = await _historial(pg, e)
-    # M4: D se cobró a las 19:00 de México (01:00 UTC del día 16) y es del 15;
+    # D se cobró a las 19:00 de México (01:00 UTC del día 16) y es del 15;
     # la estancia del 16 a las 10:00 no lo es.
     assert e["D"] in filas
     assert e["registro_16"] not in filas
@@ -414,7 +415,7 @@ async def test_indicador_ventas_suma_lo_cobrado_de_todas_las_fuentes(
 ) -> None:
     e = escenario
     indicadores = await branch_repository.get_indicadores_sucursal(pg, e["sucursal"], DIA, DIA)
-    # M5: A 161 + B (500 - 335 de cambio) + D 100 (aún en cocina, cobrada a las
+    # Ventas: A 161 + B (500 - 335 de cambio) + D 100 (aún en cocina, cobrada a las
     # 19:00) + reservación 4500 cobrados + estancia 260. Sin C (cancelada) ni la
     # estancia del día 16.
     assert indicadores["ventas"] == Decimal("5186.00")
@@ -433,7 +434,7 @@ async def test_costo_de_ventas_sin_canceladas_y_en_dias_de_la_sucursal(
     resumen = await movimiento_inventario_repository.resumen_costo_ventas(
         pg, e["sucursal"], DIA, DIA
     )
-    # A3 + M4: A 161 + B 165 + D 100 (19:00 de México); sin C.
+    # A 161 + B 165 + D 100 (19:00 de México); sin C.
     assert resumen["ventas_totales"] == Decimal("426.00")
     # Lo que C consumió volvió al inventario al cancelarla.
     assert resumen["costo_ventas"] == Decimal("50.00")

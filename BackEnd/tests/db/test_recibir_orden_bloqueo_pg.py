@@ -1,6 +1,6 @@
-"""N3 contra PostgreSQL real: `recibir` bloqueaba los insumos en el orden de
-las líneas (por nombre); con nombres repetidos dos recepciones podían bloquear
-los mismos insumos en orden distinto y trabarse. Ahora los bloquea por id."""
+"""Contra PostgreSQL real: `recibir` bloquea los insumos por id. Si los
+bloqueara en el orden de las líneas (por nombre), con nombres repetidos dos
+recepciones podrían bloquear los mismos insumos en orden distinto y trabarse."""
 
 import asyncio
 import uuid
@@ -12,7 +12,7 @@ from tests.db.conftest import Escenario
 from tests.db.inventario_datos import crear_compra, crear_insumo, linea, unidad
 
 
-async def test_n3_recepciones_simultaneas_con_insumos_homonimos_no_se_traban(
+async def test_recepciones_simultaneas_con_insumos_homonimos_no_se_traban(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     """Dos insumos con el mismo nombre en compras con las líneas en orden

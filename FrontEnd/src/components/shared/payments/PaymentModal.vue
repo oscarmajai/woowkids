@@ -243,7 +243,7 @@ const props = withDefaults(
       permitirLealtad?: boolean
       /**
        * Si es true se puede confirmar un abono menor al total (monto > 0); lo
-       * no cubierto queda como saldo. Para abonos a reservaciones (A7). Por
+       * no cubierto queda como saldo. Para abonos a reservaciones. Por
        * defecto false: el cobro debe cubrir el total.
        */
       permitirPagoParcial?: boolean
@@ -286,7 +286,7 @@ const puntosARedimir = ref(0)
 const saldoDisponible = ref<number | null>(null)
 const valorPunto = ref<number | null>(null)
 const minimoCanje = ref<number | null>(null)
-// A6: motivo por el que no se puede canjear (no se pudo leer la configuración
+// Motivo por el que no se puede canjear (no se pudo leer la configuración
 // de canje de la sucursal). Mientras tenga valor, el canje queda deshabilitado.
 const errorCanje = ref<string | null>(null)
 const mostrarModalTarjeta = ref(false)
@@ -391,7 +391,7 @@ watch(celularCliente, async (val) => {
 })
 
 /**
- * A6: sin la configuración de canje no se conoce el valor del punto ni el
+ * Sin la configuración de canje no se conoce el valor del punto ni el
  * mínimo; en vez de suponer $0.00 o mínimo 0, se deshabilita el canje y se
  * dice por qué. El servidor valida igualmente el mínimo al cobrar.
  */

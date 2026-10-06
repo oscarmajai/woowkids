@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 079_comandas_estado_check.sql
--- A2: comandas.estado_actual (VARCHAR(1)) no tenía ninguna restricción y el
+-- comandas.estado_actual (VARCHAR(1)) no tenía ninguna restricción y el
 -- PATCH /comandas/{id}/estado guardaba cualquier valor ("X", "" ...). La
 -- máquina de estados ahora vive en comanda_service.cambiar_estado; este CHECK
 -- es la red de seguridad en la BD: solo P (pendiente), E (en preparación),

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 059_lealtad_minimo_canje.sql
--- Mínimo de puntos requerido para poder canjear (WP B4, pendiente 3). Antes
+-- Mínimo de puntos requerido para poder canjear. Antes
 -- cualquier saldo > 0 permitía redimir; algunos programas de lealtad
 -- requieren acumular un piso antes de poder usarlos. DEFAULT 0 mantiene el
 -- comportamiento actual (sin mínimo) en toda sucursal existente.

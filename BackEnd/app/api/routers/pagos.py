@@ -37,10 +37,10 @@ _HISTORIAL_CSV_CAMPOS = [
 
 
 def _sucursal_del_reporte(current_user: TokenData, sucursal_id: UUID | None) -> UUID:
-    """N17: misma regla que el resto de reportes (COGS, stock, arqueos): roles
+    """Misma regla que el resto de reportes (COGS, stock, arqueos): roles
     con sucursal fija, la suya (403 si piden otra); AdministradorSistema, la
     del parámetro o la del selector; sin ninguna, 422 SUCURSAL_REQUERIDA (los
-    periodos se calculan en la zona horaria de cada sucursal, M4, así que no
+    periodos se calculan en la zona horaria de cada sucursal, así que no
     hay un agregado global). Antes respondía 403 al AdministradorSistema."""
     return resolver_sucursal_obligatoria(current_user, sucursal_id)
 
@@ -69,7 +69,7 @@ async def registrar_pagos(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> list[PaymentOut]:
-    # C1: el pago se registra en la sucursal de la sesión (403 si el body
+    # El pago se registra en la sucursal de la sesión (403 si el body
     # trae otra) y sobre una comanda de esa sucursal (404 si no).
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", body.comanda_id)

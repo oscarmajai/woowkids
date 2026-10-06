@@ -39,7 +39,7 @@ async def crear_paquete(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("paquetes:crear")),
 ) -> PaquetesOut:
-    # C1: el paquete se crea en la sucursal de la sesión (403 si el body
+    # El paquete se crea en la sucursal de la sesión (403 si el body
     # trae otra) y sus productos deben ser de esa sucursal (404).
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     await alcance_service.asegurar_recursos(

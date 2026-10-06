@@ -2,7 +2,7 @@
 app/repositories/horarios_repository.py
 Operaciones de BD para el CRUD administrativo de horarios (tabla turnos).
 
-M19: ``turnos.sucursal_id`` NULL = horario global (todas las sucursales lo
+``turnos.sucursal_id`` NULL = horario global (todas las sucursales lo
 ven); con valor, el horario es solo de esa sucursal.
 """
 

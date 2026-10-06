@@ -9,7 +9,7 @@ export interface BackendUser {
   branch_id: string | null
   branch_name: string | null
   permissions: string[]
-  /** C1: solo /auth/me lo trae poblado; login/refresh lo dejan en false. */
+  /** Solo /auth/me lo trae poblado; login/refresh lo dejan en false. */
   tiene_pin?: boolean
   debe_cambiar_password?: boolean
 }
@@ -51,7 +51,7 @@ export const authApi = {
     return data
   },
 
-  // QA #32: el refresh token ya no viaja en el body -- rawApiClient manda la
+  // El refresh token ya no viaja en el body -- rawApiClient manda la
   // cookie HttpOnly (withCredentials) y el backend la lee desde ahí.
   async refresh(): Promise<BackendLoginResponse> {
     try {
@@ -66,7 +66,7 @@ export const authApi = {
     await apiClient.post('/auth/logout', {})
   },
 
-  // QA #32: ticket efímero de un solo uso (30 s) para autenticar los
+  // Ticket efímero de un solo uso (30 s) para autenticar los
   // WebSockets de comandas/estancias sin exponer el JWT crudo en la URL.
   async wsTicket(): Promise<BackendWsTicketResponse> {
     const { data } = await apiClient.post<BackendWsTicketResponse>('/auth/ws-ticket')

@@ -1,4 +1,4 @@
-"""A4: en el arqueo, cada devolución a un cliente baja el esperado de SU método
+"""En el arqueo, cada devolución a un cliente baja el esperado de SU método
 (no solo la de efectivo) y cada renglón la trae aparte para mostrarla.
 
 Antes solo se restaba la de efectivo: cancelar una orden cobrada con tarjeta

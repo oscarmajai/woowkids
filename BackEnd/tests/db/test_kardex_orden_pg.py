@@ -1,11 +1,11 @@
-"""B11 y orden de las líneas de compra, contra PostgreSQL real.
+"""Orden del kardex, de las capas PEPS y de las líneas de compra, contra
+PostgreSQL real.
 
-B11: los movimientos de una misma transacción comparten `creado` y el kardex los
-ordenaba de forma arbitraria; las capas PEPS de una misma recepción se
-consumían en el orden de un uuid. Ahora ambos siguen la secuencia de inserción
-(migración 098).
-UX: las líneas de una compra se listaban por nombre del insumo; ahora en el
-orden en que se capturaron (migración 099)."""
+Los movimientos de una misma transacción comparten `creado`; para que el kardex
+no los ordene de forma arbitraria ni las capas PEPS de una misma recepción se
+consuman en el orden de un uuid, ambos siguen la secuencia de inserción
+(migración 098). Las líneas de una compra se listan en el orden en que se
+capturaron, no por nombre del insumo (migración 099)."""
 
 import uuid
 from decimal import Decimal
@@ -18,7 +18,7 @@ from tests.db.conftest import Escenario
 from tests.db.inventario_datos import crear_compra, crear_insumo, linea, unidad
 
 
-async def test_b11_kardex_sigue_el_orden_de_insercion_en_una_misma_transaccion(
+async def test_kardex_sigue_el_orden_de_insercion_en_una_misma_transaccion(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:
@@ -36,7 +36,7 @@ async def test_b11_kardex_sigue_el_orden_de_insercion_en_una_misma_transaccion(
         assert [m["cantidad"] for m in kardex] == [5, 4, 3, 2, 1]
 
 
-async def test_b11_peps_consume_las_capas_de_una_recepcion_en_orden_de_captura(
+async def test_peps_consume_las_capas_de_una_recepcion_en_orden_de_captura(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:

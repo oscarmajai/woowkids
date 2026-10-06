@@ -74,10 +74,10 @@ async def _resolver_tutor(
 ) -> UUID:
     """Tutor del registro: el existente con ese teléfono Y ese nombre, o uno nuevo.
 
-    N-1 (prueba E2E de v1.2.0): antes bastaba el teléfono. Si una familia daba
-    un teléfono ya registrado (por ejemplo, otro familiar), el registro quedaba
-    a nombre del tutor anterior y el nombre capturado se descartaba; en la
-    salida se verificaba contra la persona equivocada."""
+    No basta el teléfono: si una familia da un teléfono ya registrado (por
+    ejemplo, el de otro familiar), el registro quedaría a nombre del tutor
+    anterior, el nombre capturado se descartaría y en la salida se
+    verificaría contra la persona equivocada."""
     buscado = normalizar_nombre(nombre)
     for tutor in await get_tutores_by_phone(conn, telefono, sucursal_id):
         if normalizar_nombre(tutor["nombreCompleto"]) == buscado:
@@ -97,7 +97,7 @@ async def _registrar_fotos(
     usuario_id: UUID,
 ) -> list[tuple[str, bytes]]:
     """Inserta las filas de fotos del registro y devuelve los archivos que hay
-    que subir (llave, bytes). N4: no sube nada; la subida se hace al final de
+    que subir (llave, bytes). No sube nada; la subida se hace al final de
     la transacción, cuando ya pasaron todas las validaciones."""
     ruta_ine = f"{PREFIJOS['identificaciones']}/{registro_id}.jpg"
     await foto_create(conn, registro_id, TipoFoto.INE, ruta_ine, usuario_id)
@@ -136,7 +136,7 @@ async def create_estancia(
     data_ine = await validar_y_leer(foto_ine)
     data_llegadas = [await validar_y_leer(foto) for foto in foto_llegadas]
 
-    # N4: las fotos se suben al final de la transacción (después de todos los
+    # Las fotos se suben al final de la transacción (después de todos los
     # INSERT y validaciones). Si algo falla después de subirlas (incluida la
     # confirmación de la transacción), se borran para no dejar archivos
     # huérfanos en MinIO.
@@ -186,7 +186,7 @@ async def _crear_estancia_tx(
     llenando con las llaves que ya se subieron a MinIO, para que el llamador
     las borre si la transacción no llega a confirmarse."""
     async with conn.transaction():
-        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        # El turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         await _validar_pulseras_disponibles(conn, data.sucursalId, data.detalles)
 
@@ -355,7 +355,7 @@ async def _crear_estancia_tx(
                     )
 
                 # Se guarda el producto de estancia con el que se calculó el
-                # precio, no el productoId que mande el cliente (C2).
+                # precio, no el productoId que mande el cliente.
                 await insert_detalle_registro(
                     conn,
                     data.sucursalId,
@@ -402,7 +402,7 @@ async def _crear_estancia_tx(
                 )
                 total = max(total - descuento_puntos, Decimal(0))
 
-            # 4.6 C2: el total lo calcula el servidor con los tramos del
+            # El total lo calcula el servidor con los tramos del
             # producto de estancia (arriba). Lo que entra a caja menos el
             # cambio tiene que ser exactamente ese total; si no, el cliente
             # cobró con otro precio y se rechaza sin registrar nada.
@@ -485,11 +485,11 @@ async def _crear_estancia_tx(
                 "estado": "A",
             }
 
-        # A17 — código opaco del QR del comprobante (portal de padres), dentro
+        # Código opaco del QR del comprobante (portal de padres), dentro
         # de la transacción: si el registro se revierte, el código también.
         resultado["codigoAccesoPadres"] = await emitir_codigo_acceso(conn, registro_id, usuario_id)
 
-        # N4 — los archivos se suben al final, cuando todo lo anterior ya
+        # Los archivos se suben al final, cuando todo lo anterior ya
         # pasó; si una subida o la confirmación fallan, el llamador borra lo
         # que ya se haya subido.
         for llave, contenido in archivos:
@@ -533,7 +533,7 @@ async def get_productos_estancia_by_id_sucursal(
 async def reimprimir_comprobante(
     conn: asyncpg.Connection, registro_id: UUID, sucursal_id: UUID | None, usuario_id: UUID
 ) -> dict[str, Any]:
-    """N5 — re-emite el código del portal de padres de un registro activo y
+    """Re-emite el código del portal de padres de un registro activo y
     devuelve los datos del comprobante para imprimirlo de nuevo.
     `emitir_codigo_acceso` revoca el código anterior: el QR del comprobante
     viejo deja de valer. `sucursal_id` es la sucursal de la sesión (None para

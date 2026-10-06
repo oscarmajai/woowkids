@@ -627,8 +627,8 @@ interface TramoEstancia {
 
 const $q = useQuasar()
 const authStore = useAuthStore()
-// M20: desactivar un producto (botón Eliminar) exige el mismo permiso en DELETE
-// y en PATCH activo=false; sin él el botón siempre respondía 403.
+// Desactivar un producto (botón Eliminar) exige el mismo permiso en DELETE
+// y en PATCH activo=false; sin él el botón respondería 403.
 const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_producto'))
 const store = useProductosStore()
 const insumosStore = useInsumosStore()
@@ -714,7 +714,7 @@ const margenDe = (row: ProductoAdmin): number | null => {
   return Math.round(((precio - costo) / precio) * 100)
 }
 
-// M14: un combo puede incluir servicios ('S'); estancias y otros combos no.
+// Un combo puede incluir servicios ('S'); estancias y otros combos no.
 const productosDisponiblesParaCombo = computed(() => {
   const yaAgregados = new Set(formDialog.value.productos_combo.map((i) => i.producto_id))
   return store.productos.filter(
@@ -750,7 +750,7 @@ const productoComboTemporal = ref({
   cantidad: 1,
 })
 
-// D1.4: la imagen que elige el usuario (imagenFileSeleccionado) se recorta
+// La imagen que elige el usuario (imagenFileSeleccionado) se recorta
 // al cuadrado centrado y se redimensiona a 800x800 JPEG antes de usarse; lo
 // que se sube y se previsualiza es siempre el resultado ya recortado.
 const imagenFileSeleccionado = ref<File | null>(null)
@@ -789,9 +789,9 @@ const formularioValido = computed(() => {
 
 // ── Gestión de tramos de Estancia ────────────────────────────────────────────
 
-// UX (ola 4): el motivo por el que no se agregó un tramo se muestra junto al
-// formulario (antes era un toast fácil de perder), y los rangos contiguos
-// ("0–1 h" y "1–2 h") ya no cuentan como solapados (ver utils/tramosEstancia).
+// El motivo por el que no se agregó un tramo se muestra junto al formulario
+// (un toast sería fácil de perder), y los rangos contiguos ("0–1 h" y
+// "1–2 h") no cuentan como solapados (ver utils/tramosEstancia).
 const errorTramo = ref<string | null>(null)
 watch(tramoTemporal, () => (errorTramo.value = null), { deep: true })
 

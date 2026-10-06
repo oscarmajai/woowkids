@@ -1,4 +1,4 @@
-"""C4: las operaciones que leen, validan y escriben el efectivo o el estado de un
+"""Las operaciones que leen, validan y escriben el efectivo o el estado de un
 turno bloquean la fila de apertura_caja DENTRO de una transacción y ANTES de
 validar. Sin BD: un conn falso registra el orden BEGIN / bloqueo / escrituras /
 COMMIT. La prueba de concurrencia real está en tests/db/test_carrera_turnos_caja.py."""
@@ -233,7 +233,7 @@ async def test_transiciones_del_turno_validan_y_escriben_bajo_el_bloqueo(
         f"{SVC}._verificar_credenciales_usuario",
         AsyncMock(return_value={"id": uuid4(), "sucursal_id": None, "nombre_completo": "A"}),
     )
-    # A15/A16: lectura previa (sin bloqueo) solo del dueño y la sucursal, para
+    # Lectura previa (sin bloqueo) solo del dueño y la sucursal, para
     # decidir quién puede pedir la revisión antes de validar credenciales.
     monkeypatch.setattr(
         f"{SVC}.get_dueno_y_sucursal_apertura",

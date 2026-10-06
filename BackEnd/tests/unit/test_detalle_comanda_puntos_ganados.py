@@ -1,4 +1,4 @@
-"""Pendiente B9 B.3: puntos_ganados en el detalle de la orden, via join a
+"""puntos_ganados en el detalle de la orden, via join a
 movimientos_puntos. null cuando no hay movimiento de otorgamiento."""
 
 from datetime import UTC, datetime

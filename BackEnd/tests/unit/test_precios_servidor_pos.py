@@ -1,4 +1,4 @@
-"""C2 / M3 / M11: el cobro del POS (POST /pagos/completar) usa los precios del
+"""El cobro del POS (POST /pagos/completar) usa los precios del
 catálogo de la sucursal de la sesión, no los del navegador.
 
 Sin BD: los repositorios se simulan con un catálogo en memoria. La prueba
@@ -336,7 +336,7 @@ async def test_combo_con_hijos_que_no_son_su_definicion_da_422(
     assert _nada_escrito(mundo)
 
 
-# --- cantidades (M3) ---------------------------------------------------------
+# --- cantidades ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize("cantidad", [0, -1, 1000])
@@ -360,7 +360,7 @@ async def test_calcular_venta_rechaza_cantidad_cero_aunque_no_pase_por_el_schema
     assert exc.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-# --- tarjeta sin referencia (M11) --------------------------------------------
+# --- tarjeta sin referencia --------------------------------------------------
 
 
 @pytest.mark.parametrize("notas", ["", "   ", "CREDITO - Folio: "])

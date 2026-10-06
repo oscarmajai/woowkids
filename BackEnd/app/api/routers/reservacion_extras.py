@@ -45,7 +45,7 @@ async def crear_reservacion_extra(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_extras")),
 ) -> ReservacionExtrasOut:
-    # C1: la reservación y el extra deben ser de la sucursal de la sesión.
+    # La reservación y el extra deben ser de la sucursal de la sesión.
     await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
     await alcance_service.asegurar_recurso(conn, current_user, "extra", body.extra_id)
     return await svc.crear(conn, body, UUID(current_user.sub))

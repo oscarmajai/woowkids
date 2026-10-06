@@ -12,7 +12,7 @@ const esCancelado = computed(() => {
   return estado === 'C'
 })
 
-// M13: cada combo lleva solo sus productos (por renglón, no por nombre), con
+// Cada combo lleva solo sus productos (por renglón, no por nombre), con
 // los iguales sumados ("2x Hot dog" en un 2x combo).
 const detallesAgrupados = computed<DetalleProducto[]>(() => {
   if (!props.orden?.detalles) return []
@@ -22,7 +22,7 @@ const detallesAgrupados = computed<DetalleProducto[]>(() => {
   ])
 })
 
-// M12: encabezado con los datos de la sucursal de la venta.
+// Encabezado con los datos de la sucursal de la venta.
 const sucursal = computed(() => props.orden?.sucursal ?? null)
 const lineaCiudad = computed(() => {
   const s = sucursal.value
@@ -48,7 +48,7 @@ function formatearFecha(iso: string | null): string {
 
 <template>
   <div class="ticket-receipt" :style="{ width: ticketContentWidth(anchoMm) }">
-    <!-- Encabezado: WOOW KIDS y la sucursal de la venta (M12) -->
+    <!-- Encabezado: WOOW KIDS y la sucursal de la venta -->
     <div class="ticket-header">
       <h1>WOOW KIDS</h1>
       <p v-if="sucursal?.nombre">{{ sucursal.nombre }}</p>

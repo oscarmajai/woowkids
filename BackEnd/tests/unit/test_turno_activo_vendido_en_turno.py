@@ -1,12 +1,12 @@
-"""Pendiente B9 B.4 / M6 / M7 / B23: lo que GET /turnos-caja/activo expone
+"""Lo que GET /turnos-caja/activo expone
 del turno del cajero.
 
-- M6: total_vendido es lo aplicado (lo cobrado menos el cambio entregado,
+- total_vendido es lo aplicado (lo cobrado menos el cambio entregado,
   como el esperado del arqueo), no el efectivo recibido; numero_ventas
   cuenta tickets (ver contar_ventas_apertura), no pagos.
-- M7: efectivo_esperado en vivo y lo cobrado por método (efectivo neto del
+- efectivo_esperado en vivo y lo cobrado por método (efectivo neto del
   cambio), para el hub del turno.
-- B23: con el conteo ya enviado, el turno trae el conteo guardado."""
+- Con el conteo ya enviado, el turno trae el conteo guardado."""
 
 import json
 from decimal import Decimal
@@ -93,7 +93,7 @@ async def test_total_vendido_es_neto_del_cambio_y_cuenta_tickets() -> None:
     resultado = await _turno(_apertura())
 
     assert resultado.numero_ventas == 3
-    # M6: antes total_vendido = 1,300 (incluía los 120 devueltos de cambio).
+    # Antes total_vendido = 1,300 (incluía los 120 devueltos de cambio).
     assert resultado.total_vendido == Decimal("1180")
     assert resultado.total_cambio == Decimal("120")
     # El bruto se conserva por compatibilidad.

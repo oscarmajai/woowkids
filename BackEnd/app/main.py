@@ -49,7 +49,7 @@ from app.exceptions.manejadores import registrar_manejadores
 from app.services.comanda_evento_scheduler import loop_comandas_eventos
 from app.services.reservaciones_vencidas_scheduler import loop_reservaciones_vencidas
 
-logger = logging.getLogger("mercury.debug")
+logger = logging.getLogger("mercury")
 logging.basicConfig(level=logging.INFO)
 
 

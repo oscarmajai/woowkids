@@ -243,7 +243,7 @@ describe('turno en BALANCE_REVELADO tras recargar', () => {
     expect(store.adminEmail).toBe('admin@x.com')
   })
 
-  it('usa adminEmail y balancePorMetodo del backend sin re-autenticar (QA #8)', async () => {
+  it('usa adminEmail y balancePorMetodo del backend sin re-autenticar', async () => {
     const store = useTurnoCajaStore()
     servicio.cargarTurnoActivo.mockResolvedValue(
       turnoEn('BALANCE_REVELADO', {
@@ -299,7 +299,7 @@ describe('filas de metodos de pago', () => {
   })
 })
 
-describe('B23: recargar con el conteo en espera de revisión', () => {
+describe('recargar con el conteo en espera de revisión', () => {
   const conteoGuardado = {
     desgloseEfectivo: {
       billetes: [
@@ -356,7 +356,7 @@ describe('B23: recargar con el conteo en espera de revisión', () => {
   })
 })
 
-describe('M7: efectivo esperado del turno', () => {
+describe('efectivo esperado del turno', () => {
   it('usa el efectivo esperado del backend (resta cambio y devoluciones)', async () => {
     const store = useTurnoCajaStore()
     servicio.cargarTurnoActivo.mockResolvedValue(

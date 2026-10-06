@@ -574,7 +574,7 @@ const insumoOptions = computed(() =>
 
 // Codifica el valor del select como "u:<uuid>" (unidad global) o "p:<uuid>"
 // (presentación específica del insumo) para distinguir cuál campo llenar al
-// agregar la línea, sin comparar objetos en el v-model (fase 7).
+// agregar la línea, sin comparar objetos en el v-model.
 const unidadesCombinadas = computed(() => {
   if (!lineaTemporal.value.insumo_id) return []
   const insumo = insumosStore.insumos.find((i) => i.id === lineaTemporal.value.insumo_id)
@@ -746,7 +746,7 @@ const agregarLinea = () => {
     presentacion_id,
     unidad_label,
     // Precisión de las columnas: cantidad con 3 decimales y costo unitario con
-    // 6 (M21: el costo ya no se redondea a centavos).
+    // 6 (el costo no se redondea a centavos).
     cantidad: Number(Number(lineaTemporal.value.cantidad).toFixed(3)),
     costo_unitario: Number(Number(lineaTemporal.value.costo_unitario).toFixed(6)),
   })

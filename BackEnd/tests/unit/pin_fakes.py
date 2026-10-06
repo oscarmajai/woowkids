@@ -1,4 +1,4 @@
-"""Dobles de prueba para la validación de PIN de caja (A5/A16).
+"""Dobles de prueba para la validación de PIN de caja.
 
 ``LimiteEnMemoria`` reemplaza ``intentos_pin_repository`` por un contador en
 memoria con la misma semántica (llave usuario + sucursal, ventana fija), y

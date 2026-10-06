@@ -1,4 +1,4 @@
-"""Q6 contra PostgreSQL real: el kardex trae el nombre de quien registró el
+"""Contra PostgreSQL real: el kardex trae el nombre de quien registró el
 movimiento y la zona de la sucursal (para el CSV en hora local)."""
 
 import uuid
@@ -16,7 +16,7 @@ async def _sucursal(conn: asyncpg.Connection, zona: str = "America/Mexico_City")
     sucursal_id: uuid.UUID = await conn.fetchval(
         "INSERT INTO public.sucursales (nombre, correo, zona_horaria) VALUES ($1, $2, $3) "
         "RETURNING id",
-        f"Sucursal Q6 {sufijo}",
+        f"Sucursal Kardex {sufijo}",
         f"sucursal.{sufijo}@test.local",
         zona,
     )
@@ -28,7 +28,7 @@ async def _usuario(conn: asyncpg.Connection, rol_id: int, nombre: str) -> uuid.U
     usuario_id: uuid.UUID = await conn.fetchval(
         "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
         "VALUES ($1, 'x', $2, $3) RETURNING id",
-        f"q6.{sufijo}@test.local",
+        f"kardex.{sufijo}@test.local",
         nombre,
         rol_id,
     )
@@ -44,7 +44,7 @@ async def test_kardex_trae_nombre_del_usuario_y_zona_de_la_sucursal(pool: asyncp
             "INSERT INTO public.insumos (sucursal_id, nombre, unidad_base_id, unidad_compra_id) "
             "VALUES ($1, $2, $3, $3) RETURNING id",
             sucursal_id,
-            f"Insumo Q6 {uuid.uuid4().hex[:8]}",
+            f"Insumo Kardex {uuid.uuid4().hex[:8]}",
             unidad_id,
         )
         await movimiento_inventario_repository.registrar(

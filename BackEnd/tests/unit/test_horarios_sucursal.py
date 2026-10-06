@@ -1,4 +1,4 @@
-"""M19: horarios por sucursal.
+"""Horarios por sucursal.
 
 - Globales (sucursal_id NULL): solo el AdministradorSistema los edita.
 - Los nuevos se crean en la sucursal de quien los crea; el Administrador de
@@ -161,7 +161,7 @@ async def test_id_que_no_es_uuid_da_404(repo: dict[str, AsyncMock]) -> None:
     assert exc.value.status_code == 404
 
 
-# ── M3: hora inválida → 422, no 500 ─────────────────────────────────────────
+# ── Hora inválida → 422, no 500 ─────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("hora", ["xx", "25:00", "8 am", ""])

@@ -23,8 +23,8 @@ def _validar_dias(dias: DiasSemana) -> DiasSemana:
 
 
 def _validar_hora(valor: str | None) -> str | None:
-    """M3: una hora mal escrita ("xx", "25:00") reventaba con 500 en el
-    repositorio; ahora es un 422 de validación."""
+    """Una hora mal escrita ("xx", "25:00") es un 422 de validación, en vez
+    de un 500 en el repositorio."""
     if valor is None:
         return None
     try:
@@ -42,7 +42,7 @@ class HorarioCreate(BaseModel):
     hora_inicio: str  # "HH:MM"
     hora_fin: str  # "HH:MM"
     dias: DiasSemana = None
-    # M19: sucursal del horario. Roles con sucursal fija: solo la suya (es la
+    # Sucursal del horario. Roles con sucursal fija: solo la suya (es la
     # que se usa si no viene). AdministradorSistema: la indicada, la del
     # selector o, sin ninguna, un horario global.
     sucursal_id: UUID | None = None
@@ -83,7 +83,7 @@ class HorarioResponse(BaseModel):
     hora_fin: str
     activo: bool
     dias: DiasSemana = None
-    # M19: None = horario global (todas las sucursales).
+    # None = horario global (todas las sucursales).
     sucursal_id: str | None = None
 
 
@@ -118,6 +118,6 @@ class CajaAdminResponse(BaseModel):
     activo: bool
     impresora: str | None = None
     turno_actual: TurnoActualCaja | None = None
-    # N14: para distinguir las cajas en la vista "Todas las sucursales".
+    # Para distinguir las cajas en la vista "Todas las sucursales".
     sucursal_id: str | None = None
     sucursal_nombre: str | None = None

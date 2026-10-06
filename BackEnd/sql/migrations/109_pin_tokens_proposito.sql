@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 109_pin_tokens_proposito.sql
--- A16 (prueba E2E): el token de un solo uso que se emite al validar el PIN de
+-- El token de un solo uso que se emite al validar el PIN de
 -- un administrador servía igual para cancelar una orden pagada que para cerrar
 -- la caja, porque los dos usaban rol = 'admin'. Ahora cada token guarda para
 -- qué se emitió y cada operación exige el suyo:

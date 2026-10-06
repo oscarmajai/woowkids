@@ -52,7 +52,7 @@ class AdministradorInvalidoError(Exception):
 
 
 class RangoFechasInvalidoError(Exception):
-    """B1: `desde` posterior a `hasta` (antes respondía 200 con ceros)."""
+    """`desde` posterior a `hasta` (se rechaza en vez de responder 200 con ceros)."""
 
 
 class TelefonoInvalidoError(Exception):
@@ -97,7 +97,7 @@ async def list_branches(conn: asyncpg.Connection, current_user: TokenData) -> li
 
 
 def _asegurar_sucursal_propia(current_user: TokenData, branch_id: UUID) -> None:
-    """C1: cualquier rol con sucursal fija (no solo Administrador) solo opera
+    """Cualquier rol con sucursal fija (no solo Administrador) solo opera
     sobre su propia sucursal; AdministradorSistema sobre todas."""
     if current_user.role != ROL_SISTEMA and current_user.branch_id != branch_id:
         raise InsufficientPermissionsError
@@ -116,8 +116,8 @@ async def get_branch(
 async def get_horario(
     conn: asyncpg.Connection, branch_id: UUID, current_user: TokenData
 ) -> HorarioSucursalResponse:
-    """Horario y zona de la sucursal (B18). Cualquier rol con sucursal fija
-    solo lee la suya (403 si pide otra, C1); AdministradorSistema, cualquiera."""
+    """Horario y zona de la sucursal. Cualquier rol con sucursal fija
+    solo lee la suya (403 si pide otra); AdministradorSistema, cualquiera."""
     sucursal = resolver_sucursal_obligatoria(current_user, branch_id)
     datos = await get_datos_operativos(conn, sucursal)
     if datos is None:

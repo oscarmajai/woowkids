@@ -1,5 +1,5 @@
-"""A6 (pruebas E2E 2026-10-03): el cajero no podía canjear puntos desde la
-caja porque GET /lealtad/configuracion exige lealtad:gestionar_configuracion.
+"""El cajero necesita canjear puntos desde la caja, pero GET
+/lealtad/configuracion exige lealtad:gestionar_configuracion.
 
 GET /lealtad/configuracion/canje expone, en solo lectura, el valor del punto
 y el mínimo de canje de la sucursal de la sesión a quien tiene
@@ -34,7 +34,7 @@ PERMISOS_CAJA = frozenset({"lealtad:ver_saldo", "lealtad:redimir"})
 def _usuario(rol: str = ROL_CAJA, branch_id: UUID | None = SUC_PROPIA) -> TokenData:
     return TokenData(
         sub=str(uuid4()),
-        email="cajero.a6@woowkids.test",
+        email="cajero.lealtad@woowkids.test",
         role=rol,
         branch_id=branch_id,
         permissions=[],

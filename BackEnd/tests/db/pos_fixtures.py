@@ -32,13 +32,13 @@ async def crear_pos(pool: asyncpg.Pool) -> Pos:
     async with pool.acquire() as conn:
         sucursal = await conn.fetchval(
             "INSERT INTO public.sucursales (nombre, clave) VALUES ($1, $2) RETURNING id",
-            f"Sucursal ola4 {sufijo}",
+            f"Sucursal POS {sufijo}",
             sufijo.upper(),
         )
         cajero = await conn.fetchval(
             "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
             "VALUES ($1, 'x', $2, 3) RETURNING id",
-            f"cajero.ola4.{sufijo}@test.local",
+            f"cajero.pos.{sufijo}@test.local",
             f"Cajero {sufijo}",
         )
         caja = await conn.fetchval(
@@ -83,7 +83,7 @@ def _venta(p: Pos, pagos: list[tuple[uuid.UUID, str]], cambio: str = "0") -> Pag
                 subtotal=Decimal("95.00"),
             )
         ],
-        # Con referencia: otra prueba hace que la tarjeta la exija (M11).
+        # Con referencia: otra prueba hace que la tarjeta la exija.
         pagos=[
             PaymentItem(metodo_pago_id=m, monto=Decimal(monto), notas_pago="REF-1")
             for m, monto in pagos

@@ -1,6 +1,6 @@
-"""Errores de dominio de comandas: máquina de estados (A2), cancelación de
+"""Errores de dominio de comandas: máquina de estados, cancelación de
 comandas cobradas con devolución y autorización de administrador, y
-devolución de comandas ya entregadas (A4)."""
+devolución de comandas ya entregadas."""
 
 from fastapi import HTTPException, status
 
@@ -107,7 +107,7 @@ class ComandaPagadaRequiereCancelacionError(HTTPException):
 
 
 class ComandaModificadaError(HTTPException):
-    """B5: la comanda cambió (otra pestaña, otra caja o cocina) desde que el
+    """La comanda cambió (otra pestaña, otra caja o cocina) desde que el
     cliente la leyó. No se aplica nada; el cliente debe recargarla."""
 
     def __init__(self) -> None:

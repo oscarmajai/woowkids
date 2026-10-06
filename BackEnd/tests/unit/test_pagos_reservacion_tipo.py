@@ -1,6 +1,5 @@
 """Unit tests de app.services.pagos_reservacion._resolver_tipo: distingue
-anticipo / pago / liquidación (pendiente "Distinguir anticipo de
-liquidación", migración 054)."""
+anticipo / pago / liquidación (migración 054)."""
 
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -73,7 +72,7 @@ async def test_default_a_pago_si_no_se_solicita_nada(monkeypatch):
 async def test_fuerza_liquidacion_si_el_pago_deja_el_saldo_en_cero(monkeypatch):
     """Aun pidiendo 'anticipo' (p.ej. quien liquida el 100% desde
     NuevaReservacionPage.vue), el backend lo sobreescribe a 'liquidacion' si
-    el saldo llega a 0 -- regla explícita del pendiente."""
+    el saldo llega a 0 -- regla explícita del negocio."""
     monkeypatch.setattr(
         reservaciones_repository, "obtener", AsyncMock(return_value=_reservacion("1000.00"))
     )

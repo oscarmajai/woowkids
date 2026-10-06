@@ -4,7 +4,7 @@ el cobro de varios pagos de una reservación es atómico. Contra PostgreSQL
 real.
 
 Migrados de tests/integration (que dependían de IDs fijos de la BD compartida
-de desarrollo, N16). El caso feliz del POS con cambio ya lo cubre
+de desarrollo). El caso feliz del POS con cambio ya lo cubre
 test_precios_servidor_pos_pg.py y la función pura validar_cambio,
 tests/unit/test_validaciones_pago.py; aquí se prueba que cada servicio la
 aplica de verdad y que no persiste nada al rechazar.

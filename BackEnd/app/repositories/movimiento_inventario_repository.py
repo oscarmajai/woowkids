@@ -35,12 +35,12 @@ _ZONA_INSUMO = (
 
 
 def _desde_local(columna: str, idx: int, zona: str) -> str:
-    """`columna` desde el inicio del día $idx en la zona de la sucursal (M4)."""
+    """`columna` desde el inicio del día $idx en la zona de la sucursal."""
     return f"{columna} >= (${idx}::date::timestamp AT TIME ZONE {zona})"
 
 
 def _hasta_local(columna: str, idx: int, zona: str) -> str:
-    """`columna` hasta el fin del día $idx (inclusivo) en la zona de la sucursal (M4)."""
+    """`columna` hasta el fin del día $idx (inclusivo) en la zona de la sucursal."""
     return f"{columna} < ((${idx}::date + 1)::timestamp AT TIME ZONE {zona})"
 
 
@@ -124,7 +124,7 @@ async def listar_por_insumo(
         conditions.append(_hasta_local("mi.creado", len(params), _ZONA_INSUMO))
 
     where_clause = " AND ".join(conditions)
-    # B11: los movimientos de una misma transacción comparten `creado` (now() es
+    # Los movimientos de una misma transacción comparten `creado` (now() es
     # la hora de inicio de la transacción) y salían en orden arbitrario. La
     # secuencia (migración 098) es el orden real de inserción: para un mismo
     # insumo coincide con el orden en que se encadena stock_resultante.
@@ -172,11 +172,11 @@ async def resumen_costo_ventas(
     desde: date | None = None,
     hasta: date | None = None,
 ) -> dict[str, Any]:
-    """KPIs del reporte de costo de ventas (B7 pendiente #3): ventas totales
+    """KPIs del reporte de costo de ventas: ventas totales
     de comandas en el periodo, costo de lo vendido (motivo venta_comanda),
     merma y margen (ventas - costo de ventas - merma).
 
-    M24: la merma son todas las salidas tipo 'M' del periodo: la merma manual
+    La merma son todas las salidas tipo 'M' del periodo: la merma manual
     (motivo merma) y el faltante de los conteos físicos (motivo conteo_fisico),
     con su desglose en `merma_manual` / `merma_conteo`. Antes solo contaba la
     manual: el faltante por conteo no aparecía en ningún KPI y el margen no
@@ -185,8 +185,8 @@ async def resumen_costo_ventas(
 
     Las comandas canceladas (`estado_actual = 'C'` o `activo = FALSE`) no
     cuentan como venta, y al costo de lo vendido se le resta lo que su
-    cancelación devolvió al inventario (A3). Los días son los de la zona
-    horaria de la sucursal (M4)."""
+    cancelación devolvió al inventario. Los días son los de la zona
+    horaria de la sucursal."""
     conditions_mov = ["mi.sucursal_id = $1"]
     conditions_com = ["c.sucursal_id = $1", "c.estado_actual <> 'C'", "c.activo"]
     params: list[Any] = [sucursal_id]

@@ -93,7 +93,7 @@ describe('registration store: pagos en completeRegistration', () => {
     expect(store.submitError).toBeTruthy()
   })
 
-  it('guarda el código opaco del portal de padres que devuelve el backend (A17)', async () => {
+  it('guarda el código opaco del portal de padres que devuelve el backend', async () => {
     const store = prepararRegistroListo()
 
     await store.proceedToRFID([], 0, 100, 100)
@@ -107,7 +107,7 @@ describe('registration store: pagos en completeRegistration', () => {
   })
 })
 
-describe('registration store: referencia de pago (N8)', () => {
+describe('registration store: referencia de pago', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(postOnboarding).mockReset()

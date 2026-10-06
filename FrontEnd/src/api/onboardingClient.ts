@@ -66,7 +66,7 @@ export interface OnboardingDetalle {
 export interface OnboardingPago {
   metodoPagoId: string
   monto: number
-  // N8: folio del voucher o referencia de la transferencia. El backend la exige
+  // Folio del voucher o referencia de la transferencia. El backend la exige
   // (422 REFERENCIA_REQUERIDA) si el método de pago tiene `requiere_referencia`.
   referencia?: string
 }
@@ -99,7 +99,7 @@ export interface OnboardingResponse {
   pagado: number
   estado: string
   advertenciaEfectivo?: string | null
-  // Código opaco del QR del portal de padres (A17). Solo llega en esta
+  // Código opaco del QR del portal de padres. Solo llega en esta
   // respuesta; caduca a las 24 h o al hacer checkout del último niño.
   codigoAccesoPadres: string
 }
@@ -162,7 +162,7 @@ export interface PulseraEstadoDto extends PulseraDto {
   estado: EstadoPulsera
 }
 
-// GET /pulseras/sucursal/{sucursalId}/buscar?rfid=… (B14). Responde 404 si la
+// GET /pulseras/sucursal/{sucursalId}/buscar?rfid=… Responde 404 si la
 // pulsera no existe en la sucursal; si existe, dice si está libre, usada o inactiva.
 export async function fetchEstadoPulsera(
   sucursalId: string,
@@ -251,7 +251,7 @@ export interface ComprobanteEstanciaDto {
   ninos: NinoComprobanteDto[]
 }
 
-// POST /estancias/registros/{registroId}/comprobante (N5)
+// POST /estancias/registros/{registroId}/comprobante
 // Re-emite el código del QR del portal de padres (revoca el anterior) y
 // devuelve los datos para reimprimir el comprobante. 409 si ya no hay niños
 // dentro del registro.
@@ -263,7 +263,7 @@ export async function reimprimirComprobante(registroId: string): Promise<Comprob
 }
 
 // POST /estancias/{registro_id}/pagos
-// N9: el backend espera un objeto PagoEstanciaExtraRequest ({ pagos, cambio }),
+// El backend espera un objeto PagoEstanciaExtraRequest ({ pagos, cambio }),
 // no la lista de pagos suelta (con la lista respondía 422).
 export async function pagarExtra(
   registroId: string,

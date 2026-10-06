@@ -1,5 +1,5 @@
 """Saldo real de reservaciones, scheduler y precio del servidor contra un
-PostgreSQL de verdad (C2/C3).
+PostgreSQL de verdad.
 
 Requiere `TEST_DATABASE_URL` apuntando a una BD DESECHABLE con
 `sql/schema_maestro.sql` cargado (incluye la migración 075); sin esa variable
@@ -59,7 +59,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO sucursales (id, nombre) VALUES ($1, $2)",
         ids["sucursal"],
-        f"QA saldo {ids['sucursal']}",
+        f"Prueba saldo {ids['sucursal']}",
     )
     await pg.execute(
         "INSERT INTO tipos_evento (id, nombre, sucursal_id) VALUES ($1, 'Cumpleaños', $2)",
@@ -73,7 +73,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
         ids["paquete"],
         ids["sucursal"],
     )
-    # Por evento: se cobra una vez. Los extras por hora/persona (M15) se
+    # Por evento: se cobra una vez. Los extras por hora/persona se
     # prueban en test_reservacion_partidas_pg.py.
     await pg.execute(
         """INSERT INTO extras (id, sucursal_id, nombre, precio, unidad)
@@ -83,9 +83,9 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     )
     await pg.execute(
         """INSERT INTO usuarios (id, email, password_hash, nombre_completo, rol)
-           VALUES ($1, $2, 'x', 'Cajera QA', 3)""",
+           VALUES ($1, $2, 'x', 'Cajera Prueba', 3)""",
         ids["usuario"],
-        f"{ids['usuario']}@qa.dev",
+        f"{ids['usuario']}@prueba.dev",
     )
     await pg.execute(
         "INSERT INTO cajas (id, sucursal_id, codigo, nombre) VALUES ($1, $2, 'C01', 'CAJA 01')",
@@ -95,7 +95,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO turnos (id, nombre, hora_inicio, hora_fin) VALUES ($1, $2, '00:00', '23:59')",
         ids["turno"],
-        f"QA {ids['turno']}"[:50],
+        f"Prueba {ids['turno']}"[:50],
     )
     await pg.execute(
         """INSERT INTO apertura_caja (id, caja_id, cajero_id, turno_id, fondo_inicial, estado)
@@ -144,7 +144,7 @@ def _alta(
         "sucursal_id": e["sucursal"],
         "tipo_evento_id": e["tipo"],
         "paquete_id": e["paquete"],
-        "nombre_cliente": "Cliente QA",
+        "nombre_cliente": "Cliente Prueba",
         "telefono_cliente": "3312345678",
         "fecha_evento": e["hoy"] + timedelta(days=dias),
         "hora_inicio": time(11, 0),
@@ -181,7 +181,7 @@ async def test_saldo_refleja_anticipo_abonos_y_cambio(
     assert alta.reservacion.estado == "confirmada"
     assert alta.reservacion.saldo_pendiente == TOTAL - Decimal("4820")
 
-    # Abono parcial de $2,000 (antes no movía el saldo: B8).
+    # Abono parcial de $2,000: mueve el saldo.
     await pagos_reservacion.crear(
         pg,
         PagosReservacionCreate(reservacion_id=rid, metodo_pago_id=e["tarjeta"], monto=2000),
@@ -208,7 +208,7 @@ async def test_saldo_refleja_anticipo_abonos_y_cambio(
     assert fila["monto_pagado"] == TOTAL
     assert fila["saldo_pendiente"] == Decimal("0.00")
 
-    # N-A1: liquidada, ya no se acepta otro pago, ni por encima del saldo.
+    # Liquidada, ya no se acepta otro pago, ni por encima del saldo.
     with pytest.raises(HTTPException) as exc:
         await pagos_reservacion.crear(
             pg,
@@ -219,7 +219,7 @@ async def test_saldo_refleja_anticipo_abonos_y_cambio(
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "PAGO_EXCEDE_SALDO"
 
-    # N-A1: un pago registrado no se borra (dejaba la caja y los puntos como
+    # Un pago registrado no se borra (dejaría la caja y los puntos como
     # estaban); el saldo no cambia.
     pago_id = await pg.fetchval(
         "SELECT id FROM pagos_reservacion WHERE reservacion_id = $1 AND monto = 2000", rid

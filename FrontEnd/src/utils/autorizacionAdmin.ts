@@ -1,5 +1,5 @@
 /**
- * A4: cancelar una orden ya pagada exige la autorización con PIN de un
+ * Cancelar una orden ya pagada exige la autorización con PIN de un
  * administrador de la sucursal. El backend lo pide respondiendo 403 con
  * `code: AUTORIZACION_ADMIN_REQUERIDA` y el `turno_id` (turno abierto de quien
  * cancela) para el que hay que validar el PIN en /turnos-caja/validar-pin-admin.

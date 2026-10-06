@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 100_turnos_sucursal.sql
--- M19 (pruebas E2E 2026-10-03): los horarios de trabajo (tabla `turnos`) eran
+-- Los horarios de trabajo (tabla `turnos`) eran
 -- un catálogo global: todas las sucursales veían los de las demás en su
 -- apertura de caja y en la pestaña Horarios.
 --

@@ -1,6 +1,6 @@
 """
 app/repositories/devolucion_repository.py
-Devoluciones al cliente de una comanda cobrada (A4), al cancelarla o al
+Devoluciones al cliente de una comanda cobrada, al cancelarla o al
 devolver una ya entregada, y los cobros de caja de esa comanda que se
 devuelven.
 """

@@ -9,7 +9,7 @@ interface AlertasInventarioState {
   cargado: boolean
   // Sucursal de la última llamada a `refrescar`. Permite descartar una
   // respuesta que llega después de que el usuario ya cambió de sucursal
-  // otra vez (Bug QA #44).
+  // otra vez.
   sucursalVigente: string | null
 }
 
@@ -38,7 +38,7 @@ export const useAlertasInventarioStore = defineStore('alertasInventario', {
         // La sucursal activa pudo cambiar mientras esta petición estaba en
         // vuelo (p. ej. dos cambios de sucursal en menos de 1 s): una
         // respuesta que ya no corresponde a la sucursal vigente se descarta
-        // para no mostrar el badge ni tocar el timbre con datos ajenos (#44).
+        // para no mostrar el badge ni tocar el timbre con datos ajenos.
         if (this.sucursalVigente !== sucursalId) return
         this.criticos = data.criticos
         this.porReordenar = data.por_reordenar

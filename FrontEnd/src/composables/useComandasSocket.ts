@@ -11,7 +11,7 @@ const BACKOFF_INICIAL_MS = 1000
 const BACKOFF_MAX_MS = 30000
 
 /**
- * QA #32: antes de cada conexión/reconexión se pide un ticket efímero de un
+ * Antes de cada conexión/reconexión se pide un ticket efímero de un
  * solo uso (POST /auth/ws-ticket) para no exponer el JWT crudo en la URL del
  * WebSocket. Si el backend todavía no lo soporta (o la petición falla), cae
  * al JWT crudo (?token=...) -- el backend sigue aceptándolo mientras

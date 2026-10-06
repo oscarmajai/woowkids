@@ -15,7 +15,7 @@ class ReservacionProductosBase(BaseModel):
 
 class ReservacionProductosCreate(BaseModel):
     """Agrega un producto a una reservación. El precio sale del catálogo;
-    `precio_unitario` se acepta por compatibilidad pero se ignora (N11). El
+    `precio_unitario` se acepta por compatibilidad pero se ignora. El
     total de la reservación se recalcula; si se manda `precio_total` (lo que
     espera el cliente) y no coincide, 409."""
 
@@ -29,7 +29,7 @@ class ReservacionProductosCreate(BaseModel):
 
 class ReservacionProductosUpdate(BaseModel):
     """Cambia cantidad o notas; el precio se vuelve a tomar del catálogo
-    (`precio_unitario` se ignora, N11). `precio_total`, igual que en el alta."""
+    (`precio_unitario` se ignora). `precio_total`, igual que en el alta."""
 
     cantidad: int | None = Field(None, ge=1)
     precio_unitario: Decimal | None = Field(None, ge=0)

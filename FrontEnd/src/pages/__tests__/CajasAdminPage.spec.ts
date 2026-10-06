@@ -6,9 +6,9 @@ import CajasAdminPage from '@/pages/admin/CajasAdminPage.vue'
 import type { CajaAdmin } from '@/types/caja-admin'
 
 /**
- * N14: el AdministradorSistema en "Todas las sucursales" no podía editar
- * cajas (400 SIN_SUCURSAL). Ahora ve las de todas, con su sucursal, y las
- * edita; para crear una debe elegir la sucursal.
+ * El AdministradorSistema en "Todas las sucursales" ve las cajas de todas,
+ * con su sucursal, y las edita (sin el 400 SIN_SUCURSAL); para crear una
+ * debe elegir la sucursal.
  */
 
 const auth = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ const montar = () =>
     global: { stubs: { QPage: { template: '<div><slot /></div>' } } },
   })
 
-describe('CajasAdminPage (N14)', () => {
+describe('CajasAdminPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     auth.isSistema = true

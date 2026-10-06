@@ -1,4 +1,4 @@
-"""B14: la consulta de pulsera por RFID distingue libre, usada, inactiva e
+"""La consulta de pulsera por RFID distingue libre, usada, inactiva e
 inexistente contra PostgreSQL real, y no ve pulseras de otra sucursal."""
 
 import uuid

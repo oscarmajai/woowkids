@@ -77,7 +77,7 @@ async def get_registro_id_by_foto_ine(
     storage_url: str,
 ) -> UUID | None:
     """registro_id dueño de la foto de INE guardada en storage_url, o None si
-    no hay una INE activa con esa ruta (C6: la descarga se autoriza por el
+    no hay una INE activa con esa ruta (la descarga se autoriza por el
     registro, no por el nombre del archivo)."""
     registro_id: UUID | None = await conn.fetchval(
         """

@@ -96,7 +96,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   const noPreciosDisponibles = ref(false)
 
   const registroId = ref('')
-  // Código del QR del portal de padres (A17): solo lo devuelve el backend al
+  // Código del QR del portal de padres: solo lo devuelve el backend al
   // crear el registro; no es el registroId.
   const codigoAccesoPadres = ref('')
   const totalFromServer = ref<number | null>(null)
@@ -191,7 +191,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     }
   }
 
-  // A14: la página de registro carga por sí misma lo que necesita (tarifas y
+  // La página de registro carga por sí misma lo que necesita (tarifas y
   // pulseras libres de la sucursal), aunque se abra por URL o tras F5. Si
   // Control de Acceso acaba de traer las pulseras, no se vuelven a pedir.
   // El turno lo garantiza el guard de ruta (`requiresTurno`).
@@ -253,7 +253,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   const hours = computed(() => HOUR_OPTIONS[tutor.value.estimatedTime] ?? 1)
 
   // ── Cálculo de tarifa por tramos, por niño ────────────────────────────────
-  // Cada niño puede contratar un tiempo distinto (B2 #4); en modo evento
+  // Cada niño puede contratar un tiempo distinto; en modo evento
   // todos usan horasEvento (el tiempo lo define el evento, no el selector).
 
   // Misma regla que el backend (tramos ordenados; en un extremo compartido,
@@ -298,7 +298,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   }
 
   /**
-   * Valida una pulsera escaneada para un niño (B14). Si no está entre las
+   * Valida una pulsera escaneada para un niño. Si no está entre las
    * libres que tiene la página, se consulta al servidor para distinguir una
    * pulsera inexistente de una ya asignada a otro niño o desactivada.
    */
@@ -615,7 +615,7 @@ export const useRegistrationStore = defineStore('registration', () => {
         void cargarAvisoPrivacidad()
         submitError.value = err.message
       } else if (err?.statusCode === 422 && err?.message) {
-        // N8: p. ej. un pago con tarjeta o transferencia sin referencia.
+        // P. ej. un pago con tarjeta o transferencia sin referencia.
         submitError.value = err.message
       } else {
         submitError.value = 'No se pudo completar el registro. Intenta de nuevo.'

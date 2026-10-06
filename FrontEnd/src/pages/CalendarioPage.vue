@@ -210,12 +210,12 @@ const paquetesStore = usePaquetesStore()
 const turno = useTurnoCajaStore()
 const router = useRouter()
 
-// ── Vista: Mes / Semana / Día (C2) ───────────────────────────────────────────
+// ── Vista: Mes / Semana / Día ────────────────────────────────────────────────
 
 type Vista = 'mes' | 'semana' | 'dia'
 const vista = ref<Vista>('mes')
 
-// Horario de operación de la sucursal (B9), para los bloques por hora de las
+// Horario de operación de la sucursal, para los bloques por hora de las
 // vistas Semana y Día.
 const sucursalHorario = ref<{ horaApertura: string; horaCierre: string } | null>(null)
 
@@ -225,7 +225,7 @@ async function cargarHorarioSucursal() {
     return
   }
   try {
-    // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
+    // El endpoint acotado: GET /sucursales/{id} da 403 a la cajera.
     const branch = await branchService.getHorario(authStore.currentBranchId)
     sucursalHorario.value = { horaApertura: branch.horaApertura, horaCierre: branch.horaCierre }
   } catch {
@@ -326,7 +326,7 @@ const semanaDias = computed((): string[] => {
   })
 })
 
-// Bloques por hora según el horario de operación de la sucursal (B9).
+// Bloques por hora según el horario de operación de la sucursal.
 const horasOperacion = computed((): string[] => {
   const [hIni] = (sucursalHorario.value?.horaApertura.slice(0, 5) ?? '09:00').split(':')
   const [hFin] = (sucursalHorario.value?.horaCierre.slice(0, 5) ?? '21:00').split(':')
@@ -483,12 +483,12 @@ const seleccionar = (day: CalDay) => {
 }
 
 // Rango de fechas (desde/hasta) que necesita la vista activa, para no traer
-// todo el histórico de la sucursal (B3: GET /reservaciones?desde&hasta).
+// todo el histórico de la sucursal (GET /reservaciones?desde&hasta).
 //
 // Depende SOLO de la vista y de la fecha elegida, nunca de los eventos
-// cargados (A9): en la vista Mes salía de `calendarDays`, que se recalcula con
-// cada respuesta; con el watch sobre un arreglo nuevo en cada evaluación, cada
-// carga disparaba otra y el calendario hacía miles de peticiones sin pintarse.
+// cargados: si saliera de `calendarDays`, que se recalcula con cada
+// respuesta, el watch vería un arreglo nuevo en cada evaluación, cada carga
+// dispararía otra y el calendario haría miles de peticiones sin pintarse.
 const rangoFetch = computed((): { desde: string; hasta: string } => {
   const hoyIso = isoDate(today)
   if (vista.value === 'dia') {

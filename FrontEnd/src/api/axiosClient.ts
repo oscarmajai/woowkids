@@ -16,7 +16,7 @@ import {
 
 // Cliente sin interceptores — solo para endpoints de auth (refresh/login)
 // que no deben pasar por el interceptor de 401 para evitar loops.
-// QA #32: withCredentials para que el navegador mande/reciba la cookie
+// `withCredentials` para que el navegador mande/reciba la cookie
 // HttpOnly refresh_token (Secure; SameSite=Strict; Path=/api/auth).
 export const rawApiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -37,7 +37,7 @@ export interface RefreshResult {
   user: User
 }
 
-// QA #32: ya no recibe el refresh token -- viaja solo por la cookie HttpOnly
+// Ya no recibe el refresh token -- viaja solo por la cookie HttpOnly
 // que el navegador manda sola (withCredentials); el backend la lee de ahí.
 type Refresher = () => Promise<RefreshResult>
 
@@ -52,8 +52,7 @@ export function configurarRefresh(fn: Refresher | null): void {
 let refreshPromise: Promise<string> | null = null
 
 /**
- * Renueva el access token con el refresh token de la cookie HttpOnly (QA
- * #32). Es la única vía de refresh de la app (interceptor y guard del
+ * Renueva el access token con el refresh token de la cookie HttpOnly. Es la única vía de refresh de la app (interceptor y guard del
  * router): comparten una sola promesa en vuelo, así nunca se usan dos veces
  * refresh tokens rotados.
  */
@@ -73,7 +72,7 @@ export function refreshAccessToken(): Promise<string> {
       const { data } = await rawApiClient.post<BackendRefreshResponse>('/auth/refresh', {})
       result = { token: data.token, user: session.user }
     }
-    // C3: el access token nunca toca localStorage -- solo vive en memoria.
+    // El access token nunca toca localStorage -- solo vive en memoria.
     tokenMemory.set(result.token)
     sessionStorage.save(result.user)
     window.dispatchEvent(new CustomEvent('auth:refreshed', { detail: { token: result.token } }))
@@ -171,12 +170,12 @@ function createAxiosClient(): AxiosInstance {
     baseURL: import.meta.env.VITE_API_BASE_URL,
     timeout: 15000,
     headers: { 'Content-Type': 'application/json' },
-    // QA #32: manda la cookie HttpOnly refresh_token en /auth/* (p. ej. logout).
+    // Manda la cookie HttpOnly refresh_token en /auth/* (p. ej. logout).
     withCredentials: true,
   })
 
   client.interceptors.request.use((config) => {
-    // C3: el access token vive solo en memoria (nunca en localStorage).
+    // El access token vive solo en memoria (nunca en localStorage).
     const token = tokenMemory.get()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
@@ -211,8 +210,8 @@ function createAxiosClient(): AxiosInstance {
         const url = error.config?.url ?? ''
         // Endpoints que validan un PIN o contraseña de caja: un 401 ahí es un
         // PIN mal escrito, no una sesión vencida. Nunca refrescar, reenviar
-        // el PIN (contaría doble en el límite de intentos) ni cerrar sesión
-        // (A5). El backend ya responde 403 PIN_INVALIDO; esto cubre un
+        // el PIN (contaría doble en el límite de intentos) ni cerrar sesión.
+        // El backend ya responde 403 PIN_INVALIDO; esto cubre un
         // backend viejo que todavía mande 401.
         if (ENDPOINTS_CON_PIN.some((endpoint) => url.includes(endpoint))) {
           return Promise.reject(
@@ -235,7 +234,7 @@ function createAxiosClient(): AxiosInstance {
           return Promise.reject(buildApiError(status, code, message))
         }
 
-        // QA #32: el refresh token ya no se guarda en el front (vive en la
+        // El refresh token ya no se guarda en el front (vive en la
         // cookie HttpOnly) -- la única señal local de "hubo sesión" es el
         // usuario guardado. Sin eso, no tiene sentido intentar un refresh.
         if (!session) {

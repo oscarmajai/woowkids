@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 098_secuencia_movimientos_capas.sql
--- B11: los movimientos de una misma transacción (las líneas de una compra o de
+-- Los movimientos de una misma transacción (las líneas de una compra o de
 -- una comanda) llevan el mismo `creado` (now() es la hora de inicio de la
 -- transacción) y el kardex los ordenaba de forma arbitraria: la columna Saldo
 -- salía fuera de secuencia. Lo mismo con las capas de costo PEPS de una misma

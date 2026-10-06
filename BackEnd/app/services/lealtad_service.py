@@ -26,7 +26,7 @@ DIAS_POR_VENCER = 30
 def resolver_sucursal(current_user: TokenData, sucursal_id: UUID | None) -> UUID:
     """AdministradorSistema ve todas las sucursales, así que debe indicar
     cuál configurar/consultar (sucursal_id o el selector). El resto usa su
-    sucursal activa; C1: si pide otra → 403 (antes se ignoraba en silencio)."""
+    sucursal activa; si pide otra → 403 (no se ignora en silencio)."""
     return resolver_sucursal_obligatoria(current_user, sucursal_id)
 
 
@@ -43,10 +43,10 @@ async def obtener_configuracion(
 async def obtener_configuracion_canje(
     conn: asyncpg.Connection, current_user: TokenData, sucursal_id: UUID | None
 ) -> ConfiguracionCanjeOut:
-    """A6: versión de solo lectura y acotada de la configuración, para que
+    """Versión de solo lectura y acotada de la configuración, para que
     quien cobra (lealtad:redimir) sepa el valor del punto y el mínimo de canje
     de SU sucursal sin el permiso de configurar el programa. Mismo alcance
-    por sucursal (C1) que obtener_configuracion."""
+    por sucursal que obtener_configuracion."""
     scope = resolver_sucursal(current_user, sucursal_id)
     row = await lealtad_repository.obtener_configuracion(conn, scope)
     if not row:
@@ -154,7 +154,7 @@ async def otorgar_puntos(
 async def calcular_descuento(conn: asyncpg.Connection, sucursal_id: UUID, puntos: int) -> Decimal:
     """Descuento en pesos que daría canjear `puntos` con la configuración
     vigente, sin tocar saldos. Es la misma fórmula que redimir_puntos; sirve
-    para validar el total de un cobro antes de escribir nada (C2)."""
+    para validar el total de un cobro antes de escribir nada."""
     config = await lealtad_repository.obtener_configuracion(conn, sucursal_id)
     if not config:
         raise DatosInvalidos("No hay configuración de lealtad para esta sucursal.")
@@ -278,7 +278,7 @@ async def ajustar_puntos(
     puntos: int,
     motivo: str,
 ) -> MovimientoPuntoOut:
-    """Ajuste manual de puntos (WP B4): `puntos` positivo otorga (crea un
+    """Ajuste manual de puntos: `puntos` positivo otorga (crea un
     lote propio, sin origen de venta, que caduca igual que uno normal);
     `puntos` negativo descuenta de los lotes vigentes FIFO, igual que un
     canje, validando que el saldo no quede negativo."""

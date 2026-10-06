@@ -1,12 +1,12 @@
-"""P8 — usuarios y sesión contra PostgreSQL real (A10, A11, M1, M2).
+"""Usuarios y sesión contra PostgreSQL real.
 
-- A10: un usuario desactivado sigue en el listado (filtro ``estado``) y se
-  puede reactivar por PUT; el aislamiento por sucursal (C1) se mantiene.
-- A11: el token de un usuario desactivado, eliminado o inexistente responde
+- Un usuario desactivado sigue en el listado (filtro ``estado``) y se puede
+  reactivar por PUT; el aislamiento por sucursal se mantiene.
+- El token de un usuario desactivado, eliminado o inexistente responde
   401 en cualquier endpoint, y su refresh token ya no renueva.
-- M1: el correo no distingue mayúsculas (alta duplicada → 409, login con
+- El correo no distingue mayúsculas (alta duplicada → 409, login con
   otra capitalización → 200).
-- M2: el servidor exige contraseñas de al menos 8 caracteres.
+- El servidor exige contraseñas de al menos 8 caracteres.
 
 Cada test corre en una transacción que se revierte al final (mismo patrón
 que ``test_aislamiento_sucursal_db.py``).
@@ -44,10 +44,10 @@ SUC_B = _u(2)
 
 USUARIOS = {
     # clave: (id, email, rol_id, sucursal)
-    "sistema": (_u(11), "p8.sistema@woowkids.dev", 1, None),
-    "admin_a": (_u(12), "p8.admin.a@woowkids.dev", 2, SUC_A),
-    "admin_b": (_u(13), "p8.admin.b@woowkids.dev", 2, SUC_B),
-    "cajero_a": (_u(14), "p8.cajero.a@woowkids.dev", 3, SUC_A),
+    "sistema": (_u(11), "sesion.sistema@woowkids.dev", 1, None),
+    "admin_a": (_u(12), "sesion.admin.a@woowkids.dev", 2, SUC_A),
+    "admin_b": (_u(13), "sesion.admin.b@woowkids.dev", 2, SUC_B),
+    "cajero_a": (_u(14), "sesion.cajero.a@woowkids.dev", 3, SUC_A),
 }
 _ROLES = {1: "AdministradorSistema", 2: "Administrador", 3: "Cajero"}
 
@@ -56,7 +56,7 @@ async def sembrar(conn: asyncpg.Connection) -> None:
     await conn.execute(
         f"""
         INSERT INTO public.sucursales (id, nombre, clave) VALUES
-          ('{SUC_A}', 'P8 Sucursal A', 'P8A'), ('{SUC_B}', 'P8 Sucursal B', 'P8B');
+          ('{SUC_A}', 'Sesion Sucursal A', 'SESA'), ('{SUC_B}', 'Sesion Sucursal B', 'SESB');
         """
     )
     for uid, email, rol, suc in USUARIOS.values():
@@ -66,7 +66,7 @@ async def sembrar(conn: asyncpg.Connection) -> None:
             UUID(uid),
             email,
             _HASH,
-            f"P8 {email}",
+            f"Sesion {email}",
             rol,
         )
         if suc is not None:
@@ -103,7 +103,7 @@ def _cuerpo_cajero_a(**extra: Any) -> dict[str, Any]:
     _uid, email, _r, suc = USUARIOS["cajero_a"]
     return {
         "email": email,
-        "full_name": "P8 Cajero A",
+        "full_name": "Sesion Cajero A",
         "role": "Cajero",
         "branch_id": suc,
         **extra,
@@ -151,7 +151,7 @@ async def _desactivar_cajero(client: Any, quien: str = "admin_a") -> None:
     assert resp.json()["is_active"] is False
 
 
-# ── A10 ─────────────────────────────────────────────────────────────────────
+# ── Usuarios desactivados en el listado y reactivación ──────────────────────
 
 
 async def test_desactivado_aparece_en_inactivos_y_todos(entorno: Any) -> None:
@@ -226,7 +226,7 @@ async def test_eliminado_tambien_se_puede_reactivar(entorno: Any) -> None:
     assert resp.json()["is_active"] is True
 
 
-# ── A11 ─────────────────────────────────────────────────────────────────────
+# ── Token de un usuario desactivado o inexistente ───────────────────────────
 
 
 async def test_token_de_usuario_desactivado_es_401(entorno: Any) -> None:
@@ -286,7 +286,7 @@ async def test_refresh_de_usuario_desactivado_no_renueva(entorno: Any) -> None:
     assert resp.status_code == 401
 
 
-# ── M1 ──────────────────────────────────────────────────────────────────────
+# ── Correo sin distinguir mayúsculas ────────────────────────────────────────
 
 
 async def test_alta_con_otra_capitalizacion_es_409(entorno: Any) -> None:
@@ -294,7 +294,7 @@ async def test_alta_con_otra_capitalizacion_es_409(entorno: Any) -> None:
     resp = await client.post(
         "/api/usuarios",
         json={
-            "email": "  P8.Cajero.A@WoowKids.dev ",
+            "email": "  Sesion.Cajero.A@WoowKids.dev ",
             "full_name": "Duplicado",
             "password": PASSWORD,
             "role": "Cajero",
@@ -311,7 +311,7 @@ async def test_alta_guarda_el_correo_en_minusculas(entorno: Any) -> None:
     resp = await client.post(
         "/api/usuarios",
         json={
-            "email": "Nuevo.P8@WoowKids.dev",
+            "email": "Nuevo.Sesion@WoowKids.dev",
             "full_name": "Nuevo",
             "password": PASSWORD,
             "role": "Cajero",
@@ -320,10 +320,10 @@ async def test_alta_guarda_el_correo_en_minusculas(entorno: Any) -> None:
         headers=_h("sistema"),
     )
     assert resp.status_code == 201, resp.text
-    assert resp.json()["email"] == "nuevo.p8@woowkids.dev"
+    assert resp.json()["email"] == "nuevo.sesion@woowkids.dev"
     assert await conn.fetchval(
         "SELECT email FROM public.usuarios WHERE id = $1", UUID(resp.json()["id"])
-    ) == ("nuevo.p8@woowkids.dev")
+    ) == ("nuevo.sesion@woowkids.dev")
 
 
 async def test_correo_de_usuario_inactivo_sigue_ocupado(entorno: Any) -> None:
@@ -347,7 +347,7 @@ async def test_editar_a_correo_ajeno_con_otra_capitalizacion_es_409(entorno: Any
     client, _conn = entorno
     resp = await client.put(
         f"/api/usuarios/{USUARIOS['cajero_a'][0]}",
-        json=_cuerpo_cajero_a(email="P8.ADMIN.B@woowkids.dev"),
+        json=_cuerpo_cajero_a(email="Sesion.ADMIN.B@woowkids.dev"),
         headers=_h("sistema"),
     )
     assert resp.status_code == 409
@@ -357,7 +357,7 @@ async def test_login_con_otra_capitalizacion(entorno: Any) -> None:
     client, _conn = entorno
     resp = await client.post(
         "/api/auth/login",
-        json={"email": "P8.Cajero.A@WOOWKIDS.dev", "password": PASSWORD},
+        json={"email": "Sesion.Cajero.A@WOOWKIDS.dev", "password": PASSWORD},
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["user"]["id"] == USUARIOS["cajero_a"][0]
@@ -368,11 +368,11 @@ async def test_cuenta_vieja_con_mayusculas_entra_y_se_puede_editar(entorno: Any)
     sigue funcionando: login con cualquier capitalización y edición sin 409."""
     client, conn = entorno
     await conn.execute(
-        "UPDATE public.usuarios SET email = 'P8.Cajero.A@WoowKids.dev' WHERE id = $1",
+        "UPDATE public.usuarios SET email = 'Sesion.Cajero.A@WoowKids.dev' WHERE id = $1",
         UUID(USUARIOS["cajero_a"][0]),
     )
     resp = await client.post(
-        "/api/auth/login", json={"email": "p8.cajero.a@woowkids.dev", "password": PASSWORD}
+        "/api/auth/login", json={"email": "sesion.cajero.a@woowkids.dev", "password": PASSWORD}
     )
     assert resp.status_code == 200, resp.text
     resp = await client.put(
@@ -381,7 +381,7 @@ async def test_cuenta_vieja_con_mayusculas_entra_y_se_puede_editar(entorno: Any)
         headers=_h("admin_a"),
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["email"] == "p8.cajero.a@woowkids.dev"
+    assert resp.json()["email"] == "sesion.cajero.a@woowkids.dev"
 
 
 async def test_indice_unico_sin_distinguir_mayusculas(entorno: Any) -> None:
@@ -390,11 +390,11 @@ async def test_indice_unico_sin_distinguir_mayusculas(entorno: Any) -> None:
         async with conn.transaction():
             await conn.execute(
                 "INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol) "
-                "VALUES ('P8.CAJERO.A@woowkids.dev', 'x', 'dup', 3)"
+                "VALUES ('Sesion.CAJERO.A@woowkids.dev', 'x', 'dup', 3)"
             )
 
 
-# ── M2 ──────────────────────────────────────────────────────────────────────
+# ── Longitud mínima de contraseña ───────────────────────────────────────────
 
 
 async def test_password_corta_se_rechaza_en_alta_y_edicion(entorno: Any) -> None:
@@ -402,7 +402,7 @@ async def test_password_corta_se_rechaza_en_alta_y_edicion(entorno: Any) -> None
     resp = await client.post(
         "/api/usuarios",
         json={
-            "email": "corta.p8@woowkids.dev",
+            "email": "corta.sesion@woowkids.dev",
             "full_name": "Corta",
             "password": "1",
             "role": "Cajero",

@@ -41,22 +41,22 @@ class ComandaCreate(BaseModel):
     total_final: Decimal
     sucursal_id: uuid.UUID | None = None
     nombre_cliente: str | None = None
-    # B9 B.2: mesa del pedido, opcional. max_length=20 coincide con
+    # Mesa del pedido, opcional. max_length=20 coincide con
     # comandas.mesa VARCHAR(20) en BD.
     mesa: str | None = Field(default=None, max_length=20)
 
 
-# PATCH /comandas/{id}/estado. A2: estado_actual es el enum, así que un valor
+# PATCH /comandas/{id}/estado. `estado_actual` es el enum, así que un valor
 # fuera de P/E/L/T/C ("X", "") es 422 antes de llegar al service.
 class CambioEstadoRequest(BaseModel):
     estado_actual: EstadoComanda
     motivo_cancelacion: str | None = None
-    # A4: token de un solo uso de POST /turnos-caja/validar-pin-admin. Solo se
+    # Token de un solo uso de POST /turnos-caja/validar-pin-admin. Solo se
     # exige para cancelar una comanda con pagos.
     token_pin_admin: str | None = None
 
 
-# POST /comandas/{id}/devolucion (A4): devolver el dinero de una comanda ya
+# POST /comandas/{id}/devolucion: devolver el dinero de una comanda ya
 # entregada, sin regresar su stock. Mismo flujo de autorización que cancelar
 # una comanda cobrada: sin token responde 403 AUTORIZACION_ADMIN_REQUERIDA con
 # el turno_id para POST /turnos-caja/validar-pin-admin.
@@ -69,7 +69,7 @@ class DevolucionEntregadaRequest(BaseModel):
 class ComandaModifyRequest(BaseModel):
     detalles_ids_a_eliminar: list[str] = Field(..., min_length=1)
     motivo_cancelacion: str | None = None
-    # B5: control optimista. El `modificado` que devolvió GET
+    # Control optimista. El `modificado` que devolvió GET
     # /pagos/detalles/comanda/{id}; si la comanda cambió desde entonces, 409
     # COMANDA_MODIFICADA sin tocar nada. Opcional por compatibilidad.
     modificado_esperado: datetime | None = None

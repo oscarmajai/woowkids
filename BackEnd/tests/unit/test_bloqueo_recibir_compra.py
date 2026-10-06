@@ -1,4 +1,4 @@
-"""C5: recibir / cancelar / editar una compra la bloquean (FOR UPDATE) dentro de
+"""Recibir / cancelar / editar una compra la bloquean (FOR UPDATE) dentro de
 la transacción y releen estado y detalles después del bloqueo; marcar_estado
 solo transiciona desde el estado previo esperado. Sin BD: un conn falso registra
 el orden. La prueba de concurrencia real está en tests/db/test_carrera_compras.py."""

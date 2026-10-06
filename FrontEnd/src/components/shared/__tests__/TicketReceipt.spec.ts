@@ -46,7 +46,7 @@ function orden(extra: Partial<DetalleOrden> = {}): DetalleOrden {
 }
 
 describe('TicketReceipt', () => {
-  it('M12: encabezado con la sucursal de la venta, cliente y cambio', () => {
+  it('encabezado con la sucursal de la venta, cliente y cambio', () => {
     const texto = mount(TicketReceipt, { props: { orden: orden(), anchoMm: 80 } }).text()
     expect(texto).toContain('Woow Kids Plaza Patria')
     expect(texto).toContain('Av. Patria 1950')
@@ -64,7 +64,7 @@ describe('TicketReceipt', () => {
     expect(texto).not.toContain('CAMBIO')
   })
 
-  it('M13: un combo dividido lista solo sus productos, sin repetir los del otro', () => {
+  it('un combo dividido lista solo sus productos, sin repetir los del otro', () => {
     const combo = { nombre_combo_padre: 'Combo Hot dog' }
     const detalles = [
       detalle('c1', 'Combo Hot dog', { precio_unitario: 120, importe: 120 }),
@@ -86,7 +86,7 @@ describe('TicketReceipt', () => {
     expect(filas.filter((f) => f.includes('Sin hielo'))).toHaveLength(1)
   })
 
-  it('M13: 2x combo en un renglón suma sus productos', () => {
+  it('2x combo en un renglón suma sus productos', () => {
     const combo = { nombre_combo_padre: 'Combo Hot dog', detalle_padre_id: 'c1' }
     const detalles = [
       detalle('c1', 'Combo Hot dog', { cantidad: 2, precio_unitario: 120, importe: 240 }),

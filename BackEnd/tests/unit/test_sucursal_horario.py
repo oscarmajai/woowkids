@@ -1,9 +1,9 @@
-"""B18 — la cajera no conocía el horario de su sucursal.
+"""La cajera no conocía el horario de su sucursal.
 
 `GET /api/sucursales/{id}` exige `sucursales:ver` (el Cajero no lo tiene), así
 que el calendario y Nueva reservación recibían 403 y pintaban 09:00-20:00 en
 lugar del horario real. `GET /api/sucursales/{id}/horario` da solo los datos
-operativos a quien gestiona reservaciones, y solo de su propia sucursal (C1).
+operativos a quien gestiona reservaciones, y solo de su propia sucursal.
 """
 
 from __future__ import annotations

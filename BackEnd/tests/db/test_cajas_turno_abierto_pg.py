@@ -1,4 +1,4 @@
-"""M9 contra PostgreSQL real: no se desactiva una caja con turno abierto, y
+"""Contra PostgreSQL real: no se desactiva una caja con turno abierto, y
 una caja desactivada ya no abre turnos."""
 
 import uuid
@@ -18,9 +18,6 @@ from tests.db.pos_fixtures import Pos, crear_pos
 @pytest_asyncio.fixture
 async def pos(pool: asyncpg.Pool) -> Pos:
     return await crear_pos(pool)
-
-
-# ── M9 ────────────────────────────────────────────────────────────────────────
 
 
 def _admin(sucursal: uuid.UUID, usuario: uuid.UUID) -> TokenData:

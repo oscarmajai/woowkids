@@ -119,13 +119,13 @@ describe('auth store: tryRefresh', () => {
     expect(JSON.parse(localStorage.getItem('auth_session') ?? '{}').user.permissions).toEqual([
       'pos:acceder',
     ])
-    // C3: el token refrescado queda solo en memoria, nunca en localStorage.
+    // El token refrescado queda solo en memoria, nunca en localStorage.
     expect(JSON.parse(localStorage.getItem('auth_session') ?? '{}').token).toBeUndefined()
     expect(tokenMemory.get()).toBe('new')
   })
 })
 
-describe('auth store: restoreSession (C3)', () => {
+describe('auth store: restoreSession', () => {
   beforeEach(() => {
     localStorage.clear()
     tokenMemory.clear()
@@ -177,7 +177,7 @@ describe('auth store: restoreSession (C3)', () => {
   })
 })
 
-describe('auth store: logout limpia la memoria (C3)', () => {
+describe('auth store: logout limpia la memoria', () => {
   beforeEach(() => {
     localStorage.clear()
     tokenMemory.clear()
