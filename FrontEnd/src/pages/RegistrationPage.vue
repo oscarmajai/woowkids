@@ -72,10 +72,10 @@
           </template>
         </template>
 
-        <ConsentimientoPrivacidad />
         <TutorForm />
         <ChildrenSection v-if="store.step === 'form'" />
         <RfidSection v-if="store.step === 'rfid'" />
+        <ConsentimientoPrivacidad />
       </template>
     </div>
 

@@ -6,9 +6,9 @@ import AvisoPrivacidadTexto from '@/components/privacidad/AvisoPrivacidadTexto.v
 import { RUTA_AVISO_PRIVACIDAD } from '@/utils/avisoPrivacidad'
 
 /**
- * Consentimiento del tutor (LFPDPPP): antes de capturar sus datos se le
- * muestra el aviso simplificado (con enlace al integral) y se deja constancia
- * de que lo aceptó. También puede negarse a las finalidades voluntarias.
+ * Consentimiento del tutor (LFPDPPP): al final del registro, antes de cobrar,
+ * se le muestra el aviso simplificado (con enlace al integral) y se deja
+ * constancia de que lo aceptó. También puede negarse a las finalidades voluntarias.
  */
 const store = useRegistrationStore()
 const verAviso = ref(false)
@@ -42,8 +42,8 @@ function aceptarDesdeDialogo(): void {
 
       <template v-else-if="store.avisoPrivacidad">
         <p class="consent__intro">
-          Antes de capturar sus datos y los de los niños, muestra al tutor el aviso de privacidad
-          (versión {{ store.avisoPrivacidad.version }}).
+          Antes de continuar, muestra al tutor el aviso de privacidad (versión
+          {{ store.avisoPrivacidad.version }}) sobre el uso de sus datos y los de los niños.
           <q-btn
             flat
             dense

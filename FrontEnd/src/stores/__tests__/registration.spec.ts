@@ -231,13 +231,13 @@ describe('registration store: aviso de privacidad (LFPDPPP)', () => {
     expect(store.step).toBe('rfid')
   })
 
-  it('reset limpia la aceptación del tutor anterior', () => {
-    const store = prepararRegistroListo()
+  it('reset vuelve a dejar la aceptación marcada por defecto y quita la negativa', () => {
+    const store = prepararRegistroListo({ aceptaAviso: false })
     store.rechazaFinalidadesSecundarias = true
 
     store.reset()
 
-    expect(store.aceptaAvisoPrivacidad).toBe(false)
+    expect(store.aceptaAvisoPrivacidad).toBe(true)
     expect(store.rechazaFinalidadesSecundarias).toBe(false)
   })
 

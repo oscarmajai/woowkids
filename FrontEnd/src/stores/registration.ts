@@ -105,13 +105,14 @@ export const useRegistrationStore = defineStore('registration', () => {
   const advertenciaEfectivoFromServer = ref<string | null>(null)
 
   // ── Aviso de privacidad (LFPDPPP) ─────────────────────────────────────────
-  // El tutor debe aceptar la versión vigente antes de registrar la entrada;
+  // El tutor debe aceptar la versión vigente antes de registrar la entrada
+  // (la casilla viene marcada; el cajero la desmarca si el tutor no acepta);
   // las finalidades voluntarias (lealtad y promociones) se aceptan salvo que
   // se niegue (consentimiento tácito).
   const avisoPrivacidad = ref<AvisoPrivacidad | null>(null)
   const cargandoAviso = ref(false)
   const errorAviso = ref<string | null>(null)
-  const aceptaAvisoPrivacidad = ref(false)
+  const aceptaAvisoPrivacidad = ref(true)
   const rechazaFinalidadesSecundarias = ref(false)
   const avisoAceptado = computed(
     () => aceptaAvisoPrivacidad.value && avisoPrivacidad.value !== null,
@@ -635,7 +636,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     cambioFromModal.value = 0
     puntosARedimirValue.value = 0
     descuentoPuntosValue.value = 0
-    aceptaAvisoPrivacidad.value = false
+    aceptaAvisoPrivacidad.value = true
     rechazaFinalidadesSecundarias.value = false
     tutor.value = {
       fullName: '',
