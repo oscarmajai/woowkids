@@ -8,7 +8,7 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       globals: true,
-      exclude: [...configDefaults.exclude, 'e2e/**'],
+      exclude: configDefaults.exclude,
       root: fileURLToPath(new URL('./', import.meta.url)),
       setupFiles: ['./vitest.setup.ts'],
       coverage: {
