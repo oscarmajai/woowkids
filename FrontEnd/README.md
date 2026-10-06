@@ -1,100 +1,64 @@
-# Mercury FrontEnd
+# Woow Kids — FrontEnd
 
-Frontend del sistema "todo en uno" para franquicias de restaurantes: check-in, control de inventario y gestión de restaurante.
+Aplicación web del sistema Woow Kids: caja (POS), estancias, eventos y reservaciones, inventario, lealtad, administración multisucursal y portal de padres. Consume la API de [`BackEnd/`](../BackEnd) por REST y WebSockets.
 
 ## Stack
 
 - **Vue 3** (Composition API + `<script setup>`)
+- **Quasar 2** — componentes UI
 - **Vite** — bundler y dev server
-- **Quasar** — componentes UI y layouts
 - **Pinia** — manejo de estado
+- **Vue Router** — rutas con guards de autenticación y permisos
 - **TypeScript** — tipado estricto
 - **Axios** — cliente HTTP
-- **Vitest** — pruebas unitarias
+- **Vitest** + Vue Test Utils — pruebas
 - **ESLint + Prettier** — calidad y formato
-- **Husky + commitlint** — git hooks y conventional commits
+- **Husky + commitlint** — hooks de Git del monorepo
 
-## Requisitos previos
+## Documentación
 
-- Node.js `^20.19.0` o `>=22.12.0`
-- npm
+| Documento                                  | Contenido                                                      |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| [`SETUP.md`](SETUP.md)                     | Entorno de desarrollo: instalación, variables, scripts y hooks |
+| [`GUIA_DESARROLLO.md`](GUIA_DESARROLLO.md) | Convenciones y cómo agregar páginas, módulos de API y stores   |
+| [`../SAD.md`](../SAD.md)                   | Arquitectura del sistema completo                              |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Git Flow, commits y calidad                                    |
 
-## Instalación
+## Inicio rápido
 
 ```bash
 npm install
-```
-
-## Variables de entorno
-
-Copia `.env.example` a `.env.local` y ajusta los valores:
-
-```bash
 cp .env.example .env.local
-```
-
-| Variable            | Descripción                 | Default                     |
-| ------------------- | --------------------------- | --------------------------- |
-| `VITE_API_BASE_URL` | URL base del backend (REST) | `http://localhost:8000/api` |
-| `VITE_APP_TITLE`    | Título de la aplicación     | `TEC-FS`                    |
-
-> El backend (FastAPI) corre en un repositorio separado.
-
-## Scripts
-
-```bash
-npm run dev           # servidor de desarrollo (http://localhost:5173)
-npm run build         # build de producción (vue-tsc + vite build)
-npm run preview       # previsualizar el build de producción
-
-npm run lint          # ESLint + auto-fix
-npm run format        # Prettier sobre src/
-npm run type-check    # vue-tsc sin emitir
-
-npm run test          # Vitest (una vez)
-npm run test:watch    # Vitest en modo watch
-npm run test:coverage # Vitest con cobertura
+npm run dev           # http://localhost:5173 (necesita la API en :8000, ver BackEnd/SETUP.md)
 ```
 
 ## Estructura del proyecto
 
 ```
 src/
-  api/          # Definición de endpoints y cliente axios
-  assets/       # Recursos estáticos (imágenes, fuentes)
-  boot/         # Boot files de Quasar (plugins, configuración inicial)
-  composables/  # Lógica reutilizable (use*)
-  layouts/      # Layouts de Quasar (AuthLayout, MainLayout)
+  api/          # Un módulo por recurso; solo arma y dispara la request (axiosClient.ts)
+  assets/       # Recursos estáticos
+  boot/         # setupPlugins.ts: Quasar, Pinia, router, guards, inactividad
+  components/   # Componentes por módulo, ui/ (kit base) y layout/ (sidebar, topbar)
+  composables/  # Lógica reutilizable (use*), incluido el menú lateral
+  css/          # app.scss: paleta, tipografía y variables CSS
+  layouts/      # AuthLayout, AppShell, PublicLayout, PadresLayout
   pages/        # Vistas ruteadas
-  router/       # Configuración de Vue Router y guards
+  router/       # Rutas (index.ts) y guards (guards.ts)
   services/     # Lógica de negocio que orquesta llamadas de api/
   stores/       # Stores de Pinia
   types/        # Tipos e interfaces TypeScript compartidos
   utils/        # Funciones puras de utilidad
 ```
 
+Las pruebas viven junto al código, en carpetas `__tests__/`.
+
 Reglas de capas:
 
-- Las páginas/componentes consumen `services/` o `stores/`, nunca axios directo.
+- Las páginas y componentes consumen `services/` o `stores/`, nunca axios directo.
 - `services/` orquesta y llama a `api/`.
 - Todo lo que cruce una frontera (respuestas de API, props, payloads) se tipa en `types/`.
 
-## Git
+## Producción
 
-Este proyecto sigue **Git Flow** y **Conventional Commits**.
-
-Ramas:
-
-- `main` — producción
-- `develop` — integración (todas las ramas de trabajo salen de aquí)
-- `feature/<issue>-<descripcion>` — nuevas funcionalidades
-- `fix/<issue>-<descripcion>` — correcciones sobre develop
-- `hotfix/<descripcion>` — urgencias sobre main
-
-Formato de commit: `<tipo>: <descripción en imperativo sin punto final>`
-
-Tipos permitidos: `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`, `perf`, `build`, `ci`, `revert`.
-
-Ejemplo: `feat: agregar validación de credenciales en login`
-
-El hook `pre-commit` corre lint-staged (ESLint + Prettier) y `type-check` automáticamente. El hook `commit-msg` valida el formato conventional.
+El `Dockerfile` compila la aplicación y la sirve con nginx (`nginx.conf`), que además hace proxy de `/api` (incluidos los WebSockets) al servicio `backend`. Se construye desde la raíz del monorepo con `docker compose build` (ver [`README.md`](../README.md)).

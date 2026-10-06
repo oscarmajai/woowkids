@@ -1,112 +1,105 @@
-# Setup de calidad + git hooks — Mercury BackEnd
+# Entorno de desarrollo — BackEnd
 
-Pasos para dejar funcionando Ruff + mypy + pytest + pre-commit + commitlint.
+Cómo correr la API en local, con PostgreSQL y MinIO en Docker. Las reglas de Git, commits y calidad están en [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-## 1. Copiar archivos a la raíz del repo
+## Requisitos
 
-```
-pyproject.toml
-requirements-dev.txt
-.pre-commit-config.yaml
-commitlint.config.js
-```
+- Python 3.12 (mínimo 3.11)
+- Docker con Compose
+- Cliente `psql` (lo usa `scripts/reset_db_local.sh`)
+- Node.js, para los hooks de Git (se instalan desde `FrontEnd/`)
 
-## 2. Crear entorno virtual e instalar dependencias
+## 1. Entorno virtual y dependencias
 
 ```bash
+cd BackEnd
 python -m venv .venv
-source .venv/bin/activate         # en Fedora/Linux
-
-# Dependencias de desarrollo (calidad + testing)
-pip install -r requirements-dev.txt
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-> Las dependencias de la app (fastapi, uvicorn, asyncpg, pydantic-settings, etc.)
-> van en `requirements.txt` aparte, a medida que se necesiten.
+El hook de pre-commit busca `ruff` y `mypy` en `BackEnd/.venv`: crea el entorno virtual con ese nombre.
 
-## 3. Instalar los hooks de pre-commit
-
-```bash
-pre-commit install                      # hook pre-commit (ruff, mypy, etc.)
-pre-commit install --hook-type commit-msg   # hook commit-msg (commitlint)
-```
-
-Esto deja los dos hooks activos en `.git/hooks/`.
-
-> commitlint corre sobre Node. Necesitas tener `node`/`npx` disponible en el sistema
-> (el hook lo descarga vía pre-commit, pero requiere Node instalado en la máquina).
-
-## 4. Probar
+## 2. Base de datos y almacenamiento locales
 
 ```bash
-# Correr todos los hooks manualmente sobre todo el repo:
-pre-commit run --all-files
-
-# Probar la validación de mensaje:
-git commit -m "agrega login"     # debe FALLAR (sin tipo conventional)
-git commit -m "feat: agregar endpoint de login con jwt"   # debe PASAR
-```
-
-```bash
-ruff check . --fix      # lint con autofix
-ruff format .           # formato
-mypy app                # type-check
-pytest                  # tests
-```
-
-## Qué hace cada cosa
-
-- **pyproject.toml** — Config central de Ruff (lint+formato, línea 100, reglas E/W/F/I/B/UP/N/ASYNC/RUF), mypy en modo estricto con plugin de pydantic, y pytest con modo asyncio automático.
-- **requirements-dev.txt** — Ruff, mypy, pytest, pytest-asyncio, httpx (tests de endpoints) y pre-commit.
-- **.pre-commit-config.yaml** — Hooks: ruff + ruff-format, mypy, higiene de archivos y commitlint en el mensaje. Al commitear, si algo falla el commit se aborta.
-- **commitlint.config.js** — Conventional commits: todos los tipos, sin scope, subject en minúscula sin punto final. Idéntico al frontend.
-
-## Entorno local con Docker (BD + almacenamiento)
-
-La BD de dev compartida (`100.125.39.1`, vía Tailscale) depende de que la
-máquina de otra persona esté encendida, y probar migraciones ahí es
-irreversible. Para desarrollo y para validar migraciones antes de proponerlas,
-levanta el stack local:
-
-```bash
-docker compose -f docker-compose.dev.yml up -d     # Postgres :5433 + MinIO :9000
+docker compose -f docker-compose.dev.yml up -d     # PostgreSQL :5433 + MinIO :9000 (consola :9001)
 ./scripts/reset_db_local.sh --seed                 # migraciones + datos de prueba
 ```
 
-`reset_db_local.sh` tira el esquema `public` y reaplica **todos** los archivos de
-`sql/migrations/` en orden. Es la forma de comprobar que una migración nueva
-funciona desde cero, no solo sobre una BD que ya tiene datos.
-
-### Cómo se aplican las migraciones en producción
-
-Al arrancar, `docker/entrypoint.sh` aplica solo las migraciones de
-`sql/migrations/` que falten (orden byte a byte del nombre) y registra cada una
-en `public.schema_migraciones`. Una BD vacía se crea con `sql/schema_maestro.sql`
-y todas quedan registradas. Reglas para una migración nueva:
-
-- **No la edites una vez publicada**: se aplica una sola vez por instalación;
-  un cambio posterior va en otra migración.
-- **Sin `BEGIN`/`COMMIT` propios**: el arranque la corre en una transacción
-  junto con su registro. Si falla, no queda a medias ni registrada y el
-  contenedor no arranca (el error queda en los logs).
-- **Regenera el maestro** (`./scripts/generar_schema_maestro.sh`) y commitéalo
-  con la migración; el CI lo verifica.
-- `./scripts/probar_control_migraciones.sh <imagen>` prueba el mecanismo
-  completo contra un PostgreSQL real (el CI lo corre en cada cambio del backend).
-
-El `.env` ya apunta al stack local; las cadenas de la BD compartida quedaron
-comentadas ahí mismo para volver a ellas cuando haga falta.
-
-> **MinIO es obligatorio aunque no lo uses.** El `lifespan` de la app llama a
-> `ensure_bucket()` al arrancar; si el endpoint S3 no responde, el arranque se
-> queda colgado en `Waiting for application startup` y **ningún** endpoint
-> contesta, ni siquiera el login.
-
-Credenciales del seed (`sql/seed_local.sql`), todas con contraseña `12345678`:
-
-| Correo | Rol |
-|---|---|
-| `admin@local.dev` | Administrador (sucursal "Sucursal Local") |
-| `sistemas@local.dev` | AdministradorSistema (acceso global) |
+`reset_db_local.sh` tira el esquema `public` y reaplica **todos** los archivos de `sql/migrations/` en orden. Es la forma de comprobar que una migración nueva funciona desde cero, no solo sobre una BD que ya tiene datos. Sin `--seed` deja la BD solo con los catálogos que siembran las migraciones.
 
 Para tirar todo, incluidos los volúmenes: `docker compose -f docker-compose.dev.yml down -v`
+
+> **MinIO es obligatorio aunque no lo uses.** El `lifespan` de la app llama a `ensure_bucket()` al arrancar; si el endpoint S3 no responde, el arranque se queda en `Waiting for application startup` y **ningún** endpoint contesta, ni siquiera el login.
+
+## 3. Configuración
+
+```bash
+cp .env.example .env
+```
+
+Los valores de `.env.example` ya apuntan al stack de `docker-compose.dev.yml`. Cambia `SECRET_KEY` por cualquier valor propio.
+
+## 4. Levantar la API
+
+```bash
+uvicorn app.main:app --reload
+```
+
+- API: `http://localhost:8000/api/...`
+- Documentación interactiva: `http://localhost:8000/docs`
+
+El frontend en modo desarrollo (`npm run dev` en `FrontEnd/`) hace proxy de `/api` a este puerto.
+
+### Usuarios de prueba
+
+Los crea `sql/seed_local.sql`, todos con contraseña `12345678`:
+
+| Correo | Rol | Sucursal |
+|---|---|---|
+| `sistemas@local.dev` | AdministradorSistema | — (acceso global) |
+| `admin@local.dev` | Administrador | Sucursal Local |
+| `cajero@local.dev` | Cajero | Sucursal Local |
+
+El seed también deja cajas, tarifa de estancia, pulseras, productos y paquetes para probar los flujos completos. **Solo es para desarrollo**: en una instalación real se entra con el administrador inicial (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, ver [`README.md`](../README.md)).
+
+## 5. Pruebas y calidad
+
+```bash
+ruff check .            # lint (ruff check . --fix para corregir)
+ruff format --check .   # formato (ruff format . para aplicarlo)
+mypy app                # tipos
+pytest tests/unit       # pruebas unitarias, sin BD
+```
+
+Las pruebas de `tests/db/` corren contra un PostgreSQL real y desechable con el esquema completo cargado. Si `TEST_DATABASE_URL` no está definida, se saltan:
+
+```bash
+TEST_DATABASE_URL=postgresql://dev:dev@localhost:5433/mercury pytest tests/db -q
+```
+
+Cada prueba crea sus propios datos con nombres únicos, así que se pueden repetir sobre la misma BD. No apuntes `TEST_DATABASE_URL` a una BD con datos que quieras conservar.
+
+## 6. Migraciones
+
+Al arrancar, `docker/entrypoint.sh` aplica solo las migraciones de `sql/migrations/` que falten (orden byte a byte del nombre) y registra cada una en `public.schema_migraciones`. Una BD vacía se crea con `sql/schema_maestro.sql` y todas quedan registradas. Reglas para una migración nueva:
+
+- **Siguiente número libre** en el prefijo (`NNN_descripcion.sql`, después de la última de `sql/migrations/`).
+- **No la edites una vez publicada**: se aplica una sola vez por instalación; un cambio posterior va en otra migración.
+- **Sin `BEGIN`/`COMMIT` propios**: el arranque la corre en una transacción junto con su registro. Si falla, no queda a medias ni registrada y el contenedor no arranca (el error queda en los logs).
+- **Pruébala desde cero** con `./scripts/reset_db_local.sh`.
+- **Regenera el maestro** (`./scripts/generar_schema_maestro.sh`, requiere Docker) y commitéalo con la migración; el CI verifica que esté al día.
+- `./scripts/probar_control_migraciones.sh <imagen>` prueba el mecanismo completo de arranque contra un PostgreSQL real (el CI lo corre en cada cambio del backend).
+
+## 7. Respaldos
+
+`scripts/respaldos.py` respalda la BD y los archivos de MinIO. Dentro de los contenedores se usa con el comando `respaldos`:
+
+```bash
+respaldos respaldar            # un respaldo ahora
+respaldos listar               # respaldos disponibles
+respaldos restaurar <nombre>   # vuelve a un respaldo
+```
+
+En producción lo corre solo el servicio `respaldos` del `docker-compose.yml` de la raíz (o el proceso equivalente de la imagen todo en uno) cada `BACKUP_CADA_HORAS` horas.

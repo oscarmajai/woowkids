@@ -26,10 +26,10 @@ until psql "$DATABASE_URL" -tAc 'SELECT 1' >/dev/null 2>&1; do
     sleep 1
 done
 
-# Última migración incluida en todas las versiones publicadas antes de que
-# existiera el control de migraciones (v1.0.0). En una BD de esas versiones,
-# todo lo que ordena hasta aquí ya está aplicado; lo posterior se aplica (074 en
-# adelante deben ser idempotentes, porque v1.0.1+ ya las traía en el maestro).
+# Última migración incluida en todas las instalaciones anteriores al control de
+# migraciones. En una BD de esas instalaciones, todo lo que ordena hasta aquí ya
+# está aplicado; lo posterior se aplica (074 en adelante deben ser idempotentes,
+# porque algunas de esas instalaciones ya las traían en el maestro).
 MIGRACION_BASE="073_administrador_permisos_turno.sql"
 
 psql_q() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q "$@"; }
