@@ -48,7 +48,9 @@
 
     <div class="ie-modal-callout ie-modal-callout--info">
       <q-icon name="info" size="19px" />
-      <span>El ingreso afectará de inmediato el saldo esperado en caja. No se contará como venta.</span>
+      <span
+        >El ingreso afectará de inmediato el saldo esperado en caja. No se contará como venta.</span
+      >
     </div>
   </BaseDialog>
 </template>

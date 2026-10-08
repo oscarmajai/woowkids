@@ -23,7 +23,7 @@ function montarCon(registroId: string, codigoAccesoPadres: string) {
   return mount(PrintVoucher, { global: { plugins: [pinia] } })
 }
 
-describe('PrintVoucher: QR del portal de padres (A17)', () => {
+describe('PrintVoucher: QR del portal de padres', () => {
   beforeEach(() => {
     vi.mocked(QRCode.toDataURL).mockClear()
   })
@@ -47,7 +47,7 @@ describe('PrintVoucher: QR del portal de padres (A17)', () => {
   })
 })
 
-describe('PrintVoucher: notas / alergias en el comprobante (M26)', () => {
+describe('PrintVoucher: notas / alergias en el comprobante', () => {
   it('cada niño con notas las muestra en el ticket', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

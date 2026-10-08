@@ -17,7 +17,7 @@ from app.services.validaciones_pago import validar_cambio
 async def validar_referencias_pago(
     conn: asyncpg.Connection, sucursal_id: UUID, pagos: list[PagoIn]
 ) -> None:
-    """N8 — misma regla que M11 en el POS (pago_service._validar_metodos_pago)
+    """Misma regla que en el POS (pago_service._validar_metodos_pago)
     para los cobros de estancia (check-in, cargo extra del checkout y pago
     extra): si el método de pago exige referencia (folio del voucher,
     número de transferencia), el pago tiene que traerla; si no, 422 sin
@@ -54,13 +54,13 @@ async def pago_create_service(
     await validar_referencias_pago(conn, sucursal_id, body.pagos)
 
     async with conn.transaction():
-        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        # El turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         registro = await obtener_saldo_para_cobro(conn, registro_id)
         if not registro or registro["sucursal_id"] != sucursal_id:
             raise HTTPException(404, "Registro no encontrado")
 
-        # C2: lo que se puede cobrar lo dice el servidor (total del registro
+        # Lo que se puede cobrar lo dice el servidor (total del registro
         # menos lo ya cobrado), no el cliente. Un abono parcial se acepta;
         # cobrar de más, no.
         saldo = Decimal(registro["total"]) - Decimal(registro["pagado_neto"])

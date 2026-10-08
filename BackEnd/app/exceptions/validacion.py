@@ -1,4 +1,4 @@
-"""Errores de validación de la petición en español (B8).
+"""Errores de validación de la petición en español.
 
 FastAPI responde los ``RequestValidationError`` con los mensajes en inglés de
 Pydantic ("Input should be greater than 0"). Este manejador conserva la misma

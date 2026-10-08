@@ -211,7 +211,7 @@ import type { Proveedor } from '@/types/proveedor'
 
 const $q = useQuasar()
 const authStore = useAuthStore()
-// M20: eliminar (desactivar) exige inventario:eliminar_proveedor.
+// Eliminar (desactivar) exige inventario:eliminar_proveedor.
 const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_proveedor'))
 const store = useProveedoresStore()
 
@@ -247,7 +247,13 @@ const columns: QTableColumn[] = [
   { name: 'contacto_nombre', label: 'Contacto', field: 'contacto_nombre', align: 'left' },
   { name: 'telefono', label: 'Teléfono', field: 'telefono', align: 'left' },
   { name: 'email', label: 'Email', field: 'email', align: 'left' },
-  { name: 'rfc', label: 'RFC', field: 'rfc', align: 'left', format: (v: string | null) => v ?? '—' },
+  {
+    name: 'rfc',
+    label: 'RFC',
+    field: 'rfc',
+    align: 'left',
+    format: (v: string | null) => v ?? '—',
+  },
   {
     name: 'dias_entrega',
     label: 'Entrega',

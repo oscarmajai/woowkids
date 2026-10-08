@@ -336,7 +336,7 @@ const modoImpresion = ref(false)
 const exportando = ref(false)
 let controladorFetch: AbortController | null = null
 
-// N17: el historial es por sucursal (sus periodos se calculan en la zona de
+// El historial es por sucursal (sus periodos se calculan en la zona de
 // cada una). En "Todas las sucursales" el backend pide elegir una (422); no se
 // consulta y se avisa.
 const sinSucursal = computed(() => !authStore.currentBranchId)
@@ -600,7 +600,7 @@ function esEditable(estado: string): boolean {
   return estado.toUpperCase() === 'P'
 }
 
-// A2: solo se cancela mientras sigue en cocina (Pendiente, En preparación,
+// Solo se cancela mientras sigue en cocina (Pendiente, En preparación,
 // Lista). Una entregada ya consumió sus insumos; el backend responde 409.
 function esCancelable(estado: string): boolean {
   return ['P', 'E', 'L'].includes(estado.toUpperCase())
@@ -617,7 +617,7 @@ function abrirCancelar(comandaId: string) {
     },
   }).onOk(async (motivo: string) => {
     try {
-      // A4: si la orden está pagada, pide el PIN de un administrador.
+      // Si la orden está pagada, pide el PIN de un administrador.
       const cancelada = await cancelarComanda(comandaId, motivo)
       if (!cancelada) return
       $q.notify({
@@ -636,7 +636,7 @@ function abrirCancelar(comandaId: string) {
   })
 }
 
-// A4: una entregada ya no se cancela (su producto se consumió), pero se le
+// Una entregada ya no se cancela (su producto se consumió), pero se le
 // puede devolver el dinero al cliente: no regresa stock y exige el PIN de un
 // administrador de la sucursal.
 function esDevolvible(estado: string): boolean {

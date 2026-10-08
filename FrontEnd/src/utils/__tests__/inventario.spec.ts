@@ -4,6 +4,7 @@ import {
   compraPorRecibir,
   diferenciaConteo,
   formatCostoUnitario,
+  pasoCantidadReceta,
   sumarBadgesGrupo,
   tituloAlertasStock,
   totalConIva,
@@ -12,7 +13,7 @@ import {
 // Intl usa espacios especiales en algunos entornos: se comparan sin ellos.
 const limpio = (s: string) => s.replace(/\s/g, '')
 
-describe('formatCostoUnitario (M21)', () => {
+describe('formatCostoUnitario', () => {
   it('no redondea a centavos el costo por gramo o mililitro', () => {
     expect(limpio(formatCostoUnitario('0.042692'))).toBe('$0.042692')
     expect(limpio(formatCostoUnitario(0.12231))).toBe('$0.12231')
@@ -35,7 +36,7 @@ describe('diferenciaConteo (conteo físico)', () => {
   })
 })
 
-describe('compraPorRecibir (B6)', () => {
+describe('compraPorRecibir', () => {
   it('cuenta las pendientes y las parciales', () => {
     expect(compraPorRecibir('P')).toBe(true)
     expect(compraPorRecibir('PARCIAL')).toBe(true)
@@ -52,7 +53,7 @@ describe('totalConIva (UX compras)', () => {
   })
 })
 
-describe('tituloAlertasStock (B7)', () => {
+describe('tituloAlertasStock', () => {
   it('separa bajo mínimo de por reordenar', () => {
     expect(tituloAlertasStock(1, 1)).toBe('1 insumo bajo mínimo · 1 por reordenar')
     expect(tituloAlertasStock(2, 0)).toBe('2 insumos bajo mínimo')
@@ -60,7 +61,7 @@ describe('tituloAlertasStock (B7)', () => {
   })
 })
 
-describe('sumarBadgesGrupo (B7)', () => {
+describe('sumarBadgesGrupo', () => {
   it('cuenta una sola vez dos ítems con el mismo contador', () => {
     const alertas = { count: 2, tone: 'warn' as const, fuente: 'alertas-inventario' }
     expect(sumarBadgesGrupo([alertas, null, alertas])).toBe(2)
@@ -74,5 +75,22 @@ describe('sumarBadgesGrupo (B7)', () => {
         { count: 1, tone: 'warn' },
       ]),
     ).toBe(6)
+  })
+})
+
+describe('pasoCantidadReceta', () => {
+  it('sube de 1 en 1 los insumos por pieza', () => {
+    expect(pasoCantidadReceta({ tipo: 'pieza', factor_a_base: '1.000000' })).toBe(1)
+  })
+
+  it('sube de 0.5 en 0.5 los insumos en kg o l', () => {
+    expect(pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1000.000000' })).toBe(0.5)
+    expect(pasoCantidadReceta({ tipo: 'volumen', factor_a_base: '1000.000000' })).toBe(0.5)
+  })
+
+  it('deja el paso fino en g, ml o sin insumo elegido', () => {
+    expect(pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1.000000' })).toBe(0.001)
+    expect(pasoCantidadReceta({ tipo: 'volumen', factor_a_base: '1.000000' })).toBe(0.001)
+    expect(pasoCantidadReceta(null)).toBe(0.001)
   })
 })

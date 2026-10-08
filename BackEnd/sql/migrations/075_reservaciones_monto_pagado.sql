@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 075_reservaciones_monto_pagado.sql
 -- El saldo de una reservación refleja TODO lo cobrado, no sólo el anticipo
--- (bug C3: reservaciones liquidadas que el scheduler cancelaba "por falta de
+-- (si no, había reservaciones liquidadas que el scheduler cancelaba "por falta de
 -- pago", y saldos obsoletos en Reservaciones, Registrar pago, Resumen de
 -- eventos y el check-in de "Evento / Fiesta").
 --

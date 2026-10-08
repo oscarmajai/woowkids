@@ -43,7 +43,7 @@ def hash_refresh_token(raw: str) -> str:
 
 
 def generate_ws_ticket() -> tuple[str, str]:
-    """Ticket efímero de un solo uso para autenticar WebSockets (QA #32).
+    """Ticket efímero de un solo uso para autenticar WebSockets.
     Devuelve (ticket_crudo, hash_sha256); solo el hash se guarda en BD."""
     raw = secrets.token_urlsafe(32)
     ticket_hash = hashlib.sha256(raw.encode()).hexdigest()
@@ -55,7 +55,7 @@ def hash_ws_ticket(raw: str) -> str:
 
 
 def generate_codigo_acceso_padres() -> tuple[str, str]:
-    """Código opaco del QR del portal de padres (A17). Devuelve
+    """Código opaco del QR del portal de padres. Devuelve
     (codigo_crudo, hash_sha256); solo el hash se guarda en BD. 24 bytes
     aleatorios (192 bits): no se puede adivinar por fuerza bruta."""
     raw = secrets.token_urlsafe(24)

@@ -21,7 +21,7 @@ async def listar_con_unidad_por_reservacion(
     conn: asyncpg.Connection, reservacion_id: UUID
 ) -> list[dict[str, Any]]:
     """Extras de la reservación con la `unidad` de su catálogo, para recalcular
-    la cantidad de los que se cobran por persona o por hora (M15)."""
+    la cantidad de los que se cobran por persona o por hora."""
     rows = await conn.fetch(
         """
         SELECT re.id, re.extra_id, re.cantidad, re.precio_unitario, e.unidad

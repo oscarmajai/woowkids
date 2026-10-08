@@ -171,7 +171,7 @@
                         {{ selectedDateLabel }}
                       </div>
                       <!-- Se avisa desde aquí, antes de armar el paquete: a 7 días o
-                           menos se cobra el total al reservar (C3, paso 3). -->
+                           menos se cobra el total al reservar. -->
                       <div
                         v-if="liquidacionObligatoria"
                         class="text-warning q-mt-xs"
@@ -1049,7 +1049,7 @@ onMounted(() => {
 
   // Horario de operación de la sucursal, para avisar (no bloquear) cuando el
   // evento quede fuera de ese horario.
-  // B18: el endpoint acotado; GET /sucursales/{id} da 403 a la cajera.
+  // El endpoint acotado: GET /sucursales/{id} da 403 a la cajera.
   branchService
     .getHorario(authStore.currentBranchId)
     .then((b) => {
@@ -1222,7 +1222,7 @@ const handleDayClick = (day: BookingCalendarDay) => {
   if (!day.isOtherMonth && day.day !== '' && !day.isPast) form.value.selectedDate = day.date
 }
 
-// N-A2: el saldo vence una semana antes del evento, no el día del evento.
+// El saldo vence una semana antes del evento, no el día del evento.
 const limiteLiquidacionLabel = computed(() =>
   form.value.selectedDate ? fechaLimiteLiquidacionTexto(form.value.selectedDate) : '',
 )
@@ -1433,7 +1433,7 @@ const paquetesDisponibles = computed(() =>
     (p) =>
       form.value.ninos >= p.min_invitados &&
       form.value.ninos <= p.max_invitados &&
-      // M17: solo los paquetes del tipo de evento elegido (o sin tipos: todos).
+      // Solo los paquetes del tipo de evento elegido (o sin tipos: todos).
       paqueteSirveParaTipo(p, form.value.tipoEvento),
   ),
 )
@@ -1492,7 +1492,7 @@ const precioPulserasNum = computed(
 )
 
 /**
- * Extras elegidos con la cantidad que les toca por su unidad (M15): por persona
+ * Extras elegidos con la cantidad que les toca por su unidad: por persona
  * = niños, por hora = horas del evento, por evento = 1. Es solo la vista
  * previa: el servidor calcula lo mismo y, si no coincide, responde 409.
  */
@@ -1527,7 +1527,7 @@ const montoPorPorcentaje = (porcentaje: number) =>
 
 /**
  * Piso de anticipo: 30 % del negocio o el `anticipo_porcentaje` del paquete si
- * es mayor (M16). El servidor rechaza cualquier cobro por debajo.
+ * es mayor. El servidor rechaza cualquier cobro por debajo.
  */
 const porcentajeMinimo = computed(() =>
   porcentajeAnticipoMinimo(selectedPkg.value?.anticipo_porcentaje),
@@ -1702,8 +1702,8 @@ function reiniciarCobro(): void {
 }
 
 const confirmarReservacion = async () => {
-  // Único bloqueo de doble clic: ya no hace falta recordar si una reservación
-  // quedó creada a medias (QA #10) porque POST /reservaciones/completa es
+  // Único bloqueo de doble clic: no hace falta recordar si una reservación
+  // quedó creada a medias porque POST /reservaciones/completa es
   // atómico -- o se crea todo, o no se crea nada.
   if (confirmando.value) return
 
@@ -1775,8 +1775,8 @@ const confirmarReservacion = async () => {
     return
   }
 
-  // QA #10: un solo POST atómico -- reservación, extras, productos y pagos
-  // se crean (o fallan) juntos en una transacción del backend, así que ya no
+  // Un solo POST atómico -- reservación, extras, productos y pagos
+  // se crean (o fallan) juntos en una transacción del backend, así que no
   // hace falta recordar un id a medio camino para reintentar.
   try {
     const resultado = await resStore.crearReservacionCompleta({

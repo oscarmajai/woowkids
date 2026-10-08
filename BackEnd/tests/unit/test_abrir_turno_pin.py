@@ -1,11 +1,11 @@
-"""C1 #2 / A5 / A16 / B15 / N2: abrir turno exige el PIN del cajero.
+"""Abrir turno exige el PIN del cajero.
 
-- Sin PIN configurado vale la contraseña; con PIN, SOLO el PIN (A16).
-- Un PIN mal escrito responde 403 PIN_INVALIDO, nunca 401 (A5: el front
-  trataba el 401 como sesión vencida y cerraba la sesión).
+- Sin PIN configurado vale la contraseña; con PIN, SOLO el PIN.
+- Un PIN mal escrito responde 403 PIN_INVALIDO, nunca 401 (el front
+  trataría el 401 como sesión vencida y cerraría la sesión).
 - El PIN se valida aunque ya haya un turno abierto, y un turno abierto con
-  otra caja/fondo responde 409 en vez de 201 con el existente (B15).
-- Dos aperturas simultáneas ya no dan 500 por el índice único (N2).
+  otra caja/fondo responde 409 en vez de 201 con el existente.
+- Dos aperturas simultáneas ya no dan 500 por el índice único.
 """
 
 from decimal import Decimal
@@ -149,7 +149,7 @@ async def test_abrir_turno_sin_pin_configurado_acepta_password(
 async def test_abrir_turno_con_pin_configurado_rechaza_la_password(
     entorno: dict[str, AsyncMock],
 ) -> None:
-    """A16: si el cajero ya tiene PIN, su contraseña no sirve como PIN."""
+    """Si el cajero ya tiene PIN, su contraseña no sirve como PIN."""
     with pytest.raises(HTTPException) as exc_info:
         await _abrir(_payload(pin="contraseña123"))
 
@@ -176,7 +176,7 @@ async def test_abrir_turno_bloquea_tras_cinco_fallos(
 async def test_abrir_turno_con_turno_abierto_valida_el_pin_primero(
     entorno: dict[str, AsyncMock],
 ) -> None:
-    """B15: antes devolvía 201 con el turno existente sin mirar el PIN."""
+    """Antes devolvía 201 con el turno existente sin mirar el PIN."""
     entorno["get_apertura_activa_por_usuario"].return_value = _activa()
 
     with pytest.raises(HTTPException) as exc_info:
@@ -248,7 +248,7 @@ def _violacion(constraint: str) -> asyncpg.UniqueViolationError:
 async def test_abrir_turno_carrera_del_mismo_cajero_responde_409_no_500(
     entorno: dict[str, AsyncMock],
 ) -> None:
-    """N2: la otra petición ganó con otra caja → 409, no UniqueViolationError."""
+    """La otra petición ganó con otra caja → 409, no UniqueViolationError."""
     entorno["crear_apertura_caja"].side_effect = _violacion("uq_apertura_cajero_activo")
     entorno["get_apertura_activa_por_usuario"].side_effect = [
         None,
@@ -333,7 +333,7 @@ async def test_abrir_turno_caja_ocupada_por_otro_cajero_responde_409(
 async def test_abrir_turno_con_horario_de_otra_sucursal_da_422(
     entorno: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """M19: el horario debe ser global o de la sucursal; antes se aceptaba el
+    """El horario debe ser global o de la sucursal; antes se aceptaba el
     de cualquier sucursal (y uno inexistente daba 500 por la FK)."""
     disponible = AsyncMock(return_value=False)
     monkeypatch.setattr(f"{SVC}.turno_disponible_en_sucursal", disponible)
@@ -349,7 +349,7 @@ async def test_abrir_turno_con_horario_de_otra_sucursal_da_422(
 
 
 async def test_abrir_turno_guarda_las_notas_de_apertura(entorno: dict[str, AsyncMock]) -> None:
-    """B13: las "Notas" del formulario se descartaban; ahora se guardan."""
+    """Las "Notas" del formulario se descartaban; ahora se guardan."""
     await _abrir(_payload(observaciones_apertura="  Fondo con monedas de $10  "))
 
     kwargs = entorno["crear_apertura_caja"].call_args.kwargs

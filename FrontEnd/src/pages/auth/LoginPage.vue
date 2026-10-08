@@ -39,7 +39,7 @@ onMounted(() => {
 
 const sucursalSeleccionada = ref<string | null>(null)
 
-// B22: no hay recuperación por correo; la contraseña la reasigna un
+// No hay recuperación por correo; la contraseña la reasigna un
 // administrador desde Usuarios.
 const olvidePasswordAbierto = ref(false)
 

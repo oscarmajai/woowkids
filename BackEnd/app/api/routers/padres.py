@@ -20,7 +20,7 @@ from app.services.padres_service import (
 
 router = APIRouter(prefix="/api/padres", tags=["Padres"])
 
-# A17 — mismo error para código mal formado, inexistente, revocado, expirado
+# Mismo error para código mal formado, inexistente, revocado, expirado
 # o de un registro ya cerrado: no se revela cuál de esos casos fue.
 _TOKEN_INVALIDO = HTTPException(
     status_code=status.HTTP_400_BAD_REQUEST,
@@ -54,7 +54,7 @@ async def ninos_activos_endpoint(
     current_user: TokenData = Depends(require_role(ROL_PADRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> PadreNinosActivosResponse:
-    """QA #31 — polling del dashboard con el token de `/padres/auth`
+    """Polling del dashboard con el token de `/padres/auth`
     (Authorization: Bearer), sin volver a mandar el código cada vez. Un 401 o
     403 (token revocado/expirado o registro ya no activo) debe cerrar la
     sesión en el front."""

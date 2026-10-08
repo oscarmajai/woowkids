@@ -122,7 +122,7 @@ async def buscar_por_rfid(
     """Busca una pulsera por su RFID dentro de una sucursal, esté libre o no.
 
     Sirve para que el check-in distinga una pulsera inexistente de una que ya
-    se usó o está desactivada (B14). No expone a quién está asignada.
+    se usó o está desactivada. No expone a quién está asignada.
     """
     row = await conn.fetchrow(
         """

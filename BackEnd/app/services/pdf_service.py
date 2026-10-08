@@ -212,7 +212,7 @@ def _bloque_firmas(tipo_cierre: str) -> KeepTogether:
     )
 
 
-# A4: de dónde salió cada devolución a un cliente.
+# De dónde salió cada devolución a un cliente.
 _ORIGEN_DEVOLUCION = {
     "cancelacion": "Cancelación",
     "entregada": "Devolución de orden entregada",
@@ -225,7 +225,7 @@ def _fmt_devolucion(valor: Any) -> str:
 
 
 def _tabla_devoluciones(detalle: DetalleArqueoResponse) -> Table:
-    """A4: cada devolución del turno con su orden, tipo y motivo, método,
+    """Cada devolución del turno con su orden, tipo y motivo, método,
     monto, quién la autorizó y la hora."""
     data: list[list[Any]] = [
         [
@@ -387,7 +387,7 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
     story.append(_separador())
 
     # ── Desglose por método de pago ─────────────────────────────────────
-    # A4: la columna "Devoluciones" es lo devuelto a clientes con cada método;
+    # La columna "Devoluciones" es lo devuelto a clientes con cada método;
     # ya va restado del esperado de ese método.
     story.append(Paragraph("Desglose por Método de Pago", _ESTILO_SECCION))
     if detalle.balance_por_metodo:
@@ -555,7 +555,7 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
         )
     story.append(_separador())
 
-    # ── Devoluciones a clientes (A4) ─────────────────────────────────────
+    # ── Devoluciones a clientes ─────────────────────────────────────
     story.append(Paragraph("Devoluciones a Clientes", _ESTILO_SECCION))
     if detalle.devoluciones:
         story.append(_tabla_devoluciones(detalle))

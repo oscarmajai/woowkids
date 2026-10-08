@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { UserListItem } from '@/types/user'
 
 /**
- * UX administración de usuarios: el sysadmin veía Editar/Eliminar en la
- * cuenta de sistema y en la suya, los administradores salían sin sucursal y
- * el diálogo de Eliminar decía "no se puede deshacer" aunque desde A10 el
- * usuario queda inactivo y se reactiva.
+ * Administración de usuarios: el sysadmin no ve Editar/Eliminar en la cuenta
+ * de sistema ni en la suya, los administradores muestran su sucursal y el
+ * diálogo de Eliminar no dice "no se puede deshacer", porque el usuario
+ * queda inactivo y se puede reactivar.
  */
 
 const usuario = (over: Partial<UserListItem>): UserListItem => ({

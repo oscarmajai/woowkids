@@ -4,8 +4,8 @@
 #
 #   1. BD vacía: se crea con el maestro y todas las migraciones quedan registradas.
 #   2. Segundo arranque: no se aplica nada.
-#   3. BD de una versión sin control (v1.0.0): se registra la base y se aplica
-#      lo posterior (074 restaura el permiso de cobro).
+#   3. BD de una instalación anterior al control de migraciones: se registra la
+#      base y se aplica lo posterior (074 restaura el permiso de cobro).
 #   4. Migración nueva: se aplica una sola vez.
 #   5. Migración que falla: el arranque termina con error y no se registra.
 #

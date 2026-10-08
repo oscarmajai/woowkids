@@ -100,7 +100,7 @@ describe('mensajeDeError', () => {
 })
 
 describe('esPedidoDesactualizado', () => {
-  it('reconoce los rechazos del cobro por catálogo desactualizado (C2)', () => {
+  it('reconoce los rechazos del cobro por catálogo desactualizado', () => {
     for (const code of [
       'PRECIO_CAMBIADO',
       'TOTAL_NO_COINCIDE',

@@ -10,7 +10,7 @@ export interface UserListItem {
   branchId: string | null
   isActive: boolean
   lastAccess: string | null
-  /** C1: true si el usuario ya tiene PIN de caja configurado. */
+  /** `true` si el usuario ya tiene PIN de caja configurado. */
   tienePin: boolean
   /**
    * Todas las sucursales del usuario. Un Administrador no tiene `branchId`
@@ -44,5 +44,5 @@ export interface UpdateUserPayload {
   pin?: string | null
 }
 
-/** Filtro de estado de GET /usuarios (A10). Sin él, el backend lista solo activos. */
+/** Filtro de estado de GET /usuarios. Sin él, el backend lista solo activos. */
 export type EstadoUsuarios = 'activos' | 'inactivos' | 'todos'

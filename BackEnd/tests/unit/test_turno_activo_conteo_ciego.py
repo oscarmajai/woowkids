@@ -1,7 +1,7 @@
-"""B9 + M7: el conteo del cierre es a ciegas.
+"""El conteo del cierre es a ciegas.
 
-Las respuestas del turno traen el efectivo esperado y las ventas por método
-(M7), pero solo a quien puede revisar el arqueo (turnos_caja:revision_admin).
+Las respuestas del turno traen el efectivo esperado y las ventas por método,
+pero solo a quien puede revisar el arqueo (turnos_caja:revision_admin).
 Al cajero que cuenta se le omiten.
 """
 
@@ -65,7 +65,7 @@ async def test_esperado_solo_para_quien_revisa_el_arqueo(
         assert resp.ventas_por_metodo is None
 
 
-# R1 (prueba E2E de v1.2.0): /abrir, /iniciar-conteo, /conteo y /cancelar
+# /abrir, /iniciar-conteo, /conteo y /cancelar también deben ocultarlo: antes
 # devolvían el esperado al cajero aunque GET /activo ya lo ocultara.
 _LLAMADAS = {
     "abrir_turno": lambda u: router.abrir_turno(

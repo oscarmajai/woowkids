@@ -19,6 +19,6 @@ export interface NavBadge {
   count: number
   tone: NavBadgeTone
   /** De dónde sale el contador. Dos ítems con la misma fuente muestran el mismo
-   * número y el grupo lo cuenta una sola vez (B7). */
+   * número y el grupo lo cuenta una sola vez. */
   fuente?: string
 }

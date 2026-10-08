@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 080_devoluciones_comanda.sql
--- A4: cancelar una comanda ya cobrada no movía la caja: el efectivo esperado
+-- Cancelar una comanda ya cobrada no movía la caja: el efectivo esperado
 -- del arqueo seguía contando la venta. Ahora la cancelación de una comanda con
 -- pagos (autorizada con el PIN de un administrador) registra aquí la
 -- devolución al cliente, en el turno de caja abierto de quien cancela:

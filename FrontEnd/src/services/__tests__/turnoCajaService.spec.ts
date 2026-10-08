@@ -27,7 +27,7 @@ function apiError(statusCode: number, code: string, message: string): ApiError {
 
 const REVISION = { turnoId: 't1', adminEmail: 'admin@x.mx', adminPassword: 'x' }
 
-describe('turnoCajaService — errores de PIN (A5/A16)', () => {
+describe('turnoCajaService — errores de PIN', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -44,7 +44,7 @@ describe('turnoCajaService — errores de PIN (A5/A16)', () => {
     )
   })
 
-  it('el rechazo de la contraseña de un administrador con PIN muestra el porqué (A16)', async () => {
+  it('el rechazo de la contraseña de un administrador con PIN muestra el porqué', async () => {
     const mensaje =
       'PIN incorrecto. Este administrador ya tiene PIN configurado: ingresa su PIN, no su contraseña.'
     api.autenticarRevisionAdmin.mockRejectedValue(apiError(403, 'CREDENCIALES_INVALIDAS', mensaje))
@@ -68,7 +68,7 @@ describe('turnoCajaService — errores de PIN (A5/A16)', () => {
     ),
     apiError(429, 'PIN_BLOQUEADO', 'Demasiados intentos fallidos de PIN.'),
     apiError(403, 'TURNO_AJENO', 'Este turno pertenece a otro cajero.'),
-    // A16: un administrador no autoriza el cierre de su propio turno.
+    // Un administrador no autoriza el cierre de su propio turno.
     apiError(
       403,
       'AUTORIZADOR_ES_DUENO_TURNO',
@@ -101,7 +101,7 @@ describe('turnoCajaService — errores de PIN (A5/A16)', () => {
   })
 })
 
-describe('turnoCajaService — retiros e ingresos rechazados (B17)', () => {
+describe('turnoCajaService — retiros e ingresos rechazados', () => {
   const RETIRO = {
     turnoId: 't1',
     concepto: 'Gastos varios' as const,
@@ -139,7 +139,7 @@ describe('turnoCajaService — retiros e ingresos rechazados (B17)', () => {
   })
 })
 
-describe('turnoCajaService — turno activo sin turno (B4)', () => {
+describe('turnoCajaService — turno activo sin turno', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

@@ -2,10 +2,9 @@
 
 Antes duplicado de forma idéntica en app/services/estancias.py y
 app/services/comanda_service.py; centralizado aquí para reutilizarlo en
-cualquier endpoint que deba filtrar por sucursal (ver T2 en
-TICKETS_E2E.md).
+cualquier endpoint que deba filtrar por sucursal.
 
-C1 (pruebas E2E 2026-10-03): regla única de aislamiento por sucursal.
+Regla única de aislamiento por sucursal.
 
 - Roles con sucursal fija (Administrador, Cajero, Cocina, Atención y
   cualquier rol personalizado): la sucursal es SIEMPRE la de la sesión
@@ -92,7 +91,7 @@ def _a_uuid(valor: UUID | str) -> UUID:
 
 
 def resolver_sucursal(current_user: TokenData, solicitada: UUID | str | None) -> UUID | None:
-    """Sucursal efectiva para un listado o reporte (regla C1).
+    """Sucursal efectiva para un listado o reporte (regla de aislamiento por sucursal).
 
     Devuelve None (VE_TODAS_LAS_SUCURSALES) solo para AdministradorSistema
     sin parámetro ni selector. Para el resto de roles nunca devuelve None:

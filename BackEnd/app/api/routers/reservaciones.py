@@ -34,7 +34,7 @@ async def _asegurar_alta(
     extra_ids: list[UUID] | None = None,
     producto_ids: list[UUID] | None = None,
 ) -> None:
-    """C1: la reservación se crea en la sucursal de la sesión (403 si el body
+    """La reservación se crea en la sucursal de la sesión (403 si el body
     trae otra) y su paquete, tipo de evento, extras y productos deben ser de
     esa sucursal (404 si no)."""
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
@@ -99,7 +99,7 @@ async def crear_reservacion(
     "/completa",
     response_model=ReservacionCompletaResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Alta atómica de una reservación (QA #10)",
+    summary="Alta atómica de una reservación",
     description=(
         "Crea la reservación junto con sus extras, productos y pagos (anticipo) "
         "en una única transacción: si algo falla, nada se persiste. Sustituye "

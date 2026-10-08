@@ -13,10 +13,42 @@ import type { MetodosPago } from '@/types/metodos_pago'
 // Catálogo de prueba con las 4 categorías activas -- "Efectivo" queda primera
 // para que el default siga siendo igual que antes de exigir el prop.
 const METODOS_PAGO_TEST: MetodosPago[] = [
-  { id: 'e', nombre: 'Efectivo', descripcion: null, tipo: 'E', comision_porcentaje: null, requiere_referencia: false, activo: true },
-  { id: 't', nombre: 'Tarjeta', descripcion: null, tipo: 'T', comision_porcentaje: null, requiere_referencia: false, activo: true },
-  { id: 'c', nombre: 'Cupones', descripcion: null, tipo: 'C', comision_porcentaje: null, requiere_referencia: false, activo: true },
-  { id: 'l', nombre: 'Lealtad', descripcion: null, tipo: 'L', comision_porcentaje: null, requiere_referencia: false, activo: true },
+  {
+    id: 'e',
+    nombre: 'Efectivo',
+    descripcion: null,
+    tipo: 'E',
+    comision_porcentaje: null,
+    requiere_referencia: false,
+    activo: true,
+  },
+  {
+    id: 't',
+    nombre: 'Tarjeta',
+    descripcion: null,
+    tipo: 'T',
+    comision_porcentaje: null,
+    requiere_referencia: false,
+    activo: true,
+  },
+  {
+    id: 'c',
+    nombre: 'Cupones',
+    descripcion: null,
+    tipo: 'C',
+    comision_porcentaje: null,
+    requiere_referencia: false,
+    activo: true,
+  },
+  {
+    id: 'l',
+    nombre: 'Lealtad',
+    descripcion: null,
+    tipo: 'L',
+    comision_porcentaje: null,
+    requiere_referencia: false,
+    activo: true,
+  },
 ]
 
 /**

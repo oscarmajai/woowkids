@@ -13,7 +13,7 @@ const USER: User = {
   permissions: [],
 }
 
-describe('sessionStorage (C3: access token solo en memoria)', () => {
+describe('sessionStorage (access token solo en memoria)', () => {
   beforeEach(() => {
     localStorage.clear()
     tokenMemory.clear()

@@ -39,7 +39,7 @@ function mapUser(raw: BackendUserResponse): UserListItem {
 }
 
 export const usersApi = {
-  /** `estado` (A10): por defecto el backend devuelve solo los activos. */
+  /** `estado`: por defecto el backend devuelve solo los activos. */
   async list(estado?: EstadoUsuarios): Promise<UserListItem[]> {
     const { data } = await apiClient.get<BackendUserResponse[]>('/usuarios', {
       params: estado ? { estado } : undefined,
@@ -90,7 +90,7 @@ export const usersApi = {
     await apiClient.put('/usuarios/me/password', { actual, nueva })
   },
 
-  /** C1: PUT /usuarios/me/pin — el usuario cambia su propio PIN de caja. */
+  /** PUT /usuarios/me/pin — el usuario cambia su propio PIN de caja. */
   async cambiarMiPin(actual: string, pinNuevo: string): Promise<void> {
     await apiClient.put('/usuarios/me/pin', { actual, pin_nuevo: pinNuevo })
   },

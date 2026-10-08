@@ -178,7 +178,7 @@ import type { TurnoItem, CajaItem } from '@/types/turnoCaja'
 interface OptionItem {
   label: string
   value: string
-  /** M8: el horario corresponde a la hora local actual de la sucursal. */
+  /** El horario corresponde a la hora local actual de la sucursal. */
   vigente?: boolean
 }
 
@@ -223,7 +223,7 @@ const fechaHoy = new Date().toLocaleDateString('es-MX', {
 const puedeAbrirCaja = computed(() => {
   // v-model.number sobre <q-input type="text"> deja "" (no null) cuando se borra el
   // campo, y "" < 0 es false en JS (compara como 0) — sin el chequeo de tipo, este
-  // guard dejaba pasar un campo vacío. Ver mismo bug corregido en stores/turnoCaja.ts.
+  // guard dejaría pasar un campo vacío. Mismo chequeo que en stores/turnoCaja.ts.
   if (typeof fondoInicial.value !== 'number' || !Number.isFinite(fondoInicial.value)) return false
   if (fondoInicial.value < 0) return false
   if (esAdminSistema.value && !sucursalSeleccionada.value) return false
@@ -244,7 +244,7 @@ const sinCajas = computed(
     (!esAdminSistema.value || !!sucursalSeleccionada.value),
 )
 
-// M8: se preselecciona el horario vigente a la hora local de la sucursal (lo
+// Se preselecciona el horario vigente a la hora local de la sucursal (lo
 // calcula el backend); si se elige uno que no corresponde, se pide confirmar.
 // No se bloquea: abrir fuera de horario es decisión de negocio.
 const opcionTurnoSeleccionado = computed(() =>
@@ -298,7 +298,7 @@ onMounted(async () => {
       value: t.id,
       vigente: t.vigente === true,
     }))
-    // M8: antes se preseleccionaba el primero de la lista, fuera la hora que fuera.
+    // Se preselecciona el vigente, no el primero de la lista.
     if (!turnoSeleccionado.value) {
       turnoSeleccionado.value = opcionesTurnos.value.find((t) => t.vigente)?.value ?? null
     }
@@ -375,7 +375,7 @@ async function abrirCaja() {
     pin.value,
   )
 
-  // A5: un PIN incorrecto (403) o bloqueado (429) deja al cajero en el
+  // Un PIN incorrecto (403) o bloqueado (429) deja al cajero en el
   // formulario con el mensaje del backend; se limpia el PIN para reintentar.
   if (turno.error) {
     pin.value = ''

@@ -1,4 +1,4 @@
-"""Máquina de estados de una reservación (A8/N12).
+"""Máquina de estados de una reservación.
 
 Estados: pendiente → confirmada → (en_curso) → completada, y cancelada desde
 pendiente o confirmada. `completada` y `cancelada` son terminales: de ahí no se

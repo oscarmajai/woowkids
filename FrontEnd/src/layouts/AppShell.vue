@@ -91,13 +91,13 @@ const refrescarReservacionesParaNotificaciones = () => {
 }
 
 onMounted(() => {
-  // Hipótesis de roles (Bug QA #13): el turno aplica a cualquier usuario que
+  // Hipótesis de roles: el turno aplica a cualquier usuario que
   // pueda cobrar, no solo al Cajero — un Administrador con
   // "reservaciones:gestionar_pagos" también necesita saber si hay turno
   // abierto antes de registrar un pago. Se usa el memo del store
   // (`asegurarTurnoCargado`) en vez de `cargarTurnoActivo` directo para
   // compartir la misma carga con el guard de ruta.
-  // B4: solo si el rol puede consultar su turno (el permiso que exige
+  // Solo si el rol puede consultar su turno (el permiso que exige
   // GET /turnos-caja/activo); si no, la consulta solo dejaba un error en consola.
   if (auth.hasPermission('turnos_caja:ver_activo')) {
     void turno.asegurarTurnoCargado()

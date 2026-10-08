@@ -1,5 +1,5 @@
 """Consulta la sucursal dueña de un recurso, para validar el aislamiento por
-sucursal (C1) antes de leerlo o modificarlo por id.
+sucursal antes de leerlo o modificarlo por id.
 
 Una sola consulta por tipo de recurso; los sub-recursos (extras de una
 reservación, presentaciones de un insumo, etc.) heredan la sucursal de su

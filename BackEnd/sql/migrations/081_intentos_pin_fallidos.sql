@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 081_intentos_pin_fallidos.sql
--- A16 (pruebas E2E 2026-10-03): los endpoints que validan el PIN de caja
+-- Los endpoints que validan el PIN de caja
 -- (abrir turno, validar-pin-cajero, validar-pin-admin, revisión del
 -- administrador) no limitaban los intentos, así que un PIN de 4 dígitos se
 -- podía adivinar por fuerza bruta.

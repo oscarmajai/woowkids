@@ -57,7 +57,7 @@ class TurnoResponse(BaseModel):
     nombre: str
     hora_inicio: time
     hora_fin: time
-    # M8: días en que aplica (0 = lunes ... 6 = domingo; None = todos) y si el
+    # Días en que aplica (0 = lunes ... 6 = domingo; None = todos) y si el
     # horario corresponde a la hora local actual de la sucursal de la sesión.
     dias: list[int] | None = None
     vigente: bool = False
@@ -72,7 +72,7 @@ class FilaBalance(BaseModel):
     declarado: Decimal
     esperado: Decimal
     diferencia: Decimal
-    # A4: lo devuelto a clientes con este método en el turno. Ya va restado
+    # Lo devuelto a clientes con este método en el turno. Ya va restado
     # de `esperado`; viene aparte para que el arqueo lo muestre.
     devoluciones: Decimal = Decimal("0")
 
@@ -82,13 +82,13 @@ class AbrirTurnoPayload(BaseModel):
     # max_length=20 coincide con cajas.codigo VARCHAR(20) en BD — sin esto, un valor
     # más largo tronaba con un 500 crudo de Postgres en vez de un 422 limpio.
     terminal: str | None = Field(default="CAJA 01", max_length=20)
-    # B13: las "Notas" de la apertura (antes se descartaban).
+    # Las "Notas" de la apertura (antes se descartaban).
     observaciones_apertura: str | None = Field(default=None, max_length=500)
     caja_id: str | None = None
     turno_id: str | None = None
     # Solo relevante para AdministradorSistema, que no tiene sucursal propia en el JWT.
     sucursal_id: str | None = None
-    # C1: PIN del cajero que abre el turno (o su contraseña, mientras no tenga
+    # PIN del cajero que abre el turno (o su contraseña, mientras no tenga
     # PIN configurado). Se valida en el service, no aquí, para devolver el
     # mismo código de error estructurado que el resto de validaciones de abrir_turno.
     pin: str | None = None
@@ -100,7 +100,7 @@ class MovimientoResumen(BaseModel):
 
 
 class VentaPorMetodo(BaseModel):
-    """M7: lo cobrado en el turno por método de pago. El efectivo va neto
+    """Lo cobrado en el turno por método de pago. El efectivo va neto
     del cambio entregado (incluye las ventas sin método, que el arqueo
     también cuenta como efectivo)."""
 
@@ -110,7 +110,7 @@ class VentaPorMetodo(BaseModel):
 
 
 class ConteoGuardado(BaseModel):
-    """B23: el conteo que el cajero ya envió (congelado hasta la revisión),
+    """El conteo que el cajero ya envió (congelado hasta la revisión),
     para que el formulario lo muestre tras recargar la página."""
 
     desglose_efectivo: dict[str, Any] = {}
@@ -131,30 +131,30 @@ class TurnoActivoResponse(BaseModel):
     estado: str
     fondo_inicial: Decimal
     fecha_apertura: str
-    # B13: notas capturadas al abrir la caja.
+    # Notas capturadas al abrir la caja.
     observaciones_apertura: str | None = None
     # Bruto: suma de los pagos recibidos (incluye el efectivo que se devolvió
     # como cambio). Se conserva por compatibilidad.
     total_ventas: Decimal = Decimal("0")
     total_retiros: Decimal = Decimal("0")
     total_ingresos: Decimal = Decimal("0")
-    # B9 B.4 / M6: "vendido en turno" para el cajero. numero_ventas cuenta
+    # "vendido en turno" para el cajero. numero_ventas cuenta
     # tickets/órdenes (no pagos) y total_vendido es lo aplicado: lo cobrado
     # menos el cambio entregado, igual que el esperado del arqueo.
     numero_ventas: int = 0
     total_vendido: Decimal = Decimal("0")
     total_cambio: Decimal = Decimal("0")
-    # M7: efectivo que debería haber en el cajón ahora mismo (la misma
+    # Efectivo que debería haber en el cajón ahora mismo (la misma
     # fórmula que el esperado del arqueo y que el disponible para retiros) y
     # lo cobrado por método. Negativo = la caja está en negativo. El conteo
-    # del cierre es a ciegas (B9): el router los deja en None para quien no
+    # del cierre es a ciegas: el router los deja en None para quien no
     # tiene turnos_caja:revision_admin.
     efectivo_esperado: Decimal | None = Decimal("0")
     ventas_por_metodo: list[VentaPorMetodo] | None = []
     movimientos: list[MovimientoResumen] = []
-    # B23: conteo ya enviado (estados ESPERANDO_REVISION y BALANCE_REVELADO).
+    # Conteo ya enviado (estados ESPERANDO_REVISION y BALANCE_REVELADO).
     conteo_guardado: ConteoGuardado | None = None
-    # QA #8: solo se llenan cuando estado == "BALANCE_REVELADO" (el admin ya
+    # Solo se llenan cuando estado == "BALANCE_REVELADO" (el admin ya
     # autenticó la revisión). El front deja de depender del sessionStorage
     # local para estos dos campos cuando vienen poblados.
     admin_email: str | None = None
@@ -198,7 +198,7 @@ class IngresoDetalle(BaseModel):
 
 
 class DevolucionDetalle(BaseModel):
-    """A4: devolución al cliente de una comanda cobrada, al cancelarla
+    """Devolución al cliente de una comanda cobrada, al cancelarla
     (origen 'cancelacion') o al devolver una ya entregada ('entregada', sin
     regresar stock). Cada una resta del esperado de su método en el turno."""
 
@@ -284,7 +284,7 @@ class ConfirmarCierrePayload(BaseModel):
     turno_id: str
     observaciones: str | None = None
     tipo_cierre: TipoCierreEnum = TipoCierreEnum.NORMAL
-    # QA #14: tokens de un solo uso emitidos por /validar-pin-cajero y
+    # Tokens de un solo uso emitidos por /validar-pin-cajero y
     # /validar-pin-admin. Opcionales por retrocompatibilidad: si
     # settings.exigir_pin_token es False, su ausencia no bloquea el cierre.
     token_pin_cajero: str | None = None
@@ -337,7 +337,7 @@ class HistorialArqueosResponse(BaseModel):
 
 class ResumenHistorialArqueosOut(BaseModel):
     """KPIs agregados de TODO el periodo filtrado (no solo la página
-    cargada por el front). B7 pendiente #2."""
+    cargada por el front)."""
 
     total_arqueos: int
     total_declarado: Decimal
@@ -360,7 +360,7 @@ class DetalleArqueoResponse(ArqueoResumen):
     ingresos: list[IngresoDetalle] = []
     devoluciones: list[DevolucionDetalle] = []
     observaciones: str | None = ""
-    # B13: notas capturadas al abrir la caja.
+    # Notas capturadas al abrir la caja.
     observaciones_apertura: str | None = None
 
 

@@ -87,7 +87,7 @@ async function cobrarPizza() {
   return wrapper
 }
 
-describe('CajaComponent: cobro rechazado por precio cambiado (C2)', () => {
+describe('CajaComponent: cobro rechazado por precio cambiado', () => {
   beforeEach(() => {
     notify.mockReset()
     mockCompletar.mockReset()
@@ -242,7 +242,7 @@ describe('CajaComponent: UX del pedido', () => {
   })
 })
 
-describe('CajaComponent: servicios (M14)', () => {
+describe('CajaComponent: servicios', () => {
   beforeEach(() => {
     mockProductos.mockReset()
     sessionStorage.clear()

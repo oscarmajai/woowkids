@@ -13,7 +13,7 @@ export interface AppliedPayment {
   timestamp: Date
   cardType?: 'DEBITO' | 'CREDITO'
   authCode?: string
-  /** Últimos 4 dígitos de la tarjeta, opcionales (B9 B.1). */
+  /** Últimos 4 dígitos de la tarjeta, opcionales. */
   ultimos4?: string
 }
 
@@ -27,7 +27,7 @@ export interface PaymentItemRequest {
 }
 
 export interface PagoCompletoRequest {
-  // QA #21: el backend asigna el folio secuencial por sucursal; ya no lo
+  // El backend asigna el folio secuencial por sucursal; ya no lo
   // genera el front. Se mantiene opcional solo como fallback de compatibilidad.
   ticket_numero?: string
   total_final: number

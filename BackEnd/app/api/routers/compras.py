@@ -52,7 +52,7 @@ async def crear_compra(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("inventario:gestionar_compras")),
 ) -> CompraOut:
-    # C1: la compra se crea en la sucursal de la sesión; otra → 403. El
+    # La compra se crea en la sucursal de la sesión; otra → 403. El
     # service ya valida que proveedor e insumos sean de esa sucursal.
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await compra_service.crear(conn, body, UUID(current_user.sub))

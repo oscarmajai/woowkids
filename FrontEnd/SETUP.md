@@ -1,93 +1,73 @@
-# Setup de calidad + git hooks — Mercury FrontEnd
+# Entorno de desarrollo — FrontEnd
 
-Pasos para dejar funcionando ESLint + Prettier + Vitest + Husky + commitlint.
+Cómo correr la aplicación en local. Las reglas de Git, commits y calidad están en [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-## 1. Copiar archivos a la raíz del repo
+## Requisitos
 
-```
-eslint.config.js
-.prettierrc.json
-.prettierignore
-vitest.config.ts
-vitest.setup.ts
-commitlint.config.js
-.lintstagedrc.json
-```
+- Node.js `^20.19.0` o `>=22.12.0` (el CI usa Node 22)
+- npm
+- La API corriendo en `http://localhost:8000` (ver [`BackEnd/SETUP.md`](../BackEnd/SETUP.md))
 
-Los dos hooks van dentro de `.husky/` (ver paso 4):
-
-```
-husky/pre-commit   -> .husky/pre-commit
-husky/commit-msg   -> .husky/commit-msg
-```
-
-## 2. Instalar dependencias
+## 1. Instalación
 
 ```bash
-# ESLint + Prettier (Vue 3 + TS)
-npm i -D eslint @eslint/js eslint-plugin-vue \
-  @vue/eslint-config-typescript @vue/eslint-config-prettier \
-  prettier vue-tsc
-
-# Vitest + testing
-npm i -D vitest @vue/test-utils jsdom @vitest/coverage-v8
-
-# Husky + commitlint + lint-staged
-npm i -D husky lint-staged \
-  @commitlint/cli @commitlint/config-conventional
+cd FrontEnd
+npm install
 ```
 
-## 3. Scripts en package.json
+`npm install` también instala los hooks de Git de **todo el monorepo** (script `prepare`, carpeta `.husky/`):
 
-Agrega dentro de `"scripts"`:
+- **pre-commit:** revisa solo la parte con archivos en stage. FrontEnd: lint-staged (ESLint + Prettier sobre lo staged) y `vue-tsc`. BackEnd: `ruff` y `mypy` desde `BackEnd/.venv`.
+- **commit-msg:** commitlint con Conventional Commits sin scope (`commitlint.config.js`).
 
-```json
-{
-  "scripts": {
-    "lint": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{ts,vue,json,scss,sass}\"",
-    "type-check": "vue-tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "prepare": "husky"
-  }
-}
-```
-
-## 4. Inicializar Husky
+## 2. Variables de entorno
 
 ```bash
-npm run prepare          # crea la carpeta .husky/
+cp .env.example .env.local
 ```
 
-Luego copia los dos hooks a `.husky/` y dales permiso de ejecución:
+| Variable            | Descripción                 | Valor en `.env.example`     |
+| ------------------- | --------------------------- | --------------------------- |
+| `VITE_API_BASE_URL` | URL base del backend (REST) | `http://localhost:8000/api` |
+| `VITE_APP_TITLE`    | Título de la aplicación     | `Woow Kids`                 |
+
+El dev server también hace proxy de `/api` (con WebSockets) a `http://127.0.0.1:8000`, o a `VITE_PROXY_TARGET` si está definida. Con `VITE_API_BASE_URL=/api` la app y la API comparten origen, igual que en producción.
+
+En las imágenes Docker estas variables se pasan como argumentos de build (`VITE_API_BASE_URL=/api`).
+
+## 3. Scripts
 
 ```bash
-cp husky/pre-commit .husky/pre-commit
-cp husky/commit-msg .husky/commit-msg
-chmod +x .husky/pre-commit .husky/commit-msg
+npm run dev           # servidor de desarrollo (http://localhost:5173)
+npm run build         # build de producción (vue-tsc + vite build)
+npm run preview       # previsualizar el build de producción
+
+npm run lint          # ESLint + auto-fix
+npm run format        # Prettier sobre src/
+npm run type-check    # vue-tsc sin emitir
+
+npm run test          # Vitest (una vez)
+npm run test:watch    # Vitest en modo watch
+npm run test:coverage # Vitest con cobertura
 ```
 
-> Nota: con Husky v9+ los hooks son scripts shell planos (sin la cabecera vieja de `husky.sh`). Los archivos provistos ya están en ese formato.
-
-## 5. Probar
+Antes de cada commit deben pasar los mismos comandos que corre el CI:
 
 ```bash
-# Debe fallar (tipo inválido):
-git commit -m "agrega login"
-
-# Debe pasar:
-git commit -m "feat: agregar validacion de credenciales en login"
+npx eslint src && npm run type-check && npx vitest run --dir src
 ```
 
-Al commitear, el `pre-commit` corre lint-staged (eslint+prettier sobre lo staged) y `type-check`; si algo falla, el commit se aborta. El `commit-msg` valida el formato conventional.
+## 4. Usuarios de prueba
 
-## Qué hace cada cosa
+Con la BD local sembrada (`./scripts/reset_db_local.sh --seed` en `BackEnd/`) se entra con `sistemas@local.dev`, `admin@local.dev` o `cajero@local.dev`, todos con contraseña `12345678`.
+
+## Qué hace cada archivo de configuración
 
 - **eslint.config.js** — Reglas Vue/TS: componentes en PascalCase multi-palabra, fuerza `<script setup>`, advierte sobre `any`, prohíbe `debugger`.
 - **.prettierrc.json** — Formato: sin punto y coma, comillas simples, ancho 100, comas finales.
 - **vitest.config.ts / vitest.setup.ts** — Tests con jsdom; Quasar y Pinia preinstalados en cada test.
-- **commitlint.config.js** — Conventional commits, todos los tipos, sin scope, subject en minúscula sin punto final.
-- **.lintstagedrc.json** — Corre las herramientas solo sobre archivos staged (rápido).
-- **.husky/** — pre-commit (calidad) y commit-msg (formato).
+- **commitlint.config.js** — Conventional Commits, todos los tipos, sin scope, subject en minúscula sin punto final.
+- **.lintstagedrc.json** — Corre ESLint y Prettier solo sobre los archivos en stage.
+- **.husky/** — Hooks pre-commit (calidad) y commit-msg (formato) del monorepo.
+- **quasar.config.ts / vite.config.ts** — Plugins de Quasar, paleta de colores, alias `@` → `src/` y proxy de desarrollo.
+- **nginx.conf** — Servidor de la imagen de producción.

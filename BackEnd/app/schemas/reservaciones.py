@@ -44,8 +44,7 @@ class ReservacionesCrear(ReservacionesBase):
     """Alta de reservación. Los campos de precio, `anticipo` y `estado` se
     aceptan por compatibilidad pero los decide el servidor: el precio se
     recalcula con el paquete y el catálogo (si `precio_total` no coincide,
-    409), el anticipo es lo realmente cobrado y el estado depende del cobro
-    (C2)."""
+    409), el anticipo es lo realmente cobrado y el estado depende del cobro."""
 
 
 class ReservacionesUpdate(BaseModel):
@@ -63,14 +62,14 @@ class ReservacionesUpdate(BaseModel):
     horas_reservadas: int | None = Field(None, ge=0)
     # Cambiar invitados u horas recalcula en el servidor las pulseras y el
     # total con la tarifa del paquete. Estos dos solo se comparan contra ese
-    # cálculo (409 si no coinciden): el precio nunca lo fija el cliente (C2).
+    # cálculo (409 si no coinciden): el precio nunca lo fija el cliente.
     # precio_base, extras, productos, descuento y anticipo ya no se editan por
     # aquí; si llegan, se ignoran.
     precio_personas_extra: Decimal | None = None
     precio_total: Decimal | None = None
     # Solo cambia por la máquina de estados (409 si la transición no procede):
     # nada sale de cancelada ni de completada, y completar exige que el evento
-    # ya haya empezado y no tenga saldo (A8/N12). Para cerrar el evento usar
+    # ya haya empezado y no tenga saldo. Para cerrar el evento usar
     # POST /reservaciones/{id}/cerrar, que conserva las notas.
     estado: Literal["pendiente", "confirmada", "en_curso", "completada", "cancelada"] | None = None
     notas: str | None = None
@@ -87,7 +86,7 @@ class ReservacionesUpdate(BaseModel):
 
 class ReservacionCerrar(BaseModel):
     """Cierre del evento. `notas_cierre` se agrega a las notas existentes de la
-    reservación; no las reemplaza (A8)."""
+    reservación; no las reemplaza."""
 
     notas_cierre: str | None = Field(None, max_length=2000)
 

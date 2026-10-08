@@ -1,4 +1,4 @@
-"""Pendiente B5 #1: apellidos/telefono en el usuario y 'activo' editable
+"""Apellidos/telefono en el usuario y 'activo' editable
 desde el formulario (en vez de solo por DELETE)."""
 
 from datetime import UTC, datetime
@@ -98,7 +98,7 @@ async def test_update_user_pasa_apellidos_telefono_y_activo_al_repositorio():
     ):
         result = await user_service.update_user(conn, target["id"], body, current_user)
 
-    # A11: desactivar revoca sus refresh tokens.
+    # Desactivar revoca sus refresh tokens.
     mock_revocar.assert_awaited_once_with(conn, target["id"])
     assert mock_update.await_args.kwargs["apellidos"] == "Pérez"
     assert mock_update.await_args.kwargs["telefono"] == "5551234567"
@@ -115,7 +115,7 @@ async def test_to_response_incluye_ultimo_acceso():
     assert response.ultimo_acceso == record["ultimo_acceso"]
 
 
-# ── C1: PIN de caja ───────────────────────────────────────────────────────────
+# ── PIN de caja ───────────────────────────────────────────────────────────────
 
 
 def test_to_response_tiene_pin_refleja_pin_hash():

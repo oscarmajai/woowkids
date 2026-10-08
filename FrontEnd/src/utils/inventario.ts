@@ -6,6 +6,7 @@
  */
 import type { EstadoCompra } from '@/types/compra'
 import type { NavBadge } from '@/types/navigation'
+import type { UnidadMedida } from '@/types/unidadMedida'
 
 const formateadorCostoUnitario = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -15,7 +16,7 @@ const formateadorCostoUnitario = new Intl.NumberFormat('es-MX', {
 })
 
 /**
- * Costo por unidad base de un insumo (M21). En insumos por gramo o mililitro
+ * Costo por unidad base de un insumo. En insumos por gramo o mililitro
  * el costo es de centavos o fracciones ($0.042692/ml): con 2 decimales se
  * leía $0.04. Los montos totales siguen con `formatMXN` (2 decimales).
  * @example formatCostoUnitario(0.042692) → "$0.042692"
@@ -38,7 +39,7 @@ export function diferenciaConteo(stockContado: number, stockSistema: number): Di
   return { tipo: delta > 0 ? 'entrada' : 'merma', cantidad: Math.abs(delta) }
 }
 
-/** Una compra sigue pendiente de recibir mientras no llegue completa (B6). */
+/** Una compra sigue pendiente de recibir mientras no llegue completa. */
 export function compraPorRecibir(estado: EstadoCompra): boolean {
   return estado === 'P' || estado === 'PARCIAL'
 }
@@ -51,7 +52,7 @@ export function totalConIva(total: number | string, iva: number | string | null 
 }
 
 /**
- * Título del aviso de stock de Inicio (B7): separa "bajo mínimo" de "por
+ * Título del aviso de stock de Inicio: separa "bajo mínimo" de "por
  * reordenar" (antes todo salía como "N insumos bajo mínimo").
  * @example tituloAlertasStock(1, 1) → "1 insumo bajo mínimo · 1 por reordenar"
  */
@@ -69,7 +70,7 @@ export function tituloAlertasStock(criticos: number, porReordenar: number): stri
 }
 
 /**
- * Contador de un grupo del menú cuando está cerrado (B7). Varios ítems pueden
+ * Contador de un grupo del menú cuando está cerrado. Varios ítems pueden
  * mostrar el mismo contador (Insumos y Reporte de Stock muestran las mismas
  * alertas): cada `fuente` cuenta una sola vez para no sumarlo doble.
  */
@@ -85,4 +86,20 @@ export function sumarBadgesGrupo(badges: Array<NavBadge | null | undefined>): nu
     total += badge.count
   }
   return total
+}
+
+/**
+ * Paso del campo de cantidad en una línea de receta según la unidad base del
+ * insumo: las piezas van de 1 en 1, kg/l (factor 1000) de 0.5 en 0.5 y g/ml
+ * aceptan fracciones finas. Sin insumo elegido se deja el paso fino.
+ * @example pasoCantidadReceta({ tipo: 'pieza', factor_a_base: '1' }) → 1
+ * @example pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1000' }) → 0.5
+ */
+export function pasoCantidadReceta(
+  unidad: Pick<UnidadMedida, 'tipo' | 'factor_a_base'> | null | undefined,
+): number {
+  if (!unidad) return 0.001
+  if (unidad.tipo === 'pieza') return 1
+  if (Number(unidad.factor_a_base) >= 1000) return 0.5
+  return 0.001
 }

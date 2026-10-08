@@ -1,5 +1,5 @@
 /**
- * M26: notas y alergias del niño (campo "Notas / Alergias" del registro).
+ * Notas y alergias del niño (campo "Notas / Alergias" del registro).
  * Es texto libre, así que cualquier nota capturada se trata como algo que
  * quien cuida al niño tiene que ver: en la tarjeta de Control de Acceso, en
  * "Requiere atención" de Inicio y en el comprobante.

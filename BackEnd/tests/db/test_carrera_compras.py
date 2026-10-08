@@ -1,5 +1,5 @@
-"""C5: recibir (y cancelar/editar) la misma compra en paralelo, cada petición
-con su propia conexión del pool. Antes del arreglo, 4 recepciones simultáneas
+"""Recibir (y cancelar/editar) la misma compra en paralelo, cada petición
+con su propia conexión del pool. Sin el bloqueo, 4 recepciones simultáneas
 de una compra de 10 respondían todas 200 y el stock subía 40."""
 
 import asyncio
@@ -126,7 +126,7 @@ async def test_recepciones_parciales_en_paralelo_no_exceden_lo_pedido(
 ) -> None:
     # Cada petición pide 2 de 10: solo caben 5; el resto llega con la compra ya
     # completa y recibe 409. (Con 3 de 10 la cuarta pediría más de lo pendiente
-    # y, desde M23, recibe 422 en vez de recortarse: ver test_recepcion_compras.)
+    # y recibe 422 en vez de recortarse: ver test_recepcion_compras.)
     compra_id, detalle_id, insumo_id = await _crear_compra(pool, escenario, Decimal("10"))
     body = RecibirCompraRequest(lineas=[LineaRecepcion(detalle_id=detalle_id, cantidad=2)])
 

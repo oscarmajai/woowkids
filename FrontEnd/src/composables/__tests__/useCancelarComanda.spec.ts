@@ -103,7 +103,7 @@ describe('useCancelarComanda', () => {
   })
 })
 
-describe('useCancelarComanda().devolverComanda (A4: orden entregada)', () => {
+describe('useCancelarComanda().devolverComanda (orden entregada)', () => {
   beforeEach(() => {
     mockDevolver.mockReset()
     dialog.mockClear()

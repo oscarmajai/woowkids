@@ -33,7 +33,7 @@ class DetalleComanda:
     es_hijo_combo: bool = False
     # Instancia de combo: agrupa hijos de una misma unidad pedida (KDS)
     id_combo_padre: str | None = None
-    # M13: renglón (detalles_comanda.id) del combo al que pertenece el hijo.
+    # Renglón (detalles_comanda.id) del combo al que pertenece el hijo.
     # None en productos sueltos, renglones de combo y filas viejas ambiguas.
     detalle_padre_id: str | None = None
 
@@ -60,7 +60,7 @@ def _campo(detalle: Any, nombre: str) -> Any:
 
 
 def indices_renglon_padre(detalles: Sequence[Any]) -> list[int | None]:
-    """M13: para cada detalle de un pedido, el índice (en `detalles`) del
+    """Para cada detalle de un pedido, el índice (en `detalles`) del
     renglón de combo al que pertenece, o None si no es hijo de combo.
 
     Cada renglón de combo con cantidad N aporta N unidades; las unidades de

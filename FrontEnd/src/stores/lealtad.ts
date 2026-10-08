@@ -61,7 +61,7 @@ export const useLealtadStore = defineStore('lealtad', {
       }
     },
     /**
-     * Valor del punto y mínimo de canje de la sucursal, para cobrar (A6). Usa
+     * Valor del punto y mínimo de canje de la sucursal, para cobrar. Usa
      * el endpoint de solo lectura que permite `lealtad:redimir`: el de
      * `configuracion` exige el permiso de configurar y al cajero le da 403.
      * Igual que `cargarSaldo`, devuelve el dato sin guardarlo en el estado y

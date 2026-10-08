@@ -1,6 +1,6 @@
 -- 051_pin_tokens.sql
 -- Token de un solo uso emitido al validar el PIN del cajero/admin en el
--- cierre de caja (QA #14). POST /turnos-caja/confirmar exige los tokens de
+-- cierre de caja. POST /turnos-caja/confirmar exige los tokens de
 -- ambos roles y los marca como usados.
 
 CREATE TABLE IF NOT EXISTS public.pin_tokens (

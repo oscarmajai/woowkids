@@ -43,7 +43,7 @@ export const authService = {
     return mapUser(data, null)
   },
 
-  // QA #32: el refresh token ya no se manda -- viaja en la cookie HttpOnly.
+  // El refresh token ya no se manda -- viaja en la cookie HttpOnly.
   async refresh(): Promise<LoginResponse> {
     const data = await authApi.refresh()
     return mapLoginResponse(data)

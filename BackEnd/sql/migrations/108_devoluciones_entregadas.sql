@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 108_devoluciones_entregadas.sql
--- A4 (segunda parte): devolución del dinero de una comanda ya entregada.
+-- Devolución del dinero de una comanda ya entregada.
 --   - origen: 'cancelacion' (la comanda se canceló en cocina, P/E/L, y su
 --     stock regresó al inventario) o 'entregada' (la comanda ya se entregó: se
 --     devuelve el dinero pero el producto ya se consumió y el stock NO

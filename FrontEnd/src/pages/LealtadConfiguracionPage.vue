@@ -11,7 +11,9 @@
           icon="save"
           label="Guardar"
           :loading="guardando"
-          :disable="!authStore.currentBranchId || !form.dias_caducidad"
+          :disable="
+            !authStore.currentBranchId || !form.dias_caducidad || !(form.pesos_por_punto > 0)
+          "
           @click="guardar"
         />
       </template>
@@ -34,21 +36,21 @@
           </div>
           <div class="form-grid">
             <label class="form-grid__field">
-              <span class="field-label">% de retorno</span>
+              <span class="field-label">Por cada</span>
               <q-input
-                v-model.number="form.porcentaje_retorno"
+                v-model.number="form.pesos_por_punto"
                 outlined
                 dense
                 type="number"
-                min="0"
-                max="100"
+                min="0.01"
                 step="0.01"
-                suffix="%"
-                hint="Del total pagado que se convierte en puntos"
+                prefix="$"
+                suffix="de consumo"
+                hint="El cliente gana 1 punto"
               />
             </label>
             <label class="form-grid__field">
-              <span class="field-label">Valor de 1 punto al canjear</span>
+              <span class="field-label">Cada punto vale</span>
               <q-input
                 v-model.number="form.valor_punto"
                 outlined
@@ -57,8 +59,14 @@
                 min="0.01"
                 step="0.01"
                 prefix="$"
+                hint="Al canjear"
               />
             </label>
+            <div class="form-grid__field">
+              <span class="field-label">Retorno real al cliente</span>
+              <span class="loy-retorno">{{ formatoPorcentaje(retorno) }}</span>
+              <span class="loy-retorno__hint">Calculado: valor del punto ÷ consumo por punto</span>
+            </div>
             <label class="form-grid__field">
               <span class="field-label">Vigencia de puntos</span>
               <q-input
@@ -108,10 +116,20 @@
         <span class="loy-preview__points">{{ puntosEjemplo }} pts</span>
         <div class="loy-preview__rule" />
         <div class="loy-preview__row">
+          <span>Valor por punto</span><b>{{ formatMXN(valorPunto) }}</b>
+        </div>
+        <div class="loy-preview__row">
           <span>Equivalen a</span><b>{{ formatMXN(equivalente) }}</b>
         </div>
         <div class="loy-preview__row">
-          <span>Retorno al cliente</span><b>{{ Number(form.porcentaje_retorno) || 0 }}%</b>
+          <span>Retorno al cliente</span><b>{{ formatoPorcentaje(retorno) }}</b>
+        </div>
+        <div class="loy-preview__row">
+          <span>Canjeable desde</span>
+          <b v-if="minimoCanje > 0">
+            {{ minimoCanje }} pts ({{ formatMXN(minimoCanje * valorPunto) }})
+          </b>
+          <b v-else>Sin mínimo</b>
         </div>
         <div class="loy-preview__row">
           <span>Vigencia</span><b>{{ form.dias_caducidad }} días</b>
@@ -158,15 +176,8 @@ const ORIGENES = [
   },
 ] as const
 
-// Vista previa estimada para una visita de $1,000.
-const GASTO_EJEMPLO = 1000
-const equivalente = computed(() => (GASTO_EJEMPLO * (Number(form.porcentaje_retorno) || 0)) / 100)
-const puntosEjemplo = computed(() =>
-  form.valor_punto > 0 ? Math.floor(equivalente.value / form.valor_punto) : 0,
-)
-
 const form = reactive<ConfiguracionLealtadInput>({
-  porcentaje_retorno: 0,
+  pesos_por_punto: 100,
   dias_caducidad: 30,
   valor_punto: 1,
   activo: true,
@@ -176,11 +187,27 @@ const form = reactive<ConfiguracionLealtadInput>({
   minimo_canje: 0,
 })
 
+// Vista previa estimada para una visita de $1,000. Se gana 1 punto por cada
+// pesos_por_punto completos (igual que el backend); el retorno es informativo.
+const GASTO_EJEMPLO = 1000
+const pesosPorPunto = computed(() => Number(form.pesos_por_punto) || 0)
+const valorPunto = computed(() => Number(form.valor_punto) || 0)
+const minimoCanje = computed(() => Number(form.minimo_canje) || 0)
+const puntosEjemplo = computed(() =>
+  pesosPorPunto.value > 0 ? Math.floor(GASTO_EJEMPLO / pesosPorPunto.value) : 0,
+)
+const equivalente = computed(() => puntosEjemplo.value * valorPunto.value)
+const retorno = computed(() =>
+  pesosPorPunto.value > 0 ? (valorPunto.value / pesosPorPunto.value) * 100 : 0,
+)
+const formatoPorcentaje = (valor: number) =>
+  `${valor.toLocaleString('es-MX', { maximumFractionDigits: 2 })}%`
+
 const cargar = async () => {
   if (!authStore.currentBranchId) return
   await store.cargarConfiguracion(authStore.currentBranchId)
   if (store.configuracion) {
-    form.porcentaje_retorno = store.configuracion.porcentaje_retorno
+    form.pesos_por_punto = store.configuracion.pesos_por_punto
     form.dias_caducidad = store.configuracion.dias_caducidad
     form.valor_punto = store.configuracion.valor_punto
     form.activo = store.configuracion.activo
@@ -246,6 +273,18 @@ onMounted(cargar)
     line-height: 1.3;
     font-weight: 800;
     color: var(--text-strong);
+  }
+}
+
+.loy-retorno {
+  font-size: 22px;
+  line-height: 40px;
+  font-weight: 800;
+  color: var(--text-strong);
+
+  &__hint {
+    font-size: 12px;
+    color: var(--text-secondary);
   }
 }
 

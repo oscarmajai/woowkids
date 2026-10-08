@@ -39,7 +39,7 @@ async def capas_disponibles(conn: asyncpg.Connection, insumo_id: UUID) -> list[d
     """Capas con stock restante, en orden FIFO (más viejas primero). `FOR UPDATE`
     serializa consumos concurrentes del mismo insumo.
 
-    B11: el orden es la secuencia de inserción (migración 098). Antes era
+    El orden es la secuencia de inserción (migración 098). Antes era
     (creado, id) y las capas de una misma recepción, que comparten `creado`,
     se consumían en el orden de un uuid aleatorio."""
     rows = await conn.fetch(

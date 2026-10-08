@@ -3,8 +3,8 @@
 #
 # Es idempotente por fuerza bruta: tira el esquema public completo y lo vuelve
 # a levantar, así que siempre refleja exactamente lo que producen los archivos
-# de sql/migrations/ — que es justo lo que se quiere validar antes de tocar la
-# BD compartida.
+# de sql/migrations/ — que es justo lo que se quiere validar antes de publicar
+# una migración.
 #
 # Uso:  ./scripts/reset_db_local.sh [--seed]
 set -euo pipefail

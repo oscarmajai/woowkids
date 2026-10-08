@@ -1,4 +1,4 @@
-"""C2 / M3 / M11 contra PostgreSQL real, por HTTP: POST /api/pagos/completar
+"""Contra PostgreSQL real, por HTTP: POST /api/pagos/completar
 (y POST /api/comandas) cobran con el catálogo de la sucursal de la sesión.
 
 Usa una BD desechable con sql/schema_maestro.sql cargado:
@@ -115,7 +115,7 @@ async def _seed(conn: asyncpg.Connection) -> dict[str, Any]:
 
     await conn.execute(
         "INSERT INTO configuracion_lealtad (sucursal_id, dias_caducidad, valor_punto, "
-        "minimo_canje, porcentaje_retorno) VALUES ($1, 30, 1.00, 50, 0)",
+        "minimo_canje, otorga_puntos_comandas) VALUES ($1, 30, 1.00, 50, FALSE)",
         sucursal,
     )
     await conn.execute(
@@ -124,7 +124,7 @@ async def _seed(conn: asyncpg.Connection) -> dict[str, Any]:
         sucursal,
         CELULAR,
     )
-    # M11: en la sucursal de la prueba, la tarjeta exige referencia.
+    # En la sucursal de la prueba, la tarjeta exige referencia.
     await conn.execute("UPDATE metodos_pago SET requiere_referencia = TRUE WHERE tipo = 'T'")
     efectivo = await conn.fetchval("SELECT id FROM metodos_pago WHERE tipo = 'E'")
     tarjeta = await conn.fetchval("SELECT id FROM metodos_pago WHERE tipo = 'T'")

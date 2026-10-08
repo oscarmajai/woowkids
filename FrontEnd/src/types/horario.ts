@@ -16,7 +16,7 @@ export interface Horario {
   horaFin: string
   activo: boolean
   dias: number[] | null
-  /** M19: null = horario global (todas las sucursales; solo lo edita el
+  /** `null` = horario global (todas las sucursales; solo lo edita el
    * AdministradorSistema). */
   sucursalId: string | null
 }

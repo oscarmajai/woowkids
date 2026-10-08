@@ -1,5 +1,5 @@
 -- 050_folios_sucursal.sql
--- Folio de ticket secuencial por sucursal (QA #21). El backend asigna
+-- Folio de ticket secuencial por sucursal. El backend asigna
 -- ticket_numero con un UPDATE ... RETURNING atómico dentro de la transacción
 -- del cobro; el valor que mande el front en PagoCompletoRequest.ticket_numero
 -- queda solo como fallback si por algún motivo no hay fila de folio.

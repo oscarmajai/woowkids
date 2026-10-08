@@ -36,7 +36,7 @@ describe('axiosClient interceptor', () => {
   beforeEach(() => {
     localStorage.clear()
     localStorage.setItem('auth_session', JSON.stringify({ user: USER }))
-    // C3: el access token ya no vive en localStorage -- solo en memoria.
+    // El access token ya no vive en localStorage -- solo en memoria.
     tokenMemory.set('old')
     refreshCalls = 0
   })
@@ -140,7 +140,7 @@ describe('axiosClient interceptor', () => {
     expect(err.details).toBeUndefined()
   })
 
-  it('B8: un 422 de validación muestra los mensajes en español del backend', async () => {
+  it('un 422 de validación muestra los mensajes en español del backend', async () => {
     apiClient.defaults.adapter = ((config: InternalAxiosRequestConfig) =>
       fail(config, 422, {
         detail: [
@@ -175,12 +175,12 @@ describe('axiosClient interceptor', () => {
     const stored = JSON.parse(localStorage.getItem('auth_session') ?? '{}')
     expect(stored.user.permissions).toEqual(['pos:acceder'])
     expect(stored.token).toBeUndefined()
-    // C3: el token nuevo queda solo en memoria, nunca en localStorage.
+    // El token nuevo queda solo en memoria, nunca en localStorage.
     expect(tokenMemory.get()).toBe('tok')
   })
 
-  // A5: un PIN mal escrito al abrir caja refrescaba el token, reenviaba el
-  // PIN equivocado y cerraba la sesión.
+  // Un PIN mal escrito al abrir caja no debe refrescar el token, reenviar el
+  // PIN equivocado ni cerrar la sesión.
   it.each([401, 403])(
     'un PIN incorrecto al abrir caja (%i) no refresca, no reenvía ni cierra sesión',
     async (status) => {
@@ -227,7 +227,7 @@ describe('axiosClient interceptor', () => {
     expect(localStorage.getItem('auth_session')).not.toBeNull()
   })
 
-  it('C3: el access token nunca se persiste en localStorage', async () => {
+  it('el access token nunca se persiste en localStorage', async () => {
     setRefresh((config) => Promise.resolve(makeResponse(config, 200, REFRESH_BODY)))
 
     const token = await refreshAccessToken()

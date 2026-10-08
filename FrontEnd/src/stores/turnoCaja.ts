@@ -105,20 +105,20 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
   /** Nombre de la caja ("Caja Patria 1"); `terminal` es el código ("CAJA 01"). */
   const cajaNombre = ref('')
   const sucursalNombre = ref('')
-  /** B13: notas capturadas al abrir la caja. */
+  /** Notas capturadas al abrir la caja. */
   const observacionesApertura = ref('')
   const fondoInicial = ref(0)
   const totalRetiros = ref(0)
   const totalIngresos = ref(0)
   const totalVentas = ref(0)
   const totalVentasEfectivo = ref(0)
-  /** "Vendido en turno" (M6): número de tickets y lo aplicado (neto del cambio). */
+  /** "Vendido en turno": número de tickets y lo aplicado (neto del cambio). */
   const numeroVentas = ref(0)
   const totalVendido = ref(0)
   const totalCambio = ref(0)
-  /** M7: efectivo esperado en el cajón según el backend (null si no lo manda). */
+  /** Efectivo esperado en el cajón según el backend (null si no lo manda). */
   const efectivoEsperado = ref<number | null>(null)
-  /** M7: lo cobrado en el turno por método (el efectivo, neto del cambio). */
+  /** Lo cobrado en el turno por método (el efectivo, neto del cambio). */
   const ventasPorMetodo = ref<VentaPorMetodo[]>([])
   const fechaApertura = ref<string | null>(null)
   const estado = ref<EstadoTurno>('SIN_TURNO')
@@ -192,7 +192,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
   /** true si hay diferencias (para forzar observaciones) */
   const hayDiferencias = computed(() => diferenciaNeta.value !== 0)
 
-  /** Efectivo físico esperado en caja. M7: el del backend (misma fórmula que el
+  /** Efectivo físico esperado en caja. El del backend (misma fórmula que el
    * arqueo: también resta el cambio entregado y las devoluciones); el cálculo
    * local queda solo para un backend que no lo mande. */
   const efectivoDisponible = computed(
@@ -201,7 +201,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
       fondoInicial.value + totalIngresos.value - totalRetiros.value + totalVentasEfectivo.value,
   )
 
-  /** M7: la caja quedó en negativo (más salidas que efectivo). */
+  /** La caja quedó en negativo (más salidas que efectivo). */
   const cajaEnNegativo = computed(() => efectivoDisponible.value < 0)
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -594,7 +594,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
     }
 
     // Si el turno llega en BALANCE_REVELADO (ej. recarga tras autenticar al admin), el
-    // backend ya incluye adminEmail y balancePorMetodo en esta misma respuesta (QA #8),
+    // backend ya incluye adminEmail y balancePorMetodo en esta misma respuesta,
     // así que no hace falta re-autenticar al admin para recuperarlos. El sessionStorage
     // y la re-autenticación quedan solo como respaldo para backends viejos que todavía
     // no manden esos campos.
@@ -630,7 +630,7 @@ export const useTurnoCajaStore = defineStore('turnoCaja', () => {
       }))
     metodosPago.value = [...filasSistema, ...filasManuales]
 
-    // B23: con el conteo ya enviado, el formulario muestra lo que se envió (antes,
+    // Con el conteo ya enviado, el formulario muestra lo que se envió (antes,
     // al recargar, el desglose salía en $0.00 detrás del aviso de espera).
     if (
       turno.conteoGuardado &&

@@ -31,7 +31,7 @@ async def descargar_imagenes_llegada(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(get_current_user),
 ) -> StreamingResponse:
-    """ZIP con las fotos de llegada de un registro. Autorizado por recurso (C6):
+    """ZIP con las fotos de llegada de un registro. Autorizado por recurso:
     staff de la sucursal del registro con permiso de estancias, o el padre
     dueño del registro; cualquier otro caso es 404."""
     return await obtener_fotos_llegada_por_registro(conn, current_user, registro_id)
@@ -43,6 +43,6 @@ async def descargar_identificacion(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(get_current_user),
 ) -> StreamingResponse:
-    """INE del tutor de un registro. Autorizada por recurso (C6), igual que las
+    """INE del tutor de un registro. Autorizada por recurso, igual que las
     fotos de llegada; cualquier caso no autorizado es 404."""
     return await obtener_identificacion(conn, current_user, nombre_archivo)

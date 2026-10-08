@@ -26,7 +26,7 @@ export async function cancelarComanda(
 }
 
 /**
- * A4: devuelve el dinero de una comanda ya entregada, sin regresar su stock.
+ * Devuelve el dinero de una comanda ya entregada, sin regresar su stock.
  * Exige el token de PIN de un administrador (ver useCancelarComanda).
  */
 export async function devolverComanda(

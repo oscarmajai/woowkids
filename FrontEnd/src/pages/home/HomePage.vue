@@ -46,7 +46,7 @@ const puede = {
   inventario: computed(() => auth.hasPermission('inventario:ver')),
   pos: computed(() => auth.hasPermission('pos:acceder')),
   // "Nuevo pedido" abre Caja (POS): el Administrador de sucursal no vende en
-  // mostrador y AdministradorSistema necesita elegir sucursal antes (B21).
+  // mostrador y AdministradorSistema necesita elegir sucursal antes.
   nuevoPedido: computed(
     () =>
       auth.hasPermission('pos:acceder') &&
@@ -83,7 +83,7 @@ const subtitulo = computed(() => {
 const comandas = ref<Comanda[]>([])
 const abortComandas = new AbortController()
 
-// C1: aviso "Configura tu PIN de caja". Bloque propio y aparte: se consulta
+// Aviso "Configura tu PIN de caja". Bloque propio y aparte: se consulta
 // /auth/me (en vez del user cacheado del login) porque tienePin puede cambiar
 // sin volver a iniciar sesión, y porque este dato debe llegar sin pedir
 // usuarios:ver (el Cajero no lo tiene).
@@ -213,7 +213,7 @@ const pendientes = computed<Pendiente[]>(() => {
         : undefined,
     })
   }
-  // M26: cada niño en estancia con notas / alergias aparece aquí.
+  // Cada niño en estancia con notas / alergias aparece aquí.
   if (puede.estancias.value) {
     for (const aviso of avisosDeNotas(acceso.activos)) {
       lista.push({ ...aviso, icon: 'medical_information', tone: 'warn' })
@@ -246,7 +246,7 @@ const pendientes = computed<Pendiente[]>(() => {
       action: { label: 'Ver cocina', run: () => router.push({ name: 'pos-cocina' }) },
     })
   }
-  // UX: aviso de existencias bajas de pulseras (son de un solo uso).
+  // Aviso de existencias bajas de pulseras (son de un solo uso).
   if (puede.estancias.value && acceso.puedeVerPulseras && pulseras.value.conocidas) {
     const aviso = avisoPulserasBajas(pulseras.value.libres, pulseras.value.registradas)
     if (aviso) {
@@ -270,7 +270,7 @@ const pendientes = computed<Pendiente[]>(() => {
       key: 'stock',
       icon: 'inventory_2',
       tone: 'info',
-      // B7: "bajo mínimo" y "por reordenar" son alertas distintas.
+      // "Bajo mínimo" y "por reordenar" son alertas distintas.
       title: tituloAlertasStock(alertas.criticos.length, alertas.porReordenar.length),
       detail: insumos
         .slice(0, 3)
@@ -285,8 +285,8 @@ const pendientes = computed<Pendiente[]>(() => {
 })
 
 // ── Pulseras ────────────────────────────────────────────────────────────────
-// UX: el total son las pulseras registradas (antes libres + en estancia, que
-// se encogía con cada salida porque son de un solo uso) y las ya usadas se
+// El total son las pulseras registradas (no libres + en estancia, que se
+// encogería con cada salida porque son de un solo uso) y las ya usadas se
 // muestran aparte. El inventario se pide una vez; libres y en estancia van en vivo.
 const inventarioPulseras = ref<PulseraAdmin[] | null>(null)
 

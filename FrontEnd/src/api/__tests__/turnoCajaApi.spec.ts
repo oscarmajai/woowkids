@@ -38,7 +38,7 @@ const TURNO_RAW = {
   },
 }
 
-describe('turnoCajaApi.obtenerActivo (B4 / M6 / M7 / B23)', () => {
+describe('turnoCajaApi.obtenerActivo', () => {
   beforeEach(() => {
     get.mockReset()
   })
@@ -90,7 +90,7 @@ describe('turnoCajaApi.obtenerActivo (B4 / M6 / M7 / B23)', () => {
   })
 })
 
-describe('turnoCajaApi.obtenerTurnos (M8)', () => {
+describe('turnoCajaApi.obtenerTurnos', () => {
   it('expone si cada horario está vigente', async () => {
     get.mockResolvedValue({
       data: [
@@ -141,7 +141,7 @@ describe('turnoCajaApi.registrarIngreso (motivo)', () => {
   })
 })
 
-describe('turnoCajaApi.validarPinAdmin (A16)', () => {
+describe('turnoCajaApi.validarPinAdmin', () => {
   beforeEach(() => {
     post.mockReset()
   })
@@ -161,7 +161,7 @@ describe('turnoCajaApi.validarPinAdmin (A16)', () => {
   })
 })
 
-describe('turnoCajaApi.obtenerDetalleArqueo (A4: devoluciones)', () => {
+describe('turnoCajaApi.obtenerDetalleArqueo (devoluciones)', () => {
   beforeEach(() => {
     get.mockReset()
   })

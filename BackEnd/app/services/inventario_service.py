@@ -179,7 +179,7 @@ async def revertir_por_cancelacion(
 
 
 def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
-    """M22: un insumo eliminado (borrado lógico) no admite ajustes ni conteos."""
+    """Un insumo eliminado (borrado lógico) no admite ajustes ni conteos."""
     if not insumo["activo"]:
         raise RecursoInactivoError(
             f"El insumo «{insumo['nombre']}» está eliminado; no admite movimientos de inventario."
@@ -336,7 +336,7 @@ async def resumen_cogs(
     desde: date | None = None,
     hasta: date | None = None,
 ) -> ResumenCogsOut:
-    """KPIs de ventas, margen y merma del periodo (B7 pendiente #3)."""
+    """KPIs de ventas, margen y merma del periodo."""
     data = await movimiento_inventario_repository.resumen_costo_ventas(
         conn, sucursal_id, desde, hasta
     )

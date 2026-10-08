@@ -1,7 +1,7 @@
 import type { Paquetes } from '@/types/paquetes'
 
 /**
- * true si el paquete se puede ofrecer para ese tipo de evento (M17). Un
+ * true si el paquete se puede ofrecer para ese tipo de evento. Un
  * paquete sin tipos de evento asignados sirve para todos; sin tipo elegido
  * todavía, tampoco se descarta ninguno.
  */

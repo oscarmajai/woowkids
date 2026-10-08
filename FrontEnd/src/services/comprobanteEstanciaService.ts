@@ -24,7 +24,7 @@ export function datosDeReimpresion(
 }
 
 /**
- * N5: pide al backend un código nuevo del portal de padres para el registro
+ * Pide al backend un código nuevo del portal de padres para el registro
  * (el QR del comprobante anterior deja de valer) y arma el comprobante.
  */
 export async function reimprimirComprobanteEstancia(

@@ -1,4 +1,4 @@
-"""M9: no se desactiva una caja con turno abierto (DELETE /cajas/{id} y
+"""No se desactiva una caja con turno abierto (DELETE /cajas/{id} y
 PATCH con activo=false responden 409). Sin BD; con PostgreSQL real en
 tests/db/test_cajas_turno_abierto_pg.py."""
 
@@ -31,7 +31,7 @@ def _token(role: str = "Administrador") -> TokenData:
     )
 
 
-# ── M9: desactivar una caja con turno abierto ────────────────────────────────
+# ── Desactivar una caja con turno abierto ────────────────────────────────────
 
 
 def _caja(**extra: Any) -> dict[str, Any]:

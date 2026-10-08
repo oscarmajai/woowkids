@@ -1,4 +1,4 @@
-"""A2 / M27 / A4 contra PostgreSQL real, por HTTP: máquina de estados de las
+"""Contra PostgreSQL real, por HTTP: máquina de estados de las
 comandas, cancelación sin "zombies" ni doble reversión de stock, una sola
 emisión WebSocket por cambio, la cancelación de comandas cobradas con PIN de
 administrador y devolución en el arqueo (de cada método, no solo el
@@ -331,7 +331,7 @@ async def _devoluciones(e: Esc, comanda_id: str) -> list[asyncpg.Record]:
         )
 
 
-# ── A2: máquina de estados ───────────────────────────────────────────────────
+# ── Máquina de estados ───────────────────────────────────────────────────────
 
 
 async def test_estados_solo_avanzan_un_paso(esc: Esc) -> None:
@@ -427,7 +427,7 @@ async def test_cancelaciones_simultaneas_revierten_una_vez(esc: Esc) -> None:
     assert await _reversiones(esc, cid) == 1
 
 
-# ── M27: una sola emisión por cambio ─────────────────────────────────────────
+# ── Una sola emisión por cambio ──────────────────────────────────────────────
 
 
 async def test_un_solo_broadcast_por_cambio_de_estado(
@@ -447,7 +447,7 @@ async def test_un_solo_broadcast_por_cambio_de_estado(
     assert mensaje["comanda"]["estado_actual"] == "E"
 
 
-# ── A4: cancelar una comanda cobrada ─────────────────────────────────────────
+# ── Cancelar una comanda cobrada ─────────────────────────────────────────────
 
 
 async def test_cancelar_pagada_sin_pin_403_y_no_cancela(esc: Esc) -> None:
@@ -529,7 +529,7 @@ async def test_cancelar_pagada_con_tarjeta_no_mueve_el_efectivo(esc: Esc) -> Non
 
 
 async def test_admin_de_otra_sucursal_no_autoriza(esc: Esc) -> None:
-    # Desde A16 el admin de otra sucursal ya no obtiene token: validar-pin-admin
+    # El admin de otra sucursal no obtiene token: validar-pin-admin
     # lo rechaza antes de probar el PIN. La revisión al consumir el token
     # (ADMIN_NO_AUTORIZADO) queda como defensa en profundidad.
     cid = await _cobrada(esc)
@@ -601,7 +601,7 @@ async def test_cancelar_sin_pagos_no_pide_pin(esc: Esc) -> None:
     assert await _devoluciones(esc, cid) == []
 
 
-# ── A4: cada devolución baja el esperado de SU método ────────────────────────
+# ── Cada devolución baja el esperado de SU método ────────────────────────────
 
 
 async def _balance(e: Esc) -> tuple[Decimal, dict[str, Any]]:
@@ -681,7 +681,7 @@ async def test_cancelar_pago_mixto_baja_cada_metodo(esc: Esc) -> None:
     assert await _efectivo_esperado(esc) == (Decimal("1000.00"), Decimal("1000.00"))
 
 
-# ── A4: devolución de una comanda ya entregada ───────────────────────────────
+# ── Devolución de una comanda ya entregada ───────────────────────────────────
 
 
 async def _entregar(e: Esc, comanda_id: str) -> None:

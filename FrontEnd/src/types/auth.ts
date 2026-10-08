@@ -36,7 +36,7 @@ export interface User {
   branchId: string | null
   branchName: string | null
   permissions: string[]
-  /** C1: true si el usuario ya tiene PIN de caja configurado. Opcional para no
+  /** `true` si el usuario ya tiene PIN de caja configurado. Opcional para no
    * romper construcciones existentes de User (login/refresh no lo traían). */
   tienePin?: boolean
   /** El administrador inicial (o quien entró con la contraseña de fábrica)
@@ -61,7 +61,7 @@ export interface AuthState {
   error: string | null
 }
 
-// C3: ya no guarda el token (vive solo en memoria, ver utils/tokenMemory.ts)
+// Ya no guarda el token (vive solo en memoria, ver utils/tokenMemory.ts)
 // ni su expiración -- solo el usuario, que no es sensible y permite mostrar
 // la sesión cacheada mientras `restoreSession` confirma con el backend.
 export interface StoredSession {

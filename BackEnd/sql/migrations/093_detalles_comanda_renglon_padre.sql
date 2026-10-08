@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 093_detalles_comanda_renglon_padre.sql
--- M13: los productos de un combo (es_hijo_combo) guardaban en es_hijo_de el
+-- Los productos de un combo (es_hijo_combo) guardaban en es_hijo_de el
 -- producto_id del combo, no el renglón padre. Con dos renglones del mismo
 -- combo (combo dividido para personalizar) el ticket y "Editar orden" no
 -- sabían qué hijos eran de cuál y repetían todos bajo cada combo.

@@ -58,7 +58,7 @@ _INVALID_REFRESH = HTTPException(
 
 
 def _set_refresh_cookie(response: Response, raw_refresh_token: str, max_age_seconds: int) -> None:
-    """QA #32 — además del body (ver settings.refresh_en_body), el refresh
+    """Además del body (ver settings.refresh_en_body), el refresh
     token viaja en una cookie HttpOnly restringida a /api/auth para que un XSS
     no pueda leerlo desde JS."""
     response.set_cookie(
@@ -142,8 +142,8 @@ async def refresh_endpoint(
     conn: asyncpg.Connection = Depends(get_db),
 ) -> LoginResponse:
     """Rota el refresh token y emite un nuevo access token. Acepta el refresh
-    token desde la cookie HttpOnly o, si no vino, desde el body (QA #32:
-    clientes viejos que todavía no mandan cookies)."""
+    token desde la cookie HttpOnly o, si no vino, desde el body
+    (clientes viejos que todavía no mandan cookies)."""
     raw_token = refresh_token_cookie or (body.refresh_token if body else None)
     if not raw_token:
         raise _INVALID_REFRESH
@@ -163,8 +163,8 @@ async def logout_endpoint(
     body: RefreshRequest | None = Body(None),
     refresh_token_cookie: str | None = Cookie(None, alias=_REFRESH_COOKIE_NAME),
 ) -> Response:
-    """Revoca el access token (blacklist) y el refresh token (cookie o body,
-    QA #32) y borra la cookie."""
+    """Revoca el access token (blacklist) y el refresh token (cookie o body)
+    y borra la cookie."""
     raw_token = refresh_token_cookie or (body.refresh_token if body else None)
     await revoke_token(conn, current_user.jti, current_user.exp)
     if raw_token:
@@ -178,7 +178,7 @@ async def ws_ticket_endpoint(
     current_user: TokenData = Depends(get_current_user),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> WsTicketResponse:
-    """QA #32 — emite un ticket aleatorio de un solo uso (30 s) para que los
+    """Emite un ticket aleatorio de un solo uso (30 s) para que los
     WebSockets de comandas/estancias no necesiten el JWT crudo en la URL."""
     raw_ticket, ticket_hash = generate_ws_ticket()
     claims = {

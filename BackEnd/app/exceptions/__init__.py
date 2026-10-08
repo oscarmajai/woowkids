@@ -12,7 +12,7 @@ class CredencialesInvalidas(HTTPException):
 
 
 class NoEncontrado(HTTPException):
-    """404 con la frase concordada con el género del recurso (N15):
+    """404 con la frase concordada con el género del recurso:
     `NoEncontrado("Reservación", genero="f")` → "Reservación no encontrada.".
     `mensaje` reemplaza la frase completa cuando no basta con el nombre."""
 
@@ -74,7 +74,7 @@ class SaldoInsuficienteError(HTTPException):
 
 
 class IdempotenciaConflictoError(HTTPException):
-    """La misma Idempotency-Key llegó con un payload distinto al original (QA #20)."""
+    """La misma Idempotency-Key llegó con un payload distinto al original."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -87,7 +87,7 @@ class IdempotenciaConflictoError(HTTPException):
 
 
 class IdempotenciaEnCursoError(HTTPException):
-    """M3: otro cobro con la misma Idempotency-Key se está registrando."""
+    """Otro cobro con la misma Idempotency-Key se está registrando."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -103,7 +103,7 @@ class IdempotenciaEnCursoError(HTTPException):
 
 
 class PinTokenRequeridoError(HTTPException):
-    """Falta token_pin de cajero/admin en /turnos-caja/confirmar (QA #14)."""
+    """Falta token_pin de cajero/admin en /turnos-caja/confirmar."""
 
     def __init__(
         self, mensaje: str = "Se requieren los tokens de PIN de cajero y administrador."
@@ -115,7 +115,7 @@ class PinTokenRequeridoError(HTTPException):
 
 
 class PinTokenPropositoError(HTTPException):
-    """A16: el token de PIN de administrador se emitió para otra operación
+    """El token de PIN de administrador se emitió para otra operación
     (p. ej. uno de cancelar una orden presentado para cerrar la caja)."""
 
     def __init__(self, mensaje: str) -> None:
@@ -127,7 +127,7 @@ class PinTokenPropositoError(HTTPException):
 
 class PrecioCambiadoError(HTTPException):
     """El precio o el total que mandó el cliente no coincide con el que
-    calcula el servidor con el catálogo vigente (C2). No se cobra nada; el
+    calcula el servidor con el catálogo vigente. No se cobra nada; el
     frontend debe refrescar el catálogo y volver a cobrar."""
 
     def __init__(self, mensaje: str, code: str = "PRECIO_CAMBIADO") -> None:
@@ -138,7 +138,7 @@ class PrecioCambiadoError(HTTPException):
 
 
 class ProductoNoDisponibleError(HTTPException):
-    """El producto existe en la sucursal pero ya no está activo (C2)."""
+    """El producto existe en la sucursal pero ya no está activo."""
 
     def __init__(self, nombre: str) -> None:
         super().__init__(
@@ -153,7 +153,7 @@ class ProductoNoDisponibleError(HTTPException):
 class PedidoInvalidoError(HTTPException):
     """El pedido no se puede procesar tal como viene: producto inexistente o de
     otra sucursal, cantidad fuera de rango, combo que no corresponde a su
-    definición, pago sin referencia, etc. (C2, M3, M11)."""
+    definición, pago sin referencia, etc."""
 
     def __init__(self, mensaje: str, code: str = "PEDIDO_INVALIDO") -> None:
         super().__init__(
@@ -165,7 +165,7 @@ class PedidoInvalidoError(HTTPException):
 class RecepcionInvalidaError(HTTPException):
     """La recepción de una compra no se puede aplicar tal como viene: una línea
     excede lo pendiente, no pertenece a la compra, viene repetida o no trae nada
-    que recibir (A12, M23). `linea` lleva el detalle de la línea culpable para
+    que recibir. `linea` lleva el detalle de la línea culpable para
     que el cliente la señale."""
 
     def __init__(self, mensaje: str, linea: dict[str, str] | None = None) -> None:

@@ -1,7 +1,7 @@
-"""N-1 (prueba E2E de v1.2.0): el registro de entrada reutilizaba al tutor
-solo por teléfono y descartaba el nombre capturado; la salida verificaba
-contra la persona equivocada. Ahora se reutiliza solo si coinciden teléfono
-y nombre (sin distinguir mayúsculas, acentos ni espacios)."""
+"""El registro de entrada reutilizaba al tutor solo por teléfono y descartaba
+el nombre capturado; la salida verificaba contra la persona equivocada.
+Ahora se reutiliza solo si coinciden teléfono y nombre (sin distinguir
+mayúsculas, acentos ni espacios)."""
 
 from __future__ import annotations
 

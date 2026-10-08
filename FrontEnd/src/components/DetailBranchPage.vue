@@ -48,7 +48,7 @@ const desactivarAbierto = ref(false)
 
 // ── Indicadores por sucursal (periodo) ─────────────────────────────────────
 // El periodo por defecto (mes en curso hasta hoy) se calcula en la zona de la
-// sucursal (M4): con toISOString() "hoy" era la fecha UTC. Mientras carga la
+// sucursal (con toISOString() "hoy" sería la fecha UTC). Mientras carga la
 // sucursal se usa la zona del navegador.
 const periodoDesde = ref(primerDiaDelMesEnZona())
 const periodoHasta = ref(fechaEnZona())
@@ -57,7 +57,7 @@ const indicadores = ref<IndicadoresSucursal | null>(null)
 const indicadoresCargando = ref(false)
 const indicadoresError = ref('')
 const exportando = ref(false)
-// B1: con el rango invertido el backend responde 422; no se pide ni se exporta.
+// Con el rango invertido el backend responde 422; no se pide ni se exporta.
 const rangoInvertido = computed(() => rangoFechasInvertido(periodoDesde.value, periodoHasta.value))
 const MENSAJE_RANGO_INVERTIDO = 'La fecha «Desde» no puede ser posterior a «Hasta».'
 
@@ -193,8 +193,8 @@ const columns: QTableColumn[] = [
   { name: 'status', label: 'Estado', field: 'isActive', align: 'left' },
 ]
 
-// ── Pestañas Cajas y Horarios (C2 / D1) ─────────────────────────────────────
-// /cajas y /horarios aceptan un sucursal_id opcional (D1.1): se envía el id
+// ── Pestañas Cajas y Horarios ───────────────────────────────────────────────
+// /cajas y /horarios aceptan un sucursal_id opcional: se envía el id
 // de la sucursal que se está viendo en esta página, no el de la sesión. El
 // backend responde 403 si el usuario no es AdministradorSistema y pide una
 // sucursal distinta a la suya.
@@ -538,7 +538,7 @@ const horariosColumns: QTableColumn[] = [
               </template>
               <template #body-cell-alcance="props">
                 <q-td :props="props">
-                  <!-- M19: /horarios devuelve los de la sucursal y los globales -->
+                  <!-- /horarios devuelve los de la sucursal y los globales -->
                   <StatusBadge
                     :tone="props.row.sucursalId ? 'info' : 'pink'"
                     :label="props.row.sucursalId ? 'Esta sucursal' : 'Todas las sucursales'"

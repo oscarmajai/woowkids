@@ -26,7 +26,7 @@ describe('reservaciones store · cargar', () => {
     listarMock.mockReset()
   })
 
-  it('descarta la respuesta de una carga anterior que llega tarde (A9)', async () => {
+  it('descarta la respuesta de una carga anterior que llega tarde', async () => {
     const store = useReservacionesStore()
     const octubre = diferida<Reservaciones[]>()
     const noviembre = diferida<Reservaciones[]>()

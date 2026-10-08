@@ -1,4 +1,4 @@
-"""B8 — los errores de validación de la petición salen en español, con el
+"""Los errores de validación de la petición salen en español, con el
 campo afectado, y conservan la forma estructurada de FastAPI (type, loc,
 input, ctx) para los clientes que la leen. Sin BD."""
 
@@ -58,7 +58,7 @@ def _por_campo(resp: httpx.Response) -> dict[str, dict[str, Any]]:
 
 
 async def test_cantidad_negativa_del_ajuste_manual_sale_en_espanol() -> None:
-    """El caso de la fuente (inventario B14): ajuste con cantidad -5."""
+    """Ajuste manual de inventario con cantidad -5."""
     resp = await _post(f"/insumos/{UUID(int=1)}/movimientos", json={"tipo": "E", "cantidad": "-5"})
     errores = _por_campo(resp)
     e = errores["cantidad"]

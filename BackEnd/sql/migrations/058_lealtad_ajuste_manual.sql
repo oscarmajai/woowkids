@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 058_lealtad_ajuste_manual.sql
--- Ajuste manual de puntos de lealtad (WP B4, pendiente 1): un administrador
+-- Ajuste manual de puntos de lealtad: un administrador
 -- puede otorgar o descontar puntos a mano (ej. compensación, corrección de un
 -- error de captura), con motivo obligatorio para auditoría.
 --

@@ -21,7 +21,7 @@ const TEXTOS_DEVOLUCION: TextosAutorizacion = {
 }
 
 /**
- * A4: cancela una comanda, o devuelve el dinero de una ya entregada. Si el
+ * Cancela una comanda, o devuelve el dinero de una ya entregada. Si el
  * backend responde que hace falta la autorización de un administrador, pide su
  * correo y PIN (validados contra /turnos-caja/validar-pin-admin para el turno
  * que indica el backend) y reintenta con el token. Cualquier otro error del

@@ -2,7 +2,7 @@ import type { DevolucionArqueo, FilaBalance, OrigenDevolucion } from '@/types/tu
 import { formatMXN } from '@/utils/formatoMoneda'
 
 /**
- * A4: textos de las devoluciones a clientes en el arqueo. Cada devolución ya
+ * Textos de las devoluciones a clientes en el arqueo. Cada devolución ya
  * viene restada del esperado de su método; aquí solo se muestra.
  */
 

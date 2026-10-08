@@ -10,9 +10,9 @@ from app.schemas.comanda import DetalleCreate
 class PagoIn(BaseModel):
     metodoPagoId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
     monto: float = Field(..., gt=0)
-    # N8: folio del voucher o referencia de la transferencia. Opcional en el
+    # Folio del voucher o referencia de la transferencia. Opcional en el
     # contrato; el servicio la exige si el método de pago tiene
-    # `requiere_referencia` (misma regla que M11 en el POS). Se guarda en
+    # `requiere_referencia` (misma regla que en el POS). Se guarda en
     # pagos_estancia.notas_pago.
     referencia: str | None = Field(default=None, max_length=120)
 
@@ -39,7 +39,7 @@ class PaymentItem(BaseModel):
     metodo_pago_id: UUID
     monto: Decimal = Field(..., gt=0)
     notas_pago: str = ""
-    # B9 B.1: últimos 4 dígitos de la tarjeta, opcionales (solo aplica a pagos
+    # Últimos 4 dígitos de la tarjeta, opcionales (solo aplica a pagos
     # con tarjeta; para efectivo/transferencia se deja en None).
     ultimos4: str | None = Field(default=None)
 
@@ -82,7 +82,7 @@ class PaymentOut(BaseModel):
 class DetalleVentaIn(DetalleCreate):
     """Renglón del pedido que manda el POS. El precio y el importe se
     comparan contra el catálogo en el servidor (services/precios_venta.py);
-    aquí solo se acota la cantidad (M3: con 0 tronaba con 500 en inventario)."""
+    aquí solo se acota la cantidad (con 0 fallaría con 500 en inventario)."""
 
     cantidad: int = Field(..., ge=1, le=999)
 
@@ -95,7 +95,7 @@ class PagoCompletoRequest(BaseModel):
     persiste.
     """
 
-    # QA #21: el backend asigna el folio secuencial (folio_repository) dentro de
+    # El backend asigna el folio secuencial (folio_repository) dentro de
     # la transacción del cobro. Este campo queda opcional y solo se usa como
     # fallback si por algún motivo no hay folio disponible — el front ya no
     # necesita generar un ticket_numero (ver CajaComponent.vue). max_length=10
@@ -110,7 +110,7 @@ class PagoCompletoRequest(BaseModel):
     # sin esto, un valor más largo tronaba con un 500 crudo de Postgres en vez
     # de un 422 limpio (mismo criterio que AbrirTurnoPayload.terminal).
     nombre_cliente: str | None = Field(default=None, max_length=150)
-    # B9 B.2: mesa del pedido, opcional. max_length=20 coincide con
+    # Mesa del pedido, opcional. max_length=20 coincide con
     # comandas.mesa VARCHAR(20) en BD.
     mesa: str | None = Field(default=None, max_length=20)
     puntos_a_redimir: int = Field(0, ge=0)
@@ -184,10 +184,10 @@ class DetalleProductoOut(BaseModel):
     importe: float
     notas_especiales: str | None = None
     nombre_combo_padre: str | None = None
-    # QA #34: agrupa los hijos de una misma instancia de combo (migración 038).
+    # Agrupa los hijos de una misma instancia de combo (migración 038).
     # None para productos sueltos o cuando el dato no existe (estancias/reservaciones).
     id_combo_padre: str | None = None
-    # M13: renglón (id de detalle) del combo al que pertenece el hijo; None en
+    # Renglón (id de detalle) del combo al que pertenece el hijo; None en
     # productos sueltos, renglones de combo y filas viejas que no se pudieron
     # asignar (migración 093).
     detalle_padre_id: str | None = None
@@ -201,7 +201,7 @@ class MetodoPagoDetalle(BaseModel):
 
 
 class SucursalTicketOut(BaseModel):
-    """M12: datos de la sucursal de la venta para el encabezado del ticket."""
+    """Datos de la sucursal de la venta para el encabezado del ticket."""
 
     nombre: str
     direccion: str | None = None
@@ -225,17 +225,17 @@ class DetalleOrdenOut(BaseModel):
     # Campos de compatibilidad: solo se llenan para ventas tipo comanda.
     comanda_id: str | None = None
     ticket_numero: str | None = None
-    # B9 B.3: puntos de lealtad otorgados por esta comanda (join a
+    # Puntos de lealtad otorgados por esta comanda (join a
     # movimientos_puntos); null si no aplica (no hubo celular, o el origen no
     # es comanda).
     puntos_ganados: int | None = None
-    # B9 B.2: mesa del pedido, opcional (solo aplica a comandas).
+    # Mesa del pedido, opcional (solo aplica a comandas).
     mesa: str | None = None
-    # M12: cliente, cambio entregado (0 si no hubo) y sucursal de la venta.
+    # Cliente, cambio entregado (0 si no hubo) y sucursal de la venta.
     nombre_cliente: str | None = None
     cambio: float = 0.0
     sucursal: SucursalTicketOut | None = None
-    # B5: marca de la última modificación de la comanda. PATCH
+    # Marca de la última modificación de la comanda. PATCH
     # /comandas/{id}/detalles la recibe como modificado_esperado y responde
     # 409 si la orden cambió desde que se leyó.
     modificado: str | None = None

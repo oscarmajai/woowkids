@@ -11,7 +11,7 @@ import type { ReservacionCompletaRequest } from '@/types/reservaciones_completa'
 
 // Folio de la última carga pedida: si llega la respuesta de una carga anterior
 // (p. ej. el calendario cambió de mes mientras esperaba), se descarta para no
-// pintar otro rango ni encadenar recargas (A9).
+// pintar otro rango ni encadenar recargas.
 let ultimaCarga = 0
 
 interface ReservacionesState {
@@ -60,7 +60,7 @@ export const useReservacionesStore = defineStore('reservaciones', {
       return nueva
     },
     /**
-     * Alta atómica (QA #10): reservación + extras + productos + pagos en una
+     * Alta atómica: reservación + extras + productos + pagos en una
      * sola transacción vía POST /reservaciones/completa. Reemplaza al loop de
      * requests sueltos que usaba NuevaReservacionPage.vue.
      */

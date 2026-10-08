@@ -1,4 +1,4 @@
-"""N1: el cobro vuelve a exigir el turno ABIERTA bajo un bloqueo compartido
+"""El cobro vuelve a exigir el turno ABIERTA bajo un bloqueo compartido
 de la apertura. Sin BD; la prueba de concurrencia real está en
 tests/db/test_cobro_bloquea_turno_pg.py."""
 
@@ -13,7 +13,7 @@ from fastapi import HTTPException
 SVC = "app.services.turnos_caja_service"
 
 
-# ── N1: el cobro vuelve a validar el turno bajo bloqueo ──────────────────────
+# ── El cobro vuelve a validar el turno bajo bloqueo ──────────────────────────
 
 
 @pytest.mark.parametrize("estado", ["EN_CORTE", "CERRADA"])

@@ -90,7 +90,7 @@ async def create_chekout(
     apertura_caja_id: str,
 ) -> dict[str, Any]:
     async with conn.transaction():
-        # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
+        # El turno debe seguir ABIERTA bajo bloqueo hasta que el cobro confirme.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         now = datetime.now(UTC)
 
@@ -165,7 +165,7 @@ async def create_chekout(
             await change_registro_estado(
                 conn, EstadoRegistro.CERRADO, usuario_id, detalle["registros_id"]
             )
-            # A17 — el QR del comprobante deja de valer en cuanto sale el
+            # El QR del comprobante deja de valer en cuanto sale el
             # último niño del registro.
             await revocar_codigos_acceso(conn, detalle["registros_id"])
 

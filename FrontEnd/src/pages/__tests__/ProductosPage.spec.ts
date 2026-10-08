@@ -6,9 +6,9 @@ import ProductosPage from '@/pages/ProductosPage.vue'
 import type { ProductoAdmin } from '@/types/producto'
 
 /**
- * M20: el botón Eliminar de productos daba 403 al Administrador, que no tiene
- * `inventario:eliminar_producto`. Ahora solo se muestra a quien lo tiene (el
- * backend exige ese permiso tanto en DELETE como en PATCH activo=false).
+ * El botón Eliminar de productos solo se muestra a quien tiene
+ * `inventario:eliminar_producto` (el backend exige ese permiso tanto en
+ * DELETE como en PATCH activo=false; sin él respondería 403).
  */
 
 const permisos = vi.hoisted(() => ({ codigos: new Set<string>() }))
@@ -47,7 +47,7 @@ const montar = () =>
 const eliminar = (wrapper: ReturnType<typeof montar>) =>
   wrapper.findAll('button').filter((b) => b.attributes('aria-label') === 'Eliminar')
 
-describe('ProductosPage (M20)', () => {
+describe('ProductosPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     permisos.codigos = new Set(['inventario:gestionar_productos'])

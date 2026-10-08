@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     refresh_token_remember_me_days: int = 30
 
-    # QA #32 — seguridad de sesión (WP B8). Todo detrás de flags, default
+    # Seguridad de sesión. Todo detrás de flags, default
     # retrocompatible con los clientes viejos (body-only, sin cookie).
     cookie_secure: bool = True
     refresh_en_body: bool = True
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     minio_bucket: str = "mercury"
     minio_secure: bool = False
 
-    # QA #14: exige token_pin de cajero y admin en POST /turnos-caja/confirmar.
+    # Exige token_pin de cajero y admin en POST /turnos-caja/confirmar.
     # Retrocompatibilidad: en false, confirmar acepta la ausencia de tokens.
     exigir_pin_token: bool = True
 

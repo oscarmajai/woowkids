@@ -18,12 +18,12 @@ _INSERT = """
 
 # Una fila por pago (o por método, si una orden se pagó con varios). Los
 # totales por orden (`total_real`) se repiten en cada fila de su orden: quien
-# agregue sobre este UNION debe agrupar por orden antes de sumarlos (A1). Los
+# agregue sobre este UNION debe agrupar por orden antes de sumarlos. Los
 # montos por método (`monto`) sí salen uno por pago.
 #
 # Una comanda cuenta como cancelada con `estado_actual = 'C'` o con
 # `activo = FALSE`: la cancelación de cocina desactiva la comanda y su estado
-# puede quedar en otro valor (A3).
+# puede quedar en otro valor.
 _UNION_VENTAS = """
     SELECT
         v.referencia_id,
@@ -48,7 +48,7 @@ _UNION_VENTAS = """
             'comanda'                          AS tipo_origen,
             c.ticket_numero                    AS titulo,
             -- Una comanda desactivada se muestra como cancelada aunque su
-            -- estado_actual se haya quedado en otro valor (A3).
+            -- estado_actual se haya quedado en otro valor.
             CASE WHEN c.activo THEN c.estado_actual::text ELSE 'C' END AS estado_actual,
             po.sucursal_id                     AS sucursal_id,
             (c.estado_actual = 'C' OR NOT c.activo) AS es_cancelado,
@@ -111,7 +111,7 @@ _UNION_VENTAS = """
 """
 
 # Límites del periodo: `$2` (inclusivo) y `$3` (exclusivo) llegan como hora
-# local de la sucursal, sin zona, y se convierten con su `zona_horaria` (M4).
+# local de la sucursal, sin zona, y se convierten con su `zona_horaria`.
 _ZONA_SUCURSAL = "(SELECT s.zona_horaria FROM public.sucursales s WHERE s.id = $1)"
 
 _FILTRO_PERIODO = f"""
@@ -126,7 +126,7 @@ _SELECT_HISTORIAL = f"""
         v.tipo_origen,
         v.titulo,
         -- El total de la orden se repite en cada uno de sus pagos: se toma una
-        -- sola vez (A1). Lo cobrado por método va en metodos_pago.
+        -- sola vez. Lo cobrado por método va en metodos_pago.
         MAX(v.total_real)                    AS total_final,
         v.estado_actual,
         v.sucursal_id,
@@ -185,7 +185,7 @@ _INSERT_IDEMPOTENCIA = """
 
 
 async def bloquear_clave_idempotencia(conn: asyncpg.Connection, clave: str) -> None:
-    """M3: serializa los cobros con la misma Idempotency-Key. Candado de
+    """Serializa los cobros con la misma Idempotency-Key. Candado de
     sesión de transacción (se suelta al terminarla): el llamador DEBE estar
     dentro de `conn.transaction()`. El segundo cobro espera a que el primero
     termine y después ve su registro en pagos_idempotencia."""
@@ -208,7 +208,7 @@ async def registrar_idempotencia(
     hash_payload: str,
     comanda_id: UUID,
 ) -> None:
-    """Se llama dentro de la misma transacción del cobro (QA #20)."""
+    """Se llama dentro de la misma transacción del cobro."""
     await conn.execute(
         _INSERT_IDEMPOTENCIA, clave, sucursal_id, usuario_id, hash_payload, comanda_id
     )
@@ -276,7 +276,7 @@ _SELECT_DETALLE_COMANDA = """
         c.mesa,
         c.modificado,
         c.sucursal_id,
-        -- M12: cambio entregado al cliente (movimiento de caja 'C' de la comanda).
+        -- Cambio entregado al cliente (movimiento de caja 'C' de la comanda).
         (
             SELECT SUM(mc.monto)
             FROM public.movimientos_caja mc
@@ -288,7 +288,7 @@ _SELECT_DETALLE_COMANDA = """
     WHERE c.id = $1
 """
 
-# M12: encabezado del ticket con los datos de la sucursal de la venta.
+# Encabezado del ticket con los datos de la sucursal de la venta.
 _SELECT_SUCURSAL_TICKET = """
     SELECT nombre, direccion, ciudad, estado, codigo_postal, telefono
     FROM public.sucursales
@@ -370,11 +370,11 @@ async def detalle_por_comanda(
             "importe": float(dict(row)["importe"]),
             "notas_especiales": dict(row)["notas_especiales"],
             "nombre_combo_padre": dict(row)["nombre_combo_padre"],
-            # QA #34: agrupa hijos de combo por instancia en vez de por orden.
+            # Agrupa hijos de combo por instancia en vez de por orden.
             "id_combo_padre": (
                 str(dict(row)["id_combo_padre"]) if dict(row).get("id_combo_padre") else None
             ),
-            # M13: renglón del combo al que pertenece el hijo.
+            # Renglón del combo al que pertenece el hijo.
             "detalle_padre_id": (
                 str(dict(row)["detalle_padre_id"]) if dict(row).get("detalle_padre_id") else None
             ),
@@ -601,7 +601,7 @@ _SELECT_ESTADISTICAS = f"""
         COUNT(*)::int                         AS total_ordenes
     FROM (
         -- Una fila por orden: su total cuenta una vez aunque tenga varios
-        -- pagos en el periodo (A1).
+        -- pagos en el periodo.
         SELECT v.tipo_origen, v.referencia_id, MAX(v.total_real) AS total_real
         FROM ({_UNION_VENTAS}) v
         WHERE {_FILTRO_PERIODO}

@@ -66,7 +66,7 @@ async def crear_comanda(
     _apertura_id: str = Depends(apertura_operando_id),
 ) -> Any:
     """Crea una comanda nueva con sus detalles, sin cobrarla. Sigue exigiendo
-    un turno de caja operando, pero no registra movimiento en la caja (N10):
+    un turno de caja operando, pero no registra movimiento en la caja:
     lo cobrado entra con su método de pago en POST /pagos/completar."""
     # Obtenemos la sucursal de forma centralizada y segura: nunca confiar en
     # el sucursal_id que mande el cliente en el body.
@@ -135,7 +135,7 @@ async def cambiar_estado(
             detail="Comanda no encontrada",
         )
 
-    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
+    # El service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 
@@ -146,7 +146,7 @@ async def devolver_entregada(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("restaurante:registrar_pago")),
 ) -> Any:
-    """A4: devuelve al cliente el dinero de una comanda ya entregada (T), sin
+    """Devuelve al cliente el dinero de una comanda ya entregada (T), sin
     regresar su stock. Exige motivo y `token_pin_admin` (403
     AUTORIZACION_ADMIN_REQUERIDA con el turno_id para
     /turnos-caja/validar-pin-admin, como la cancelación de una cobrada).
@@ -185,7 +185,7 @@ async def modificar_detalles(
     """Elimina productos de una comanda en estado Pendiente y recalcula el total.
 
     Si se eliminan todos los productos, cancela automáticamente la comanda
-    y requiere motivo_cancelacion en el body. Con `modificado_esperado` (B5),
+    y requiere motivo_cancelacion en el body. Con `modificado_esperado`,
     409 COMANDA_MODIFICADA si la orden cambió desde que se leyó.
     """
     await alcance_service.asegurar_recurso(conn, current_user, "comanda", comanda_id)
@@ -211,7 +211,7 @@ async def modificar_detalles(
             detail="La comanda no existe o no está en estado Pendiente.",
         )
 
-    # M27: el service ya notificó por WebSocket; aquí no se vuelve a emitir.
+    # El service ya notificó por WebSocket; aquí no se vuelve a emitir.
     return asdict(comanda)
 
 
@@ -224,7 +224,7 @@ async def comandas_ws(
     """Canal en tiempo real de comandas: emite comanda_creada/comanda_actualizada
     a los clientes de la sucursal correspondiente (ver app/core/ws_manager.py).
 
-    QA #32: el ticket efímero (?ticket=..., ver POST /auth/ws-ticket) reemplaza
+    El ticket efímero (?ticket=..., ver POST /auth/ws-ticket) reemplaza
     al JWT crudo en la URL; ?token=... se sigue aceptando mientras
     settings.WS_ACEPTA_JWT sea true. Va por query param porque el handshake WS
     nativo del navegador no admite headers custom."""

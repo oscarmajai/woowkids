@@ -17,7 +17,7 @@ const RAW = {
   ultimo_acceso: null,
 }
 
-describe('usersApi.list (A10)', () => {
+describe('usersApi.list', () => {
   beforeEach(() => {
     get.mockReset()
     get.mockResolvedValue({ data: [RAW] })

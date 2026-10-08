@@ -8,7 +8,7 @@ vi.mock('@/api/axiosClient', () => ({ apiClient: { get: vi.fn() } }))
 
 const get = vi.mocked(apiClient.get)
 
-describe('lealtad store · configuración de canje (A6)', () => {
+describe('lealtad store · configuración de canje', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     get.mockReset()

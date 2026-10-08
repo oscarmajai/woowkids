@@ -3,8 +3,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import type { Router, RouteRecordRaw } from 'vue-router'
 
 /**
- * B12 / B21 / UX shell: el guard avisa por qué rebota (antes mandaba a Inicio
- * en silencio), una ruta inexistente con sesión muestra un 404 en vez del
+ * El guard avisa por qué rebota (no manda a Inicio en silencio), una ruta inexistente con sesión muestra un 404 en vez del
  * login y AdministradorSistema sin sucursal no entra a la caja.
  */
 
@@ -131,7 +130,7 @@ beforeEach(() => {
   turno.asegurarTurnoCargado.mockResolvedValue({ ok: false, error: 'Sin permiso' })
 })
 
-describe('guard de permisos (B21)', () => {
+describe('guard de permisos', () => {
   it('avisa por qué no deja entrar en vez de mandar a Inicio en silencio', async () => {
     const router = crearRouter()
     await router.push('/usuarios')
@@ -206,7 +205,7 @@ describe('AdministradorSistema sin sucursal', () => {
   })
 })
 
-describe('ruta inexistente (B12)', () => {
+describe('ruta inexistente', () => {
   it('con sesión se queda en la página 404', async () => {
     const router = crearRouter()
     await router.push('/ruta-que-no-existe')
@@ -225,7 +224,7 @@ describe('ruta inexistente (B12)', () => {
   })
 })
 
-describe('rutas de la app (B12)', () => {
+describe('rutas de la app', () => {
   it('el comodín ya no redirige a /login: resuelve a la página 404 con sesión', async () => {
     const { default: router } = await import('@/router')
     const resuelta = router.resolve('/ruta-que-no-existe')

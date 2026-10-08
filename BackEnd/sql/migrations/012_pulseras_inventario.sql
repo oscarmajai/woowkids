@@ -8,8 +8,6 @@
 --   baja       = activo FALSE
 --   en_uso     = activa pero ya asignada/consumida
 --   disponible = activa y sin uso registrado
---
--- Aplicada manualmente en la BD dev el 2026-07-09.
 -- =============================================================================
 
 INSERT INTO public.permisos (codigo, nombre, modulo) VALUES

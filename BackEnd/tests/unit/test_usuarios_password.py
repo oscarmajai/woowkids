@@ -1,4 +1,4 @@
-"""M2 — el servidor exige contraseñas de al menos 8 caracteres al fijarlas."""
+"""El servidor exige contraseñas de al menos 8 caracteres al fijarlas."""
 
 import pytest
 from app.schemas.auth import LoginRequest
@@ -11,7 +11,7 @@ ROL_CAJERO = "Cajero"
 _BASE = {"full_name": "Juan", "role": ROL_CAJERO}
 
 
-# ── M2: longitud mínima de contraseña ──────────────────────────────────────
+# ── Longitud mínima de contraseña ──────────────────────────────────────────
 
 
 @pytest.mark.parametrize("password", ["1", "1234567", ""])

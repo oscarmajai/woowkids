@@ -1,4 +1,4 @@
-"""M3 y M21: límites de cantidades y costos en los schemas de inventario y
+"""Límites de cantidades y costos en los schemas de inventario y
 compras. Sin límites, `1e12` desbordaba la columna y `0.0004` se redondeaba a 0
 y rompía su CHECK: ambos respondían 500. El costo unitario acepta 6 decimales
 (numeric(14,6), migración 097). La parte con BD está en
@@ -26,13 +26,13 @@ def _linea(cantidad: str = "1", costo: str = "1") -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("cantidad", ["999999999999", "1e12", "0.0004", "1.2345"])
-def test_m3_linea_de_compra_con_cantidad_fuera_de_rango_es_invalida(cantidad: str) -> None:
+def test_linea_de_compra_con_cantidad_fuera_de_rango_es_invalida(cantidad: str) -> None:
     with pytest.raises(ValidationError):
         DetalleCompraItem.model_validate(_linea(cantidad=cantidad))
 
 
 @pytest.mark.parametrize("cantidad", ["10000000000", "0.0004"])
-def test_m3_movimiento_manual_con_cantidad_fuera_de_rango_es_invalido(cantidad: str) -> None:
+def test_movimiento_manual_con_cantidad_fuera_de_rango_es_invalido(cantidad: str) -> None:
     with pytest.raises(ValidationError):
         MovimientoManualCreate.model_validate({"tipo": "E", "cantidad": cantidad})
 
@@ -47,14 +47,14 @@ def test_m3_movimiento_manual_con_cantidad_fuera_de_rango_es_invalido(cantidad: 
         (LineaRecepcion, {"detalle_id": str(uuid4()), "cantidad": "1e12"}),
     ],
 )
-def test_m3_otras_cantidades_de_inventario_fuera_de_rango_son_invalidas(
+def test_otras_cantidades_de_inventario_fuera_de_rango_son_invalidas(
     modelo: type, datos: dict[str, Any]
 ) -> None:
     with pytest.raises(ValidationError):
         modelo.model_validate(datos)
 
 
-def test_m3_alta_de_insumo_con_stock_fuera_de_rango_es_invalida() -> None:
+def test_alta_de_insumo_con_stock_fuera_de_rango_es_invalida() -> None:
     base = {
         "sucursal_id": str(uuid4()),
         "nombre": "Harina",
@@ -66,7 +66,7 @@ def test_m3_alta_de_insumo_con_stock_fuera_de_rango_es_invalida() -> None:
             InsumoCrear.model_validate({**base, campo: "1e12"})
 
 
-def test_m3_compra_con_importe_que_no_cabe_en_el_total_es_invalida() -> None:
+def test_compra_con_importe_que_no_cabe_en_el_total_es_invalida() -> None:
     with pytest.raises(ValidationError, match="importe de la línea"):
         DetalleCompraItem.model_validate(_linea(cantidad="9999999", costo="9999999"))
     with pytest.raises(ValidationError, match="total de la compra"):
@@ -88,7 +88,7 @@ def test_m3_compra_con_importe_que_no_cabe_en_el_total_es_invalida() -> None:
         )
 
 
-def test_m3_cantidades_validas_siguen_pasando() -> None:
+def test_cantidades_validas_siguen_pasando() -> None:
     linea = DetalleCompraItem.model_validate(_linea(cantidad="9999999.999", costo="0.5"))
     assert linea.cantidad == Decimal("9999999.999")
     assert MovimientoManualCreate.model_validate({"tipo": "M", "cantidad": "0.001"}).cantidad == (
@@ -96,7 +96,7 @@ def test_m3_cantidades_validas_siguen_pasando() -> None:
     )
 
 
-def test_m21_costo_unitario_acepta_seis_decimales_y_no_mas() -> None:
+def test_costo_unitario_acepta_seis_decimales_y_no_mas() -> None:
     assert DetalleCompraItem.model_validate(_linea(costo="0.123456")).costo_unitario == Decimal(
         "0.123456"
     )

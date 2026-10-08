@@ -24,7 +24,7 @@ export function lineaExcedida(l: LineaRecepcionUI): boolean {
 
 /** Payload de `POST /compras/{id}/recibir`.
  *
- * A12: se mandan TODAS las líneas, incluidas las que quedan en 0. Antes se
+ * Se mandan TODAS las líneas, incluidas las que quedan en 0. Antes se
  * filtraban las de 0 y el backend interpretaba "línea ausente" como "recibe
  * todo lo pendiente", así que la línea que el usuario dejaba en 0 se recibía
  * completa. El backend ahora también trata la ausente como 0, pero el payload

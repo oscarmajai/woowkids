@@ -1,4 +1,4 @@
-"""Pendiente B9 B.1: últimos 4 dígitos de la tarjeta, opcionales, en el pago
+"""Últimos 4 dígitos de la tarjeta, opcionales, en el pago
 de una comanda."""
 
 from decimal import Decimal

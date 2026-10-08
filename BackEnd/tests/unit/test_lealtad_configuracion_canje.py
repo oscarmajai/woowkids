@@ -1,5 +1,5 @@
-"""A6 (pruebas E2E 2026-10-03): el cajero no podía canjear puntos desde la
-caja porque GET /lealtad/configuracion exige lealtad:gestionar_configuracion.
+"""El cajero necesita canjear puntos desde la caja, pero GET
+/lealtad/configuracion exige lealtad:gestionar_configuracion.
 
 GET /lealtad/configuracion/canje expone, en solo lectura, el valor del punto
 y el mínimo de canje de la sucursal de la sesión a quien tiene
@@ -34,7 +34,7 @@ PERMISOS_CAJA = frozenset({"lealtad:ver_saldo", "lealtad:redimir"})
 def _usuario(rol: str = ROL_CAJA, branch_id: UUID | None = SUC_PROPIA) -> TokenData:
     return TokenData(
         sub=str(uuid4()),
-        email="cajero.a6@woowkids.test",
+        email="cajero.lealtad@woowkids.test",
         role=rol,
         branch_id=branch_id,
         permissions=[],
@@ -46,7 +46,7 @@ def _usuario(rol: str = ROL_CAJA, branch_id: UUID | None = SUC_PROPIA) -> TokenD
 def _config(sucursal_id: UUID = SUC_PROPIA) -> dict[str, Any]:
     return {
         "sucursal_id": sucursal_id,
-        "porcentaje_retorno": 5.0,
+        "pesos_por_punto": 20.0,
         "dias_caducidad": 30,
         "valor_punto": 1.0,
         "activo": True,
@@ -106,15 +106,15 @@ def test_cajero_no_lee_la_de_otra_sucursal(client: TestClient, repo: AsyncMock) 
     repo.assert_not_awaited()
 
 
-def test_la_respuesta_no_expone_porcentaje_ni_auditoria(client: TestClient) -> None:
+def test_la_respuesta_no_expone_pesos_por_punto_ni_auditoria(client: TestClient) -> None:
     datos = client.get("/api/lealtad/configuracion/canje").json()
-    for campo in ("porcentaje_retorno", "dias_caducidad", "creado_por", "modificado_por"):
+    for campo in ("pesos_por_punto", "dias_caducidad", "creado_por", "modificado_por"):
         assert campo not in datos
 
 
 def test_cajero_sigue_sin_ver_ni_editar_la_configuracion_completa(client: TestClient) -> None:
     assert client.get("/api/lealtad/configuracion").status_code == 403
-    body = {"porcentaje_retorno": 99, "dias_caducidad": 1, "valor_punto": 100}
+    body = {"pesos_por_punto": 1, "dias_caducidad": 1, "valor_punto": 100}
     assert client.put("/api/lealtad/configuracion", json=body).status_code == 403
 
 

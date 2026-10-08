@@ -52,21 +52,24 @@ describe('ConsentimientoPrivacidad', () => {
     expect(wrapper.text()).toContain('El tutor leyó y acepta el aviso de privacidad')
     expect(wrapper.text()).toContain('NO desea que sus datos se usen para el programa de lealtad')
     expect(wrapper.text()).toContain('versión 3')
-    expect(wrapper.text()).not.toContain('Aceptado')
   })
 
-  it('la casilla marca la aceptación en el store', async () => {
+  it('la aceptación viene marcada por defecto y se puede desmarcar', async () => {
     const { wrapper, store } = montar()
+
+    expect(store.avisoAceptado).toBe(true)
+    expect(wrapper.text()).toContain('Aceptado')
 
     await wrapper.findAll('.q-checkbox')[0].trigger('click')
 
-    expect(store.aceptaAvisoPrivacidad).toBe(true)
-    expect(store.avisoAceptado).toBe(true)
-    expect(wrapper.text()).toContain('Aceptado')
+    expect(store.aceptaAvisoPrivacidad).toBe(false)
+    expect(store.avisoAceptado).toBe(false)
+    expect(wrapper.text()).not.toContain('Aceptado')
   })
 
   it('muestra el aviso simplificado con enlace al integral y permite aceptarlo ahí', async () => {
     const { wrapper, store } = montar()
+    store.aceptaAvisoPrivacidad = false
     const ver = wrapper.findAll('button').find((b) => b.text().includes('Ver aviso'))
     await ver!.trigger('click')
 

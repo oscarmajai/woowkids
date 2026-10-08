@@ -45,7 +45,7 @@ export const reservacionesApi = {
   /**
    * Cierra el evento (pasa a completada). El servidor responde 409 si está
    * cancelada o ya cerrada, si el evento aún no empieza o si queda saldo; las
-   * notas del cierre se agregan a las existentes (A8).
+   * notas del cierre se agregan a las existentes.
    */
   cerrar: (id: string, notas_cierre: string | null) =>
     apiClient

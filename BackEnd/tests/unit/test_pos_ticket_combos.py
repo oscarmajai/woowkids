@@ -1,6 +1,6 @@
-"""M12 / M13 / M14 / N10 / M3 / B5 sin BD: enlace de hijos de combo con su
-renglón, servicios vendibles en caja, POST /comandas sin movimiento de caja,
-datos del ticket en el detalle de la orden y el 409 de idempotencia en curso.
+"""POS sin BD: enlace de hijos de combo con su renglón, servicios vendibles
+en caja, POST /comandas sin movimiento de caja, datos del ticket en el
+detalle de la orden y el 409 de idempotencia en curso.
 
 Las pruebas contra PostgreSQL real están en tests/db/test_pos_ticket_combos_pg.py.
 """
@@ -40,7 +40,7 @@ def _hijo(producto: str, instancia: str | None) -> DetalleCreate:
     return _d(producto, es_hijo_combo=True, es_hijo_de=COMBO, id_combo_padre=instancia)
 
 
-# ── M13: indices_renglon_padre ───────────────────────────────────────────────
+# ── indices_renglon_padre ───────────────────────────────────────────────────
 
 
 def test_combo_dividido_cada_unidad_va_a_su_renglon() -> None:
@@ -114,7 +114,7 @@ def test_quitar_un_combo_arrastra_solo_sus_hijos() -> None:
     assert comanda_service.ids_con_hijos_de_combo(detalles, ["h1", "c1"]) == ["h1", "c1"]
 
 
-# ── M14: servicios en el POS ─────────────────────────────────────────────────
+# ── Servicios en el POS ─────────────────────────────────────────────────────
 
 
 async def test_un_servicio_se_cobra_en_el_pos() -> None:
@@ -144,7 +144,7 @@ async def test_un_servicio_se_cobra_en_el_pos() -> None:
     assert venta.subtotal == Decimal("120.00")
 
 
-# ── N10: POST /comandas no registra venta en caja ────────────────────────────
+# ── POST /comandas no registra venta en caja ─────────────────────────────────
 
 
 async def test_post_comandas_crea_sin_movimiento_de_caja() -> None:
@@ -166,7 +166,7 @@ async def test_post_comandas_crea_sin_movimiento_de_caja() -> None:
     assert crear.await_args.args[3] is None
 
 
-# ── M12: el detalle de la orden conserva los datos del ticket ────────────────
+# ── El detalle de la orden conserva los datos del ticket ────────────────────
 
 
 def test_detalle_de_orden_devuelve_cliente_cambio_y_sucursal() -> None:
@@ -201,7 +201,7 @@ def test_detalle_de_orden_devuelve_cliente_cambio_y_sucursal() -> None:
     assert datos["modificado"] == "2026-10-03T12:00:00+00:00"
 
 
-# ── B5: la versión esperada es opcional ──────────────────────────────────────
+# ── La versión esperada es opcional ──────────────────────────────────────────
 
 
 def test_editar_orden_acepta_version_opcional() -> None:
@@ -237,7 +237,7 @@ async def test_editar_orden_con_version_vieja_no_toca_nada() -> None:
     modificar.assert_not_called()
 
 
-# ── M3: choque de la clave de idempotencia → 409, no 500 ─────────────────────
+# ── Choque de la clave de idempotencia → 409, no 500 ─────────────────────────
 
 
 def test_idempotencia_en_curso_es_409() -> None:

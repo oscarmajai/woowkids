@@ -38,7 +38,7 @@ class EmailAlreadyExistsError(Exception):
 
 
 # Restricciones únicas del correo: la original (distingue mayúsculas) y la de
-# lower(email) de la migración 089 (M1).
+# lower(email) de la migración 089.
 _RESTRICCIONES_EMAIL = frozenset({"uq_usuarios_email", "uq_usuarios_email_lower"})
 
 
@@ -51,7 +51,7 @@ class BranchRequiredError(Exception):
 
 
 class SucursalNoEncontradaError(Exception):
-    """M3: la sucursal indicada no existe (antes: 500 por la FK)."""
+    """La sucursal indicada no existe (422 en vez de un 500 por la FK)."""
 
 
 # FK de usuarios_sucursal.sucursal_id: la sucursal asignada no existe.
@@ -116,7 +116,7 @@ def _to_response(record: UsuarioRecord) -> UserResponse:
 
 def _assert_admin_scope(current_user: TokenData, target: UsuarioRecord) -> None:
     """Valida que un Administrador (o cualquier rol con sucursal fija que
-    tenga permisos de usuarios, C1) solo opere sobre usuarios de su sucursal."""
+    tenga permisos de usuarios) solo opere sobre usuarios de su sucursal."""
     if current_user.role != ROL_SISTEMA:
         if target["sucursal_id"] != current_user.branch_id:
             raise InsufficientPermissionsError
@@ -134,9 +134,9 @@ async def list_users(
     current_user: TokenData,
     estado: EstadoUsuarios = "activos",
 ) -> list[UserResponse]:
-    """A10: `estado` decide si se listan los activos (por defecto, como antes),
+    """`estado` decide si se listan los activos (por defecto, como antes),
     los inactivos o todos; sin esto un usuario desactivado desaparecía y no
-    se podía reactivar. El alcance por sucursal (C1) no cambia."""
+    se podía reactivar. El alcance por sucursal no cambia."""
     activo = _FILTRO_ESTADO[estado]
     if current_user.branch_id is not None:
         records = await get_usuarios_by_branch(conn, current_user.branch_id, activo)
@@ -197,12 +197,12 @@ async def create_user(
             if branch_id is not None:
                 await assign_usuario_to_branch(conn, user_id, branch_id, creator_id)
     except asyncpg.UniqueViolationError as exc:
-        # Dos altas simultáneas con el mismo correo: la BD decide (M1).
+        # Dos altas simultáneas con el mismo correo: la BD decide.
         if _es_email_duplicado(exc):
             raise EmailAlreadyExistsError from exc
         raise
     except asyncpg.ForeignKeyViolationError as exc:
-        # M3: la transacción ya se revirtió (no queda el usuario a medias).
+        # La transacción ya se revirtió (no queda el usuario a medias).
         if _es_sucursal_inexistente(exc):
             raise SucursalNoEncontradaError from exc
         raise
@@ -239,7 +239,7 @@ async def update_user(
             raise InsufficientPermissionsError
     if _role_requires_branch(data.role) and data.branch_id is None:
         raise BranchRequiredError
-    # M1: data.email ya viene normalizado; se excluye al propio usuario para
+    # `data.email` ya viene normalizado; se excluye al propio usuario para
     # que una cuenta vieja con mayúsculas pueda guardarse en minúsculas.
     if await email_exists(conn, data.email, excluir_id=user_id):
         raise EmailAlreadyExistsError
@@ -273,7 +273,7 @@ async def update_user(
             if branch_changed:
                 await update_usuario_branch(conn, user_id, branch_id, editor_id)
             if data.is_active is False and target["activo"]:
-                # A11: al desactivar, sus sesiones no se pueden renovar (ni
+                # Al desactivar, sus sesiones no se pueden renovar (ni
                 # revivir si después se reactiva la cuenta).
                 await revoke_all_user_refresh_tokens(conn, user_id)
     except asyncpg.UniqueViolationError as exc:

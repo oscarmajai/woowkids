@@ -1,6 +1,6 @@
 """
 app/services/horarios_service.py
-Reglas de alcance de los horarios de trabajo (tabla turnos), M19.
+Reglas de alcance de los horarios de trabajo (tabla turnos).
 
 - Horario global (``sucursal_id`` NULL): lo ven todas las sucursales y solo
   el AdministradorSistema lo crea, edita o desactiva (así quedaron los que ya

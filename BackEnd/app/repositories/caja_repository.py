@@ -47,7 +47,7 @@ async def get_caja_por_codigo(
 async def get_caja_por_id(
     conn: asyncpg.Connection, sucursal_id: str, caja_id: str
 ) -> dict[str, Any] | None:
-    """Caja activa por id, solo si pertenece a la sucursal indicada (M9: una
+    """Caja activa por id, solo si pertenece a la sucursal indicada (una
     caja desactivada ya no admite turnos nuevos)."""
     try:
         caja_uuid = uuid.UUID(caja_id)
@@ -128,7 +128,7 @@ async def listar_cajas_por_sucursal(
 async def listar_turnos(
     conn: asyncpg.Connection, sucursal_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """M19: con sucursal, los horarios activos de esa sucursal más los globales
+    """Con sucursal, los horarios activos de esa sucursal más los globales
     (sucursal_id NULL); sin sucursal (AdministradorSistema sin selector), todos."""
     rows = await conn.fetch(
         """
@@ -146,7 +146,7 @@ async def listar_turnos(
 async def turno_disponible_en_sucursal(
     conn: asyncpg.Connection, turno_id: str, sucursal_id: str
 ) -> bool:
-    """M19: el horario existe, está activo y es global o de esa sucursal."""
+    """El horario existe, está activo y es global o de esa sucursal."""
     try:
         tid = uuid.UUID(str(turno_id))
     except ValueError:
@@ -203,7 +203,7 @@ async def listar_cajas_admin(
     conn: asyncpg.Connection, sucursal_id: str | None
 ) -> list[dict[str, Any]]:
     """Cajas de la sucursal; con None (AdministradorSistema en "Todas las
-    sucursales", N14), las de todas."""
+    sucursales"), las de todas."""
     rows = await conn.fetch(
         """
         SELECT
@@ -328,7 +328,7 @@ async def actualizar_caja_admin(
 
 
 async def bloquear_caja(conn: asyncpg.Connection, caja_id: str) -> bool:
-    """M9: bloquea la fila de la caja hasta el fin de la transacción en curso
+    """Bloquea la fila de la caja hasta el fin de la transacción en curso
     (el llamador DEBE estar en `conn.transaction()`). FOR UPDATE choca con el
     FOR KEY SHARE que toma la llave foránea al insertar una apertura, así que
     una apertura en curso termina antes de revisar si la caja tiene turno.
@@ -341,7 +341,7 @@ async def bloquear_caja(conn: asyncpg.Connection, caja_id: str) -> bool:
 
 
 async def caja_tiene_turno_activo(conn: asyncpg.Connection, caja_id: str) -> bool:
-    """M9: True si la caja tiene una apertura ABIERTA o EN_CORTE."""
+    """True si la caja tiene una apertura ABIERTA o EN_CORTE."""
     return bool(
         await conn.fetchval(
             """
@@ -485,7 +485,7 @@ async def get_dueno_y_sucursal_apertura(
     conn: asyncpg.Connection, apertura_id: str
 ) -> dict[str, Any] | None:
     """Cajero dueño y sucursal de una apertura, sin bloqueo: solo para decidir
-    quién puede operarla antes de validar credenciales (A15/A16)."""
+    quién puede operarla antes de validar credenciales."""
     apertura_uuid = _uuid_o_none(apertura_id)
     if apertura_uuid is None:
         return None
@@ -507,11 +507,11 @@ async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[
     `conn.transaction()`). Serializa las operaciones que leen, validan y
     escriben el efectivo o el estado de un mismo turno (retiros, ingresos,
     conteo, revisión, cierre): la segunda espera a que la primera confirme y
-    entonces lee los datos ya actualizados (C4).
+    entonces lee los datos ya actualizados.
 
     FOR NO KEY UPDATE y no FOR UPDATE a propósito: no choca con el FOR KEY SHARE
     que toma la llave foránea de movimientos_caja al insertar (un retiro o un
-    ingreso insertan su movimiento con la apertura ya bloqueada). N1: sí choca
+    ingreso insertan su movimiento con la apertura ya bloqueada). Sí choca
     con el FOR SHARE de bloquear_apertura_para_cobro, así que un cobro en curso
     termina antes de que empiece el conteo o el cierre, y un cobro que llega
     durante una transición espera y después ve el estado nuevo. Orden de
@@ -526,7 +526,7 @@ async def bloquear_apertura(conn: asyncpg.Connection, apertura_id: str) -> dict[
 async def bloquear_apertura_para_cobro(
     conn: asyncpg.Connection, apertura_id: str
 ) -> dict[str, Any] | None:
-    """N1: bloqueo compartido (FOR SHARE) de la apertura para la transacción
+    """Bloqueo compartido (FOR SHARE) de la apertura para la transacción
     de un cobro (el llamador DEBE estar en `conn.transaction()`). Dos cobros
     del mismo turno no se esperan entre sí, pero un cobro y una transición del
     turno (iniciar conteo, cierre, retiros: FOR NO KEY UPDATE en
@@ -905,7 +905,7 @@ async def sumar_total_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id
 
 
 async def contar_ventas_apertura(conn: asyncpg.Connection, apertura_caja_id: str) -> int:
-    """Número de tickets/órdenes cobrados en el turno (M6), no de pagos: un
+    """Número de tickets/órdenes cobrados en el turno, no de pagos: un
     pago mixto (efectivo + tarjeta) registra un movimiento por pago con la
     misma referencia (la comanda en el POS, el registro en estancias). Los
     pagos de reservación ('R') referencian el pago, así que se agrupan por su
@@ -931,7 +931,7 @@ async def calcular_efectivo_disponible(
     sin depender del conteo de cierre). Misma fórmula que _calcular_balance usa
     para "efectivo esperado" al cerrar, evaluada en vivo -- fondo inicial +
     ventas en efectivo + ingresos - retiros - cambio entregado - devoluciones en
-    efectivo de comandas canceladas (A4). Único origen de
+    efectivo de comandas canceladas. Único origen de
     verdad, reusado por crear_retiro (bloquea si el retiro la deja negativa) y
     por la advertencia de cambio insuficiente en pagos/reservaciones/estancias
     (no bloquea, solo informa)."""
@@ -948,7 +948,7 @@ async def calcular_efectivo_disponible(
 async def sumar_devoluciones_efectivo_apertura(
     conn: asyncpg.Connection, apertura_caja_id: str
 ) -> Decimal:
-    """A4: efectivo devuelto a clientes desde el cajón de este turno al
+    """Efectivo devuelto a clientes desde el cajón de este turno al
     cancelar comandas cobradas (devoluciones_comanda.es_efectivo). Resta del
     efectivo esperado igual que un retiro."""
     val = await conn.fetchval(
@@ -965,7 +965,7 @@ async def sumar_devoluciones_efectivo_apertura(
 async def sumar_devoluciones_por_metodo_apertura(
     conn: asyncpg.Connection, apertura_caja_id: str
 ) -> list[dict[str, Any]]:
-    """A4: lo devuelto a clientes desde este turno (cancelaciones de comandas
+    """Lo devuelto a clientes desde este turno (cancelaciones de comandas
     cobradas y devoluciones de entregadas), agrupado por método. Cada monto
     baja el esperado de SU método en el arqueo: el efectivo, el del cajón; la
     tarjeta, lo que el sistema espera ver en la terminal. Un renglón con
@@ -1179,7 +1179,7 @@ async def resumen_historial_cierres(
     fecha_hasta: datetime | None = None,
 ) -> dict[str, Any]:
     """KPIs del periodo COMPLETO que cumple los filtros (no solo la página
-    que pagina `listar_historial_cierres`). B7 pendiente #2."""
+    que pagina `listar_historial_cierres`)."""
     query = """
         SELECT
             COUNT(*)                                                    AS total_arqueos,

@@ -169,7 +169,7 @@ const metodosPagoDisponibles = ref<MetodosPago[]>([])
 const cotizacion = ref<CotizacionCheckoutResponse | null>(null)
 const mostrarModalPagoExtra = ref(false)
 
-// UX (ola 4): el cargo extra se cobra ANTES de dar la salida. El botón lo dice
+// El cargo extra se cobra ANTES de dar la salida. El botón lo dice
 // con el monto de la cotización vigente, y la cotización se refresca cada
 // minuto mientras el cajero está en la pantalla (el excedente crece con el
 // tiempo). El backend registra salida y cargo juntos al recibir el pago.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { avisosDeNotas, notaVisible } from '@/utils/notasNino'
 
-describe('notas / alergias del niño (M26)', () => {
+describe('notas / alergias del niño', () => {
   it('una nota en blanco no cuenta', () => {
     expect(notaVisible(null)).toBeNull()
     expect(notaVisible('   ')).toBeNull()

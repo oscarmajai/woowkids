@@ -1,4 +1,4 @@
-"""A12 / M23: cálculo y validación de cuánto recibir de cada línea de una compra.
+"""Cálculo y validación de cuánto recibir de cada línea de una compra.
 La prueba contra BD real está en tests/db/test_recepcion_compras.py."""
 
 from decimal import Decimal

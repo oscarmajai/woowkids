@@ -1,6 +1,6 @@
 export interface ConfiguracionLealtad {
   sucursal_id: string
-  porcentaje_retorno: number
+  pesos_por_punto: number
   dias_caducidad: number
   valor_punto: number
   activo: boolean
@@ -26,7 +26,7 @@ export interface ConfiguracionCanje {
 }
 
 export interface ConfiguracionLealtadInput {
-  porcentaje_retorno: number
+  pesos_por_punto: number
   dias_caducidad: number
   valor_punto: number
   activo: boolean

@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { UserListItem } from '@/types/user'
 
 /**
- * UX administración: el formulario no tiene selector de sucursal para el rol
- * Administrador (se asigna desde la sucursal) y nada lo indicaba. Tampoco
- * debe ofrecer "Eliminar usuario" en la propia cuenta.
+ * El formulario no tiene selector de sucursal para el rol Administrador (se
+ * asigna desde la sucursal) y debe indicarlo. Tampoco debe ofrecer "Eliminar
+ * usuario" en la propia cuenta.
  */
 
 const usuario = (over: Partial<UserListItem>): UserListItem => ({

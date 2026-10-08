@@ -61,7 +61,7 @@
                 <span class="charge__amount">{{ fmt(precioHorasNum) }}</span>
               </div>
 
-              <!-- `precio_personas_extra` es el cargo de pulseras (B19), no
+              <!-- `precio_personas_extra` es el cargo de pulseras, no
                    un cobro por personas adicionales. -->
               <div v-if="precioPulserasNum > 0 && pulseras" class="charge">
                 <span class="charge__tag">Pulseras</span>
@@ -105,7 +105,7 @@
             <section class="notes-card">
               <!-- Las notas que ya tiene la reservación (p. ej. el motivo de una
                    cancelación) se muestran aparte y no se tocan: las del cierre
-                   se agregan al final en el servidor (A8). -->
+                   se agregan al final en el servidor. -->
               <div v-if="reservacion.notas" class="notes-card__previas">
                 <span class="field-label">Notas de la reservación</span>
                 <p class="notes-card__texto">{{ reservacion.notas }}</p>
@@ -348,7 +348,7 @@ const tituloEvento = computed(() => {
 
 const yaCerrado = computed(() => reservacion.value?.estado === 'completada')
 const cancelada = computed(() => reservacion.value?.estado === 'cancelada')
-// Ni se cobra ni se cierra una reservación cerrada o cancelada (A8).
+// Ni se cobra ni se cierra una reservación cerrada o cancelada.
 const bloqueada = computed(() => yaCerrado.value || cancelada.value)
 
 const estadoBadge = computed((): { tone: 'ok' | 'warn' | 'bad'; label: string } => {
@@ -375,7 +375,7 @@ const paquete = computed(() =>
 const packagePriceNum = computed(() => parseFloat(reservacion.value?.precio_base ?? '0'))
 const precioHorasNum = computed(() => parseFloat(reservacion.value?.precio_horas ?? '0'))
 // La columna se llama precio_personas_extra por compatibilidad, pero guarda el
-// cargo de pulseras: invitados × horas × tarifa por hora (B19).
+// cargo de pulseras: invitados × horas × tarifa por hora.
 const precioPulserasNum = computed(() =>
   parseFloat(reservacion.value?.precio_personas_extra ?? '0'),
 )
@@ -489,8 +489,8 @@ const onPagoExitoso = async (
 
   procesandoPago.value = true
   try {
-    // `completar` registra todos los pagos en una sola transacción (Bug QA #11):
-    // ya no hay fallo parcial que deje pagos sueltos.
+    // `completar` registra todos los pagos en una sola transacción: no hay
+    // fallo parcial que deje pagos sueltos.
     const resultado = await pagosReservacionApi.completar({
       reservacion_id: reservacion.value.id,
       pagos: pagosAplicados.map((pago) => ({
@@ -535,7 +535,7 @@ const finalizarEvento = async () => {
   finalizando.value = true
   try {
     // Endpoint de cierre: valida el estado en el servidor y agrega las notas
-    // del cierre a las existentes en vez de reemplazarlas (A8).
+    // del cierre a las existentes en vez de reemplazarlas.
     reservacion.value = await reservacionesApi.cerrar(
       reservacion.value.id,
       closingNotes.value.trim() || null,

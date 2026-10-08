@@ -85,7 +85,7 @@ class BranchResponse(BaseModel):
 
 
 class HorarioSucursalResponse(BaseModel):
-    """Datos operativos de una sucursal (B18): los que necesita quien gestiona
+    """Datos operativos de una sucursal: los que necesita quien gestiona
     reservaciones para pintar el calendario y avisar de un evento fuera de
     horario. No incluye datos administrativos (clave, administrador, etc.)."""
 

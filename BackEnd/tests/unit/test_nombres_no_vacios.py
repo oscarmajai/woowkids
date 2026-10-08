@@ -1,7 +1,7 @@
-"""N-INV1 (prueba E2E v1.2.0): un nombre vacío al editar se guardaba y la
-respuesta, que exige min_length=1, fallaba con 500; el listado de insumos de
-la sucursal dejaba de cargar. Ningún schema de edición acepta ya un nombre
-vacío o solo con espacios, y los válidos llegan sin espacios en los extremos.
+"""Un nombre vacío al editar se guardaba y la respuesta, que exige
+min_length=1, fallaba con 500; el listado de insumos de la sucursal dejaba
+de cargar. Ningún schema de edición acepta ya un nombre vacío o solo con
+espacios, y los válidos llegan sin espacios en los extremos.
 """
 
 from __future__ import annotations

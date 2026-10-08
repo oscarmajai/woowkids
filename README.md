@@ -46,7 +46,8 @@ Cada release publica solo `ghcr.io/oscarmajai/woowkids` (todo en uno), con su ta
 
 - Frontend: [`FrontEnd/SETUP.md`](FrontEnd/SETUP.md).
 - Backend: [`BackEnd/SETUP.md`](BackEnd/SETUP.md).
-- Reglas para trabajar en el repo (Git Flow, commits y calidad): [`CLAUDE.md`](CLAUDE.md).
+- Reglas para trabajar en el repo (Git Flow, commits y calidad): [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Arquitectura (capas, autenticación, base de datos, módulos): [`SAD.md`](SAD.md).
 - Los hooks de Git se instalan con `npm install` dentro de `FrontEnd/`:
   - **commit-msg:** Conventional Commits para todo el repo.
   - **pre-commit:** lint y tipos de la parte que cambió.

@@ -63,8 +63,8 @@ async def _resolver_tipo(
 ) -> str:
     """Si este pago deja el saldo de la reservación en 0 (o menos, por un
     sobrepago), siempre se marca como 'liquidacion' sin importar lo que se
-    haya pedido -- regla de negocio explícita del pendiente "Distinguir
-    anticipo de liquidación". En cualquier otro caso se respeta `tipo_solicitado`
+    haya pedido -- regla de negocio explícita para distinguir
+    el anticipo de la liquidación. En cualquier otro caso se respeta `tipo_solicitado`
     (o 'pago' si no se mandó ninguno)."""
     reservacion = await reservaciones_repository.obtener(conn, reservacion_id)
     if reservacion is not None:
@@ -116,7 +116,7 @@ async def _otorgar_puntos(
 
 
 async def _saldo_bloqueado(conn: asyncpg.Connection, reservacion_id: UUID) -> Decimal:
-    """Bloquea la reservación (C3: los cobros simultáneos se aplican en orden)
+    """Bloquea la reservación (los cobros simultáneos se aplican en orden)
     y devuelve su saldo pendiente real."""
     bloqueada = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
     if bloqueada is None:
@@ -134,19 +134,19 @@ async def crear(
 ) -> PagosReservacionOut:
     """Registra un pago de reservación con su movimiento de caja y sus puntos.
 
-    N-A1 (prueba E2E de v1.2.0): el pago no puede exceder el saldo pendiente
-    (409 PAGO_EXCEDE_SALDO). Antes se aceptaba cualquier monto y se otorgaban
+    El pago no puede exceder el saldo pendiente
+    (409 PAGO_EXCEDE_SALDO); si no, se aceptaría cualquier monto y se otorgarían
     puntos sobre él. `completar()` ya valida el saldo de todo el cobro (con el
     cambio) y otorga los puntos sobre lo neto, así que con `desde_completar`
     este paso no repite ninguna de las dos cosas."""
     # Transacción propia (o savepoint si ya hay una, p. ej. desde completar()):
     # pago, movimiento de caja, puntos y monto_pagado quedan juntos o no quedan.
     async with conn.transaction():
-        # N1: primero la apertura (orden de bloqueo de caja) y el turno debe
+        # Primero la apertura (orden de bloqueo de caja) y el turno debe
         # seguir ABIERTA hasta que el cobro confirme.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         # Bloquea la reservación: dos cobros simultáneos se aplican en orden y el
-        # segundo recalcula monto_pagado viendo el primero (C3).
+        # segundo recalcula monto_pagado viendo el primero.
         saldo = await _saldo_bloqueado(conn, body.reservacion_id)
         if not desde_completar and body.monto > saldo:
             raise _excede_saldo(body.monto, saldo)
@@ -207,9 +207,9 @@ async def completar(
     pagos_creados: list[PagosReservacionOut] = []
     neto = sum((p.monto for p in body.pagos), Decimal(0)) - cambio
     async with conn.transaction():
-        # N1: también aquí, por si no hay pagos y solo se registra el cambio.
+        # También aquí, por si no hay pagos y solo se registra el cambio.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
-        # N-A1: lo que se aplica (pagos menos el cambio devuelto) no puede
+        # Lo que se aplica (pagos menos el cambio devuelto) no puede
         # exceder el saldo. El efectivo sí puede pasarse, por el cambio.
         saldo = await _saldo_bloqueado(conn, body.reservacion_id)
         if neto > saldo:
@@ -256,9 +256,9 @@ _PAGO_REGISTRADO = (
 async def actualizar(
     conn: asyncpg.Connection, pago_id: UUID, body: PagosReservacionUpdate
 ) -> PagosReservacionOut:
-    """Solo se corrigen las notas. N-A1 (prueba E2E de v1.2.0): cambiar el
-    monto o el método recalculaba `monto_pagado`, pero dejaba el movimiento de
-    caja y los puntos como estaban, y cualquier cajero podía reducir el pago de
+    """Solo se corrigen las notas. Cambiar el
+    monto o el método recalcularía `monto_pagado`, pero dejaría el movimiento de
+    caja y los puntos como estaban, y cualquier cajero podría reducir el pago de
     un cliente sin autorización."""
     updates = body.model_dump(exclude_unset=True)
     if set(updates) - {"notas"}:
@@ -275,8 +275,8 @@ async def actualizar(
 
 
 async def eliminar(conn: asyncpg.Connection, pago_id: UUID) -> None:
-    """N-A1: borrar un pago dejaba en el turno el movimiento de caja y los
-    puntos otorgados. Un pago registrado no se borra."""
+    """Un pago registrado no se borra: borrarlo dejaría en el turno el
+    movimiento de caja y los puntos otorgados."""
     await obtener(conn, pago_id)
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,

@@ -18,9 +18,10 @@ vi.mock('quasar', async (importOriginal) => {
 })
 
 /**
- * A6 (E2E 2026-10-03): el cajero no podía canjear puntos porque la
- * configuración de lealtad le respondía 403; el modal mostraba "$ c/u",
- * "Solo puede aplicar hasta $0.00" y tomaba el mínimo de canje como 0.
+ * Canje de puntos: el modal lee la configuración de canje de la sucursal (la
+ * que el cajero puede leer). Si no la obtiene, no supone valores ("$ c/u",
+ * "Solo puede aplicar hasta $0.00", mínimo 0): deshabilita el canje y dice
+ * por qué.
  */
 const METODOS: MetodosPago[] = [
   {
@@ -95,7 +96,7 @@ const aplicarPuntos = async (wrapper: Wrapper, monto: number) => {
   await wrapper.vm.$nextTick()
 }
 
-describe('PaymentModal · canje de puntos (A6)', () => {
+describe('PaymentModal · canje de puntos', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     notify.mockReset()

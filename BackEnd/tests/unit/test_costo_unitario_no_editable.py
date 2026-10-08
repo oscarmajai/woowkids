@@ -1,6 +1,6 @@
-"""B9: el costo unitario del insumo es el promedio PEPS de sus capas y se
+"""El costo unitario del insumo es el promedio PEPS de sus capas y se
 recalcula en cada movimiento; un valor editado a mano se perdía en silencio en
-el siguiente. Ahora la edición lo rechaza con 422 COSTO_NO_EDITABLE."""
+el siguiente, así que la edición lo rechaza con 422 COSTO_NO_EDITABLE."""
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -44,7 +44,7 @@ def _insumo_out() -> InsumoOut:
 
 
 @pytest.mark.parametrize("costo", ["0.50", None])
-async def test_b9_editar_el_costo_unitario_a_mano_responde_422(
+async def test_editar_el_costo_unitario_a_mano_responde_422(
     monkeypatch: pytest.MonkeyPatch, costo: str | None
 ) -> None:
     actualizar = AsyncMock()
@@ -64,7 +64,7 @@ async def test_b9_editar_el_costo_unitario_a_mano_responde_422(
     actualizar.assert_not_called()
 
 
-async def test_b9_editar_sin_costo_unitario_sigue_funcionando(
+async def test_editar_sin_costo_unitario_sigue_funcionando(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     insumo = _insumo_out()

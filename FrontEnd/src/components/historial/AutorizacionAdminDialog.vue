@@ -100,7 +100,7 @@ async function confirmar() {
   validando.value = true
   error.value = null
   try {
-    // A16: el token solo sirve para cancelar/devolver la orden, no para cerrar caja.
+    // El token solo sirve para cancelar/devolver la orden, no para cerrar caja.
     const { ok, tokenPin } = await turnoCajaService.validarPinAdmin(
       props.turnoId,
       email.value.trim(),

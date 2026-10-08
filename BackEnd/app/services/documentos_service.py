@@ -15,7 +15,7 @@ from app.repositories.registros import EstadoRegistro, get_registro_alcance
 from app.schemas.auth import TokenData
 from app.services.permission_service import has_permission
 
-# C6 — permisos de estancias que justifican ver la INE y las fotos de llegada
+# Permisos de estancias que justifican ver la INE y las fotos de llegada
 # de un registro: quien ve a los niños en estancia (Control de Acceso) y quien
 # les da salida (Checkout) debe poder cotejar al tutor que los recoge. Basta
 # con uno de los dos. Registrar entrada o cobrar no da acceso por sí solo.
@@ -29,7 +29,7 @@ def _no_encontrado() -> NoEncontrado:
 async def autorizar_archivos_registro(
     conn: asyncpg.Connection, current_user: TokenData, registro_id: UUID
 ) -> None:
-    """C6 — autoriza por recurso el acceso a los archivos (INE, fotos de
+    """Autoriza por recurso el acceso a los archivos (INE, fotos de
     llegada) de un registro de estancia. Cualquier rechazo es 404, igual que
     si el registro no existiera, para no revelar su existencia:
 

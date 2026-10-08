@@ -18,7 +18,7 @@ class PulseraResponse(BaseModel):
 
 
 class PulseraEstadoOut(BaseModel):
-    """Estado de una pulsera buscada por RFID en el check-in (B14).
+    """Estado de una pulsera buscada por RFID en el check-in.
 
     `estado` resume si se puede asignar: `disponible`, `usada` (ya tiene un
     niño asignado; las pulseras son de un solo uso) o `inactiva`.

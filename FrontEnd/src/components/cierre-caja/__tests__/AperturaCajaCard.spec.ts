@@ -8,11 +8,10 @@ import BaseDialog from '@/components/ui/BaseDialog.vue'
 import { turnoCajaService } from '@/services/turnoCajaService'
 
 /**
- * M8: se abría turno con un horario que no corresponde a la hora actual y el
- * selector preseleccionaba el primero de la lista. Ahora se preselecciona el
- * vigente (lo calcula el backend con la hora local de la sucursal) y, si se
- * elige otro, se pide confirmar (no se bloquea: es decisión de negocio).
- * UX: sin cajas el aviso ya no promete crear una "automáticamente".
+ * Horario de trabajo al abrir turno: se preselecciona el vigente (lo calcula
+ * el backend con la hora local de la sucursal), no el primero de la lista, y,
+ * si se elige otro, se pide confirmar (no se bloquea: es decisión de negocio).
+ * Sin cajas, el aviso no promete crear una "automáticamente".
  */
 
 const notify = vi.fn()
@@ -76,7 +75,7 @@ beforeEach(() => {
   servicio.obtenerCajas.mockResolvedValue(CAJAS)
 })
 
-describe('AperturaCajaCard — horario de trabajo (M8)', () => {
+describe('AperturaCajaCard — horario de trabajo', () => {
   it('preselecciona el horario vigente, no el primero de la lista', async () => {
     const wrapper = await montar()
 
@@ -121,7 +120,7 @@ describe('AperturaCajaCard — horario de trabajo (M8)', () => {
   })
 })
 
-describe('AperturaCajaCard — sin cajas registradas (UX)', () => {
+describe('AperturaCajaCard — sin cajas registradas', () => {
   it('pide al administrador registrar una y no deja abrir', async () => {
     servicio.obtenerCajas.mockResolvedValue([])
 

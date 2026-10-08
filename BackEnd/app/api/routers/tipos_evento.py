@@ -44,7 +44,7 @@ async def crear_tipo_evento(
     # sucursal_id siempre se deriva del usuario autenticado, nunca se confía
     # en lo que mande el cliente -- ya no existe el concepto de tipo de
     # evento "global" (sucursal_id NULL).
-    # C1: roles con sucursal fija → la de la sesión (403 si mandan otra);
+    # Roles con sucursal fija → la de la sesión (403 si mandan otra);
     # AdministradorSistema → la del body o la del selector (422 sin ninguna).
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     return await svc.crear(conn, body)

@@ -263,8 +263,8 @@
           />
         </label>
         <p class="form-grid__field form-grid__field--full form-grid__note">
-          Al reservar solo se ofrecerán los paquetes cuyo rango cubra el número de niños que pida
-          el cliente.
+          Al reservar solo se ofrecerán los paquetes cuyo rango cubra el número de niños que pida el
+          cliente.
         </p>
         <label class="form-grid__field form-grid__field--full">
           <span class="field-label">Descripción</span>
@@ -677,7 +677,7 @@ const guardar = async () => {
 }
 
 /**
- * Asocia al paquete los tipos de evento elegidos y quita los demás (M17). El
+ * Asocia al paquete los tipos de evento elegidos y quita los demás. El
  * paquete ya quedó guardado: si esto falla se avisa sin perder lo demás. Al
  * final se recarga el listado para que muestre los tipos actualizados.
  */

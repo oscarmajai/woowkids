@@ -1,4 +1,4 @@
-"""M3 — red de seguridad: lo que PostgreSQL rechaza responde 409/422, no 500.
+"""Red de seguridad: lo que PostgreSQL rechaza responde 409/422, no 500.
 
 Cada test provoca un tipo de error de BD a través de la app real (routers,
 middleware y manejadores de ``app.main``) contra PostgreSQL real, y comprueba:
@@ -53,22 +53,22 @@ _RUTA_SONDA = "/api/_prueba_m3/formato"
 
 async def sembrar(conn: asyncpg.Connection) -> None:
     await conn.execute(
-        "INSERT INTO public.sucursales (id, nombre, clave) VALUES ($1, 'M3 Sucursal', 'M3S')",
+        "INSERT INTO public.sucursales (id, nombre, clave) VALUES ($1, 'Errores Sucursal', 'ERRS')",
         UUID(SUCURSAL),
     )
     await conn.execute(
         "INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, rol) "
-        "VALUES ($1, 'm3.sistema@woowkids.dev', 'x', 'M3 Sistema', 1)",
+        "VALUES ($1, 'errores.sistema@woowkids.dev', 'x', 'Errores Sistema', 1)",
         UUID(SISTEMA),
     )
     await conn.execute(
         "INSERT INTO public.paquetes (id, sucursal_id, nombre, precio_base, min_invitados, "
-        "max_invitados) VALUES ($1, $2, 'M3 Paquete', 1000, 5, 20)",
+        "max_invitados) VALUES ($1, $2, 'Errores Paquete', 1000, 5, 20)",
         UUID(PAQUETE),
         UUID(SUCURSAL),
     )
     await conn.execute(
-        "INSERT INTO public.tipos_evento (id, sucursal_id, nombre) VALUES ($1, $2, 'M3 Tipo')",
+        "INSERT INTO public.tipos_evento (id, sucursal_id, nombre) VALUES ($1, $2, 'Errores Tipo')",
         UUID(TIPO_EVENTO),
         UUID(SUCURSAL),
     )
@@ -81,7 +81,7 @@ def _headers() -> dict[str, str]:
     token = create_access_token(
         payload={
             "sub": SISTEMA,
-            "email": "m3.sistema@woowkids.dev",
+            "email": "errores.sistema@woowkids.dev",
             "role": "AdministradorSistema",
             "branch_id": None,
             "permissions": get_permissions("AdministradorSistema"),
@@ -184,7 +184,7 @@ async def test_check_violation_responde_422(entorno: Any, caplog: Any) -> None:
 
 async def test_numeric_fuera_de_rango_responde_422(entorno: Any, caplog: Any) -> None:
     # extras.precio es numeric(10,2): 1e12 no cabe.
-    body = {"nombre": "M3 Extra", "precio": "1000000000000", "sucursal_id": SUCURSAL}
+    body = {"nombre": "Errores Extra", "precio": "1000000000000", "sucursal_id": SUCURSAL}
     with caplog.at_level(logging.WARNING, logger="mercury.errores_bd"):
         resp = await entorno.post("/api/extras", json=body, headers=_headers())
 
@@ -197,7 +197,7 @@ async def test_entero_que_no_cabe_en_int4_responde_422(entorno: Any) -> None:
     # mandarlo (DataError del cliente, no del servidor).
     body = {
         "sucursal_id": SUCURSAL,
-        "nombre": "M3 Paquete enorme",
+        "nombre": "Errores Paquete enorme",
         "precio_base": "100",
         "min_invitados": 3_000_000_000,
         "max_invitados": 3_000_000_001,

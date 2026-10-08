@@ -1,16 +1,14 @@
-# Postgres local para desarrollo y pruebas de migraciones.
+# PostgreSQL y MinIO locales para desarrollo y pruebas de migraciones.
 #
-# Por qué existe: la BD de dev compartida (100.125.39.1, vía Tailscale) no
-# siempre está disponible y es un recurso que otras personas usan. Probar
-# migraciones ahí es arriesgado e imposible de revertir. Este contenedor es
-# desechable: se tira y se vuelve a crear con `down -v` sin afectar a nadie.
+# Probar migraciones sobre una BD con datos reales es arriesgado e imposible de
+# revertir. Este stack es desechable: se tira y se vuelve a crear con `down -v`.
 #
 # Uso:
 #   docker compose -f docker-compose.dev.yml up -d
 #   ./scripts/reset_db_local.sh          # aplica sql/migrations/* en orden
 #   docker compose -f docker-compose.dev.yml down -v   # borra todo
 #
-# Puerto 5433 en el host: el 5432 ya está ocupado por otro Postgres local.
+# Puerto 5433 en el host para no chocar con un PostgreSQL instalado en el equipo.
 
 services:
   db:

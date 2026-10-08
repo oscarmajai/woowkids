@@ -1,4 +1,4 @@
-"""Validación de PIN de caja (A5, A16 — pruebas E2E 2026-10-03).
+"""Validación de PIN de caja.
 
 Reglas comunes a todos los endpoints que piden el PIN (o la contraseña de
 operación) de un cajero o de un administrador:
@@ -6,10 +6,10 @@ operación) de un cajero o de un administrador:
 - Un PIN mal escrito responde **403** ``PIN_INVALIDO`` (o
   ``CREDENCIALES_INVALIDAS`` en la revisión con contraseña), nunca 401: el 401
   lo reserva la API para "token de sesión vencido", y el front lo usaba para
-  refrescar la sesión, reenviar el PIN equivocado y cerrar la sesión (A5).
+  refrescar la sesión, reenviar el PIN equivocado y cerrar la sesión.
 - Si el usuario tiene PIN configurado solo se acepta el PIN; la contraseña
   solo vale mientras no tenga PIN (decisión vigente del usuario). Vale
-  también para la revisión del administrador en el cierre (A16).
+  también para la revisión del administrador en el cierre.
 - Límite de intentos: ``MAX_FALLOS`` fallos en ``VENTANA_MINUTOS`` por
   usuario dueño del PIN + sucursal → **429** ``PIN_BLOQUEADO``. Se guarda en
   ``intentos_pin_fallidos`` (no en memoria) para que valga con varios
@@ -17,7 +17,7 @@ operación) de un cajero o de un administrador:
 - El autorizador (quien aprueba un cierre) se busca solo entre los usuarios
   de la sucursal del turno —o AdministradorSistema, que no tiene sucursal— y
   debe tener el permiso de autorizar en su rol.
-- Segregación de funciones (A16): nadie autoriza el cierre de su propio
+- Segregación de funciones: nadie autoriza el cierre de su propio
   turno; si el dueño del turno es un administrador, lo autoriza otro
   administrador de la sucursal o un AdministradorSistema.
 
@@ -46,7 +46,7 @@ VENTANA_MINUTOS = 15
 PERMISO_REVISION_ARQUEO = "turnos_caja:revision_admin"
 PERMISO_AUTORIZAR_CIERRE = "turnos_caja:confirmar"
 
-# A16: propósito del token de un solo uso que se emite al validar un PIN. Un
+# Propósito del token de un solo uso que se emite al validar un PIN. Un
 # token solo sirve para la operación para la que se emitió.
 PROPOSITO_CERRAR = "cerrar"  # revisión y confirmación del cierre de caja
 PROPOSITO_CANCELAR = "cancelar"  # cancelaciones y devoluciones de órdenes cobradas
@@ -95,7 +95,7 @@ class AutorizadorNoValidoError(HTTPException):
 
 
 class AutorizadorEsDuenoTurnoError(HTTPException):
-    """A16: el autorizador del cierre es el mismo dueño del turno."""
+    """El autorizador del cierre es el mismo dueño del turno."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -127,7 +127,7 @@ def _coincide(plano: str, hash_guardado: str | None) -> bool:
 
 def credencial_valida(secreto: str, pin_hash: str | None, password_hash: str | None) -> bool:
     """Con PIN configurado solo vale el PIN; sin PIN, la contraseña hace las
-    veces de PIN (C1)."""
+    veces de PIN."""
     if pin_hash:
         return _coincide(secreto, pin_hash)
     return _coincide(secreto, password_hash)
@@ -189,7 +189,7 @@ async def buscar_autorizador(
 
     Con ``dueno_turno_id`` (autorizar un cierre), el autorizador no puede ser
     el dueño del turno: 403 ``AUTORIZADOR_ES_DUENO_TURNO``, también sin llegar
-    a verificar el PIN (A16)."""
+    a verificar el PIN."""
     row = await user_repository.get_autorizador_por_email(conn, email, sucursal_id, permiso)
     if not row:
         raise AutorizadorNoValidoError()

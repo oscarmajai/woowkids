@@ -3,7 +3,7 @@
 -- Fase 4 de inventario: orden de compra a proveedor (entrada formal de stock).
 -- unidad_medida_id en detalle_compras es la unidad en la que el proveedor
 -- facturó esa línea; la conversión a insumos.unidad_base_id ocurre solo al
--- recibir la compra (ver INVENTARIO_DISENO.md §3.2.1).
+-- recibir la compra.
 -- =============================================================================
 
 CREATE TABLE public.compras (

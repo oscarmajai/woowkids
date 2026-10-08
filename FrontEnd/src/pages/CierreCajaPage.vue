@@ -299,7 +299,7 @@ const subtitulo = computed(() =>
     .join(' · '),
 )
 
-// M10: el hub solo ofrece las operaciones que el rol puede hacer (el
+// El hub solo ofrece las operaciones que el rol puede hacer (el
 // Administrador abre y cierra su turno, pero no tiene ingreso ni retiro).
 const puedeIngresarEfectivo = computed(() =>
   authStore.hasPermission('turnos_caja:ingreso_efectivo'),
@@ -309,11 +309,11 @@ const accionesHub = computed(
   () => 1 + (puedeIngresarEfectivo.value ? 1 : 0) + (puedeRetirar.value ? 1 : 0),
 )
 
-// B9: el conteo del cierre es a ciegas. El backend solo manda el efectivo
-// esperado y el desglose por método (M7) a quien puede revisar el arqueo.
+// El conteo del cierre es a ciegas. El backend solo manda el efectivo
+// esperado y el desglose por método a quien puede revisar el arqueo.
 const veEsperado = computed(() => turno.efectivoEsperado !== null)
 
-// M7: lo cobrado por método (sin renglones en cero, salvo el efectivo).
+// Lo cobrado por método (sin renglones en cero, salvo el efectivo).
 const ventasPorMetodo = computed(() =>
   turno.ventasPorMetodo.filter((v) => v.metodo === 'efectivo' || v.total !== 0),
 )

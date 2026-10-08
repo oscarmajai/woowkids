@@ -602,7 +602,7 @@ import type { TipoMovimientoManual } from '@/types/movimientoInventario'
 const $q = useQuasar()
 const router = useRouter()
 const authStore = useAuthStore()
-// M20: eliminar (desactivar) exige inventario:eliminar_insumo.
+// Eliminar (desactivar) exige inventario:eliminar_insumo.
 const puedeEliminar = computed(() => authStore.hasPermission('inventario:eliminar_insumo'))
 const store = useInsumosStore()
 const proveedoresStore = useProveedoresStore()
@@ -781,7 +781,7 @@ const guardar = async () => {
           formDialog.value.punto_reorden != null ? String(formDialog.value.punto_reorden) : null,
         stock_maximo:
           formDialog.value.stock_maximo != null ? String(formDialog.value.stock_maximo) : null,
-        // B9: el costo unitario no se manda; lo calcula el backend (PEPS).
+        // El costo unitario no se manda; lo calcula el backend (PEPS).
         proveedor_principal_id: formDialog.value.proveedor_principal_id,
       })
       $q.notify({ type: 'positive', message: 'Insumo actualizado', position: 'top-right' })

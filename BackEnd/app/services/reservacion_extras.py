@@ -1,9 +1,9 @@
-"""Extras de una reservación ya levantada (N11).
+"""Extras de una reservación ya levantada.
 
-El precio sale del catálogo y la cantidad de la unidad del extra (M15), nunca
+El precio sale del catálogo y la cantidad de la unidad del extra, nunca
 del request; cada alta, cambio o baja recalcula el total de la reservación con
-las reglas del alta (C2) y respeta la máquina de estados (A8) y el plazo de
-edición (N12)."""
+las reglas del alta y respeta la máquina de estados y el plazo de
+edición."""
 
 from typing import Any
 from uuid import UUID

@@ -92,7 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = result.data.token
       user.value = result.data.user
 
-      // C3: el access token nunca toca localStorage -- solo vive en memoria.
+      // El access token nunca toca localStorage -- solo vive en memoria.
       tokenMemory.set(result.data.token)
       sessionStorage.save(result.data.user)
       return true
@@ -123,7 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(): Promise<void> {
-    // QA #32: el refresh token ya no se manda -- el backend lo lee de la
+    // El refresh token ya no se manda -- el backend lo lee de la
     // cookie HttpOnly y la borra al salir.
     try {
       await authService.logout()
@@ -134,7 +134,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // C3: al recargar la página el access token se pierde (vivía solo en
+  // Al recargar la página el access token se pierde (vivía solo en
   // memoria); lo único que sobrevive es el usuario cacheado en localStorage.
   // Se muestra de inmediato (evita el parpadeo a "sin sesión") mientras se
   // confirma la sesión real con un refresh vía la cookie HttpOnly.
@@ -149,7 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function tryRefresh(): Promise<boolean> {
     const session = sessionStorage.load()
-    // QA #32: sin refresh token local que chequear -- si hubo sesión alguna
+    // Sin refresh token local que chequear -- si hubo sesión alguna
     // vez (hay `session`), se intenta; el backend decide con la cookie.
     if (!session) return false
 

@@ -1,13 +1,13 @@
-"""Q5 — permisos, alcance por sucursal y administración, contra PostgreSQL real.
+"""Permisos, alcance por sucursal y administración, contra PostgreSQL real.
 
-- M19: horarios por sucursal (globales = sucursal_id NULL).
-- M20: desactivar por PATCH exige el mismo permiso que DELETE.
-- M3: usuario con sucursal inexistente → 422.
-- B2: activar métodos de pago con la sucursal elegida.
-- B3: tiene_pin en login y refresh.
-- N14: cajas desde "Todas las sucursales".
-- N17: historial de ventas del AdministradorSistema.
-- B20: lectura de /productos/catalogo y /productos/admin por rol.
+- Horarios por sucursal (globales = sucursal_id NULL).
+- Desactivar por PATCH exige el mismo permiso que DELETE.
+- Usuario con sucursal inexistente → 422.
+- Activar métodos de pago con la sucursal elegida.
+- tiene_pin en login y refresh.
+- Cajas desde "Todas las sucursales".
+- Historial de ventas del AdministradorSistema.
+- Lectura de /productos/catalogo y /productos/admin por rol.
 
 Cada test corre en una transacción que se revierte al final (mismo patrón
 que ``test_aislamiento_sucursal_db.py``).
@@ -47,19 +47,19 @@ ROL_INVENTARIO = 905  # rol personalizado "Supervisor de inventario"
 
 USUARIOS = {
     # clave: (id, email, rol_id, sucursal)
-    "sistema": (_u(11), "q5.sistema@woowkids.dev", 1, None),
-    "admin_a": (_u(12), "q5.admin.a@woowkids.dev", 2, SUC_A),
-    "admin_b": (_u(13), "q5.admin.b@woowkids.dev", 2, SUC_B),
-    "cajero_a": (_u(14), "q5.cajero.a@woowkids.dev", 3, SUC_A),
-    "atencion_a": (_u(15), "q5.atencion.a@woowkids.dev", 5, SUC_A),
-    "inventario_a": (_u(16), "q5.inventario.a@woowkids.dev", ROL_INVENTARIO, SUC_A),
+    "sistema": (_u(11), "permisos.sistema@woowkids.dev", 1, None),
+    "admin_a": (_u(12), "permisos.admin.a@woowkids.dev", 2, SUC_A),
+    "admin_b": (_u(13), "permisos.admin.b@woowkids.dev", 2, SUC_B),
+    "cajero_a": (_u(14), "permisos.cajero.a@woowkids.dev", 3, SUC_A),
+    "atencion_a": (_u(15), "permisos.atencion.a@woowkids.dev", 5, SUC_A),
+    "inventario_a": (_u(16), "permisos.inventario.a@woowkids.dev", ROL_INVENTARIO, SUC_A),
 }
 _ROLES = {
     1: "AdministradorSistema",
     2: "Administrador",
     3: "Cajero",
     5: "Personal de atención de niños",
-    ROL_INVENTARIO: "Q5 Supervisor de inventario",
+    ROL_INVENTARIO: "Permisos Supervisor de inventario",
 }
 
 IDS = {
@@ -79,26 +79,26 @@ async def sembrar(conn: asyncpg.Connection) -> None:
     await conn.execute(
         f"""
         INSERT INTO public.sucursales (id, nombre, clave) VALUES
-          ('{SUC_A}', 'Q5 Sucursal A', 'Q5A'), ('{SUC_B}', 'Q5 Sucursal B', 'Q5B');
+          ('{SUC_A}', 'Permisos Sucursal A', 'PERA'), ('{SUC_B}', 'Permisos Sucursal B', 'PERB');
         INSERT INTO public.roles (id, nombre, descripcion, activo)
-          VALUES ({ROL_INVENTARIO}, '{_ROLES[ROL_INVENTARIO]}', 'Prueba Q5', TRUE);
+          VALUES ({ROL_INVENTARIO}, '{_ROLES[ROL_INVENTARIO]}', 'Prueba de permisos', TRUE);
         INSERT INTO public.rol_permisos (rol_id, permiso_id)
           SELECT {ROL_INVENTARIO}, id FROM public.permisos
           WHERE codigo IN ('inventario:ver', 'inventario:gestionar_insumos',
                            'inventario:gestionar_proveedores');
         INSERT INTO public.turnos (id, nombre, hora_inicio, hora_fin, sucursal_id) VALUES
-          ('{IDS["global"]}', 'Q5 Global', '08:00', '14:00', NULL),
-          ('{IDS["horario_a"]}', 'Q5 Matutino A', '08:00', '14:00', '{SUC_A}'),
-          ('{IDS["horario_b"]}', 'Q5 Matutino B', '08:00', '14:00', '{SUC_B}');
+          ('{IDS["global"]}', 'Permisos Global', '08:00', '14:00', NULL),
+          ('{IDS["horario_a"]}', 'Permisos Matutino A', '08:00', '14:00', '{SUC_A}'),
+          ('{IDS["horario_b"]}', 'Permisos Matutino B', '08:00', '14:00', '{SUC_B}');
         INSERT INTO public.cajas (id, sucursal_id, codigo, nombre, numero) VALUES
-          ('{IDS["caja_a"]}', '{SUC_A}', 'Q5-A', 'Q5 Caja A', 51),
-          ('{IDS["caja_b"]}', '{SUC_B}', 'Q5-B', 'Q5 Caja B', 52);
+          ('{IDS["caja_a"]}', '{SUC_A}', 'PER-A', 'Permisos Caja A', 51),
+          ('{IDS["caja_b"]}', '{SUC_B}', 'PER-B', 'Permisos Caja B', 52);
         INSERT INTO public.productos (id, sucursal_id, nombre, precio_unitario, tipo)
-          VALUES ('{IDS["producto_a"]}', '{SUC_A}', 'Q5 Pizza A', 95, 'A');
+          VALUES ('{IDS["producto_a"]}', '{SUC_A}', 'Permisos Pizza A', 95, 'A');
         INSERT INTO public.insumos (id, sucursal_id, nombre, unidad_base_id, unidad_compra_id)
-          VALUES ('{IDS["insumo_a"]}', '{SUC_A}', 'Q5 Leche A', '{unidad}', '{unidad}');
+          VALUES ('{IDS["insumo_a"]}', '{SUC_A}', 'Permisos Leche A', '{unidad}', '{unidad}');
         INSERT INTO public.proveedores (id, sucursal_id, nombre)
-          VALUES ('{IDS["proveedor_a"]}', '{SUC_A}', 'Q5 Proveedor A');
+          VALUES ('{IDS["proveedor_a"]}', '{SUC_A}', 'Permisos Proveedor A');
         """
     )
     for uid, email, rol, suc in USUARIOS.values():
@@ -108,7 +108,7 @@ async def sembrar(conn: asyncpg.Connection) -> None:
             UUID(uid),
             email,
             _HASH,
-            f"Q5 {email}",
+            f"Permisos {email}",
             rol,
         )
         if suc is not None:
@@ -181,7 +181,7 @@ def _ids(resp: Any) -> set[str]:
     return {str(item["id"]) for item in resp.json()}
 
 
-# ── M19: horarios por sucursal ─────────────────────────────────────────────
+# ── Horarios por sucursal ──────────────────────────────────────────────────
 
 
 async def test_horarios_listado_muestra_los_de_la_sucursal_y_los_globales(
@@ -224,7 +224,7 @@ async def test_admin_crea_horario_en_su_sucursal_aunque_otra_tenga_el_mismo_nomb
     client, conn = entorno
     resp = await client.post(
         "/api/horarios",
-        json={"nombre": "Q5 Matutino A", "hora_inicio": "09:00", "hora_fin": "15:00"},
+        json={"nombre": "Permisos Matutino A", "hora_inicio": "09:00", "hora_fin": "15:00"},
         headers=_h("admin_b"),
     )
     assert resp.status_code == 201, resp.text
@@ -241,7 +241,7 @@ async def test_horario_de_sucursal_no_puede_llamarse_como_uno_global(entorno: An
     client, _conn = entorno
     resp = await client.post(
         "/api/horarios",
-        json={"nombre": "Q5 Global", "hora_inicio": "09:00", "hora_fin": "15:00"},
+        json={"nombre": "Permisos Global", "hora_inicio": "09:00", "hora_fin": "15:00"},
         headers=_h("admin_a"),
     )
     assert resp.status_code == 409, resp.text
@@ -264,7 +264,7 @@ async def test_admin_edita_los_suyos_pero_no_los_globales_ni_los_de_otra(entorno
 
     assert await conn.fetchval(
         "SELECT nombre FROM public.turnos WHERE id = $1", UUID(IDS["global"])
-    ) == ("Q5 Global")
+    ) == ("Permisos Global")
     assert await conn.fetchval(
         "SELECT activo FROM public.turnos WHERE id = $1", UUID(IDS["horario_b"])
     )
@@ -306,7 +306,7 @@ async def test_no_se_abre_caja_con_un_horario_de_otra_sucursal(entorno: Any) -> 
     )
 
 
-# ── M20: desactivar por PATCH = eliminar ───────────────────────────────────
+# ── Desactivar por PATCH = eliminar ────────────────────────────────────────
 
 _TABLAS = {"productos", "insumos", "proveedores"}
 
@@ -318,13 +318,15 @@ async def _activo(conn: asyncpg.Connection, tabla: str, rid: str) -> bool:
 
 
 async def test_admin_desactiva_productos_con_eliminar_producto(entorno: Any) -> None:
-    """Desde la 101 el Administrador tiene inventario:eliminar_producto
-    (decisión del usuario: todos los permisos salvo los del sistema), así que
-    M20 no le quita la forma de desactivar productos."""
+    """Desde la migración 101 el Administrador tiene inventario:eliminar_producto
+    (todos los permisos salvo los del sistema), así que exigir en el PATCH el
+    permiso de DELETE no le quita la forma de desactivar productos."""
     client, conn = entorno
     url = f"/api/productos/{IDS['producto_a']}"
     editar = await client.patch(
-        url, data={"payload": json.dumps({"nombre": "Q5 Pizza grande"})}, headers=_h("admin_a")
+        url,
+        data={"payload": json.dumps({"nombre": "Permisos Pizza grande"})},
+        headers=_h("admin_a"),
     )
     assert editar.status_code == 200, editar.text
     desactivar = await client.patch(
@@ -345,7 +347,9 @@ async def test_sin_permiso_de_eliminar_no_se_desactivan_insumos_ni_proveedores(
         resp = await client.patch(url, json={"activo": False}, headers=_h("inventario_a"))
         assert resp.status_code == 403, (tabla, resp.text)
         assert await _activo(conn, tabla, rid), tabla
-        resp = await client.patch(url, json={"nombre": f"Q5 {tabla}"}, headers=_h("inventario_a"))
+        resp = await client.patch(
+            url, json={"nombre": f"Permisos {tabla}"}, headers=_h("inventario_a")
+        )
         assert resp.status_code == 200, (tabla, resp.text)
 
 
@@ -360,7 +364,7 @@ async def test_con_permiso_de_eliminar_si_se_desactiva_por_patch(entorno: Any) -
     assert resp.status_code == 200, resp.text
 
 
-# ── M3: sucursal inexistente al dar de alta/editar un usuario ──────────────
+# ── Sucursal inexistente al dar de alta/editar un usuario ──────────────────
 
 _SUCURSAL_INEXISTENTE = "00000000-0000-0000-0000-000000000000"
 
@@ -370,8 +374,8 @@ async def test_alta_de_usuario_con_sucursal_inexistente_da_422(entorno: Any) -> 
     resp = await client.post(
         "/api/usuarios",
         json={
-            "email": "q5.nuevo@woowkids.dev",
-            "full_name": "Q5 Nuevo",
+            "email": "permisos.nuevo@woowkids.dev",
+            "full_name": "Permisos Nuevo",
             "password": PASSWORD,
             "role": "Cajero",
             "branch_id": _SUCURSAL_INEXISTENTE,
@@ -381,7 +385,7 @@ async def test_alta_de_usuario_con_sucursal_inexistente_da_422(entorno: Any) -> 
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
     assert not await conn.fetchval(
-        "SELECT count(*) FROM public.usuarios WHERE email = 'q5.nuevo@woowkids.dev'"
+        "SELECT count(*) FROM public.usuarios WHERE email = 'permisos.nuevo@woowkids.dev'"
     )
 
 
@@ -392,7 +396,7 @@ async def test_editar_usuario_a_una_sucursal_inexistente_da_422(entorno: Any) ->
         f"/api/usuarios/{uid}",
         json={
             "email": email,
-            "full_name": "Q5 Cajero A",
+            "full_name": "Permisos Cajero A",
             "role": "Cajero",
             "branch_id": _SUCURSAL_INEXISTENTE,
         },
@@ -407,7 +411,7 @@ async def test_editar_usuario_a_una_sucursal_inexistente_da_422(entorno: Any) ->
     assert str(sucursal) == SUC_A
 
 
-# ── B2: activar métodos de pago desde "Todas las sucursales" ───────────────
+# ── Activar métodos de pago desde "Todas las sucursales" ───────────────────
 
 
 async def _activo_en(conn: asyncpg.Connection, metodo: UUID, sucursal: str) -> bool | None:
@@ -440,7 +444,7 @@ async def test_activacion_de_metodo_de_pago_por_sucursal(entorno: Any) -> None:
     assert resp.status_code == 200, resp.text
     assert await _activo_en(conn, metodo, SUC_B) is False
 
-    # Rol con sucursal fija: la suya sí, otra no (C1).
+    # Rol con sucursal fija: la suya sí, otra no.
     resp = await client.patch(
         f"{url}?sucursal_id={SUC_A}", json={"activo": True}, headers=_h("admin_b")
     )
@@ -451,7 +455,7 @@ async def test_activacion_de_metodo_de_pago_por_sucursal(entorno: Any) -> None:
     assert await _activo_en(conn, metodo, SUC_A) is True
 
 
-# ── B3: tiene_pin en login y refresh ────────────────────────────────────────
+# ── tiene_pin en login y refresh ────────────────────────────────────────────
 
 
 async def test_login_y_refresh_informan_si_el_usuario_tiene_pin(entorno: Any) -> None:
@@ -481,7 +485,7 @@ async def test_login_y_refresh_informan_si_el_usuario_tiene_pin(entorno: Any) ->
     assert sin_pin.json()["user"]["tiene_pin"] is False
 
 
-# ── N14: cajas desde "Todas las sucursales" ────────────────────────────────
+# ── Cajas desde "Todas las sucursales" ─────────────────────────────────────
 
 
 async def test_sistema_lista_y_edita_cajas_sin_sucursal_elegida(entorno: Any) -> None:
@@ -491,10 +495,12 @@ async def test_sistema_lista_y_edita_cajas_sin_sucursal_elegida(entorno: Any) ->
     por_id = {c["id"]: c for c in resp.json()}
     assert {IDS["caja_a"], IDS["caja_b"]} <= set(por_id)
     assert por_id[IDS["caja_a"]]["sucursal_id"] == SUC_A
-    assert por_id[IDS["caja_a"]]["sucursal_nombre"] == "Q5 Sucursal A"
+    assert por_id[IDS["caja_a"]]["sucursal_nombre"] == "Permisos Sucursal A"
 
     resp = await client.patch(
-        f"/api/cajas/{IDS['caja_b']}", json={"nombre": "Q5 Caja B editada"}, headers=_h("sistema")
+        f"/api/cajas/{IDS['caja_b']}",
+        json={"nombre": "Permisos Caja B editada"},
+        headers=_h("sistema"),
     )
     assert resp.status_code == 200, resp.text
     resp = await client.delete(f"/api/cajas/{IDS['caja_a']}", headers=_h("sistema"))
@@ -506,7 +512,7 @@ async def test_sistema_lista_y_edita_cajas_sin_sucursal_elegida(entorno: Any) ->
             [UUID(IDS["caja_a"]), UUID(IDS["caja_b"])],
         )
     }
-    assert filas[IDS["caja_b"]]["nombre"] == "Q5 Caja B editada"
+    assert filas[IDS["caja_b"]]["nombre"] == "Permisos Caja B editada"
     assert str(filas[IDS["caja_b"]]["sucursal_id"]) == SUC_B
     assert filas[IDS["caja_a"]]["activo"] is False
 
@@ -521,10 +527,10 @@ async def test_admin_sigue_sin_editar_cajas_de_otra_sucursal(entorno: Any) -> No
     assert {c["sucursal_id"] for c in resp.json()} == {SUC_A}
     assert await conn.fetchval(
         "SELECT nombre FROM public.cajas WHERE id = $1", UUID(IDS["caja_b"])
-    ) == ("Q5 Caja B")
+    ) == ("Permisos Caja B")
 
 
-# ── N17: Historial de ventas del AdministradorSistema ──────────────────────
+# ── Historial de ventas del AdministradorSistema ───────────────────────────
 
 _REPORTES_VENTAS = (
     "/api/pagos/historial",
@@ -558,7 +564,7 @@ async def test_historial_de_ventas_con_sucursal_elegida_o_propia(entorno: Any) -
         assert otra.status_code == 403, (ruta, otra.text)
 
 
-# ── B20: catálogo de productos solo para quien vende o los gestiona ────────
+# ── Catálogo de productos solo para quien vende o los gestiona ─────────────
 
 
 @pytest.mark.parametrize(
