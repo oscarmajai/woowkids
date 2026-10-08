@@ -5,7 +5,7 @@ from uuid import UUID
 import asyncpg
 
 _SELECT = """
-    SELECT sucursal_id, porcentaje_retorno, dias_caducidad, valor_punto, activo,
+    SELECT sucursal_id, pesos_por_punto, dias_caducidad, valor_punto, activo,
            otorga_puntos_comandas, otorga_puntos_reservaciones, otorga_puntos_checkin,
            minimo_canje, creado, creado_por, modificado, modificado_por
     FROM configuracion_lealtad
@@ -22,7 +22,7 @@ async def obtener_configuracion(
 async def upsert_configuracion(
     conn: asyncpg.Connection,
     sucursal_id: UUID,
-    porcentaje_retorno: float,
+    pesos_por_punto: float,
     dias_caducidad: int,
     valor_punto: float,
     activo: bool,
@@ -35,12 +35,12 @@ async def upsert_configuracion(
     row = await conn.fetchrow(
         """
         INSERT INTO configuracion_lealtad
-            (sucursal_id, porcentaje_retorno, dias_caducidad, valor_punto,
+            (sucursal_id, pesos_por_punto, dias_caducidad, valor_punto,
              activo, otorga_puntos_comandas, otorga_puntos_reservaciones,
              otorga_puntos_checkin, minimo_canje, creado_por, modificado_por)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
         ON CONFLICT (sucursal_id) DO UPDATE SET
-            porcentaje_retorno = EXCLUDED.porcentaje_retorno,
+            pesos_por_punto = EXCLUDED.pesos_por_punto,
             dias_caducidad = EXCLUDED.dias_caducidad,
             valor_punto = EXCLUDED.valor_punto,
             activo = EXCLUDED.activo,
@@ -50,12 +50,12 @@ async def upsert_configuracion(
             minimo_canje = EXCLUDED.minimo_canje,
             modificado = NOW(),
             modificado_por = EXCLUDED.modificado_por
-        RETURNING sucursal_id, porcentaje_retorno, dias_caducidad, valor_punto, activo,
+        RETURNING sucursal_id, pesos_por_punto, dias_caducidad, valor_punto, activo,
                   otorga_puntos_comandas, otorga_puntos_reservaciones, otorga_puntos_checkin,
                   minimo_canje, creado, creado_por, modificado, modificado_por
         """,
         sucursal_id,
-        porcentaje_retorno,
+        pesos_por_punto,
         dias_caducidad,
         valor_punto,
         activo,

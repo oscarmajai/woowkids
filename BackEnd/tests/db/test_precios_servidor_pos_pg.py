@@ -115,7 +115,7 @@ async def _seed(conn: asyncpg.Connection) -> dict[str, Any]:
 
     await conn.execute(
         "INSERT INTO configuracion_lealtad (sucursal_id, dias_caducidad, valor_punto, "
-        "minimo_canje, porcentaje_retorno) VALUES ($1, 30, 1.00, 50, 0)",
+        "minimo_canje, otorga_puntos_comandas) VALUES ($1, 30, 1.00, 50, FALSE)",
         sucursal,
     )
     await conn.execute(

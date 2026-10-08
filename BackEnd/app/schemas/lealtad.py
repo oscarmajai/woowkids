@@ -7,7 +7,7 @@ CELULAR_PATTERN = r"^\d{10}$"
 
 
 class ConfiguracionLealtadBase(BaseModel):
-    porcentaje_retorno: float = Field(0, ge=0, le=100)
+    pesos_por_punto: float = Field(100, gt=0)
     dias_caducidad: int = Field(..., gt=0)
     valor_punto: float = Field(1.00, gt=0)
     activo: bool = True
@@ -29,8 +29,8 @@ class ConfiguracionLealtadOut(ConfiguracionLealtadBase):
 
 class ConfiguracionCanjeOut(BaseModel):
     """Lo mínimo que la caja necesita para canjear puntos (A6): valor del
-    punto y mínimo de canje de la sucursal. Solo lectura; no expone el
-    porcentaje de retorno ni la auditoría de la configuración."""
+    punto y mínimo de canje de la sucursal. Solo lectura; no expone
+    cuánto hay que gastar por punto ni la auditoría de la configuración."""
 
     sucursal_id: UUID
     activo: bool
