@@ -251,3 +251,25 @@ describe('registration store: aviso de privacidad (LFPDPPP)', () => {
     expect(store.errorAviso).toContain('No se pudo cargar el aviso de privacidad')
   })
 })
+
+describe('registration store: modo evento', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('deja capturar fotos y más niños; solo fija el nombre y el teléfono del tutor', () => {
+    const store = useRegistrationStore()
+    store.cambiarModo('evento')
+
+    expect(store.isLocked).toBe(false)
+    expect(store.datosTutorFijos).toBe(true)
+  })
+
+  it('en el paso de pulseras ya no se edita nada', () => {
+    const store = useRegistrationStore()
+    store.step = 'rfid'
+
+    expect(store.isLocked).toBe(true)
+    expect(store.datosTutorFijos).toBe(true)
+  })
+})

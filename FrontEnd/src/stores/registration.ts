@@ -65,9 +65,11 @@ export const useRegistrationStore = defineStore('registration', () => {
   const eventoNoEncontrado = ref(false)
 
   const isEventoMode = computed(() => modo.value === 'evento')
-  const isLocked = computed(
-    () => isEventoMode.value || step.value === 'rfid' || step.value === 'complete',
-  )
+  // Pasos de pulseras y listo: el formulario ya no se edita.
+  const isLocked = computed(() => step.value === 'rfid' || step.value === 'complete')
+  // En modo evento el nombre y el teléfono vienen de la reservación; las
+  // fotos, el segundo tutor y los niños se siguen capturando.
+  const datosTutorFijos = computed(() => isLocked.value || isEventoMode.value)
 
   const tutor = ref<TutorData>({
     fullName: '',
@@ -656,6 +658,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     modo,
     isEventoMode,
     isLocked,
+    datosTutorFijos,
     eventoSeleccionado,
     isLoadingEvento,
     eventoNoEncontrado,
