@@ -3,6 +3,7 @@ repository (sin BD). Cubren el ajuste manual de puntos, el mínimo de
 canje y el KPI de puntos por vencer."""
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -31,7 +32,7 @@ def _usuario(rol: str = "Administrador") -> TokenData:
 def _config(**overrides):
     base = {
         "sucursal_id": SUCURSAL,
-        "porcentaje_retorno": 1.0,
+        "pesos_por_punto": 100.0,
         "dias_caducidad": 30,
         "valor_punto": 1.0,
         "activo": True,
@@ -202,3 +203,58 @@ async def test_buscar_clientes_delega_en_el_repository(monkeypatch):
     assert len(resultado) == 1
     assert resultado[0].celular == CELULAR
     assert resultado[0].nombre == "Ana López"
+
+
+def _mock_otorgamiento(monkeypatch, config):
+    monkeypatch.setattr(
+        lealtad_service.lealtad_repository,
+        "obtener_configuracion",
+        AsyncMock(return_value=config),
+    )
+    crear_lote = AsyncMock(return_value={"id": uuid4()})
+    monkeypatch.setattr(lealtad_service.lealtad_repository, "crear_lote", crear_lote)
+    monkeypatch.setattr(
+        lealtad_service.lealtad_repository, "calcular_saldo", AsyncMock(return_value=0)
+    )
+    monkeypatch.setattr(
+        lealtad_service.lealtad_repository, "registrar_movimiento", AsyncMock(return_value=None)
+    )
+    return crear_lote
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("total", "pesos_por_punto", "esperados"),
+    [
+        ("1000.00", 100.0, 10),
+        ("250.00", 100.0, 2),  # solo cuentan los $100 completos
+        ("1000.00", 50.0, 20),
+        ("85.00", 1.0, 85),
+    ],
+)
+async def test_otorgar_puntos_uno_por_cada_pesos_por_punto(
+    monkeypatch, total, pesos_por_punto, esperados
+):
+    # El valor del punto no cambia cuántos se ganan: solo cuenta al canjear.
+    crear_lote = _mock_otorgamiento(
+        monkeypatch, _config(pesos_por_punto=pesos_por_punto, valor_punto=0.5)
+    )
+
+    puntos = await lealtad_service.otorgar_puntos(
+        AsyncMock(), SUCURSAL, CELULAR, Decimal(total), USUARIO, comanda_id=uuid4()
+    )
+
+    assert puntos == esperados
+    assert crear_lote.await_args.args[3] == esperados
+
+
+@pytest.mark.asyncio
+async def test_otorgar_puntos_no_crea_lote_si_no_alcanza_un_punto(monkeypatch):
+    crear_lote = _mock_otorgamiento(monkeypatch, _config(pesos_por_punto=100.0))
+
+    puntos = await lealtad_service.otorgar_puntos(
+        AsyncMock(), SUCURSAL, CELULAR, Decimal("99.99"), USUARIO, comanda_id=uuid4()
+    )
+
+    assert puntos == 0
+    crear_lote.assert_not_awaited()

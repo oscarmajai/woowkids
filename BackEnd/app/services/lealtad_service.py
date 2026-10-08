@@ -1,5 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, Decimal
 from typing import Any
 from uuid import UUID
 
@@ -64,7 +64,7 @@ async def actualizar_configuracion(
     row = await lealtad_repository.upsert_configuracion(
         conn,
         scope,
-        porcentaje_retorno=body.porcentaje_retorno,
+        pesos_por_punto=body.pesos_por_punto,
         dias_caducidad=body.dias_caducidad,
         valor_punto=body.valor_punto,
         activo=body.activo,
@@ -97,9 +97,9 @@ async def otorgar_puntos(
     no hay configuración, el programa o el origen están desactivados, o el
     cálculo da 0 puntos.
 
-    Los puntos se escalan por valor_punto para no perder el cashback en
-    pagos chicos: con valor_punto=0.01 (1 punto = 1 centavo), $85 al 1%
-    ($0.85 de cashback) otorga 85 puntos en vez de truncarse a 0."""
+    Se gana 1 punto por cada pesos_por_punto pagados, completos (sin
+    redondear hacia arriba): con $100 por punto, $250 otorgan 2 puntos. El
+    valor del punto solo cuenta al canjear."""
     if sum(x is not None for x in (comanda_id, reservacion_id, registro_id)) != 1:
         raise ValueError(
             "Debe indicarse exactamente uno de comanda_id, reservacion_id o registro_id."
@@ -115,9 +115,8 @@ async def otorgar_puntos(
     if registro_id is not None and not config["otorga_puntos_checkin"]:
         return 0
 
-    cashback = total_pagado * Decimal(str(config["porcentaje_retorno"])) / 100
-    valor_punto = Decimal(str(config["valor_punto"]))
-    puntos = int((cashback / valor_punto).to_integral_value(rounding=ROUND_HALF_UP))
+    pesos_por_punto = Decimal(str(config["pesos_por_punto"]))
+    puntos = int((total_pagado / pesos_por_punto).to_integral_value(rounding=ROUND_FLOOR))
     if puntos <= 0:
         return 0
 
