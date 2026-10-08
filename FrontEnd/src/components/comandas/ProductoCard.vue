@@ -3,6 +3,7 @@
     type="button"
     class="producto-card"
     :class="{ 'producto-card--agotado': sinStock }"
+    :disabled="sinStock"
     @click="$emit('agregar', producto)"
   >
     <div class="producto-card__media">
@@ -20,17 +21,25 @@
     </div>
     <div class="producto-card__body">
       <span class="producto-card__nombre">{{ producto.nombre }}</span>
-      <div class="producto-card__row">
+      <div class="producto-card__foot">
         <span class="producto-card__precio">${{ producto.precio_unitario.toFixed(2) }}</span>
-        <span v-if="sinStock" class="producto-card__stock producto-card__stock--out"
-          >Sin stock</span
+        <span
+          v-if="sinStock"
+          class="producto-card__stock producto-card__stock--out"
+          title="Sin stock: falta algún insumo de su receta"
         >
+          <q-icon name="remove_shopping_cart" size="13px" class="producto-card__stock-ico" />
+          Sin stock
+        </span>
         <span
           v-else-if="rinde !== null"
           class="producto-card__stock"
           :class="{ 'producto-card__stock--low': stockBajo }"
+          :title="`≈ ${rinde} disponibles (estimado según el stock de la receta)`"
         >
-          ≈ {{ rinde }} disponibles (estimado)
+          <q-icon name="inventory_2" size="13px" class="producto-card__stock-ico" />
+          <span class="producto-card__stock-num">≈ {{ rinde }}</span>
+          <span class="producto-card__stock-lbl">estimado</span>
         </span>
       </div>
     </div>
@@ -88,7 +97,17 @@ const stockBajo = computed(
   }
 
   &--agotado {
-    opacity: 0.6;
+    opacity: 0.55;
+    filter: grayscale(0.5);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+
+    &:hover {
+      border-color: var(--border-color);
+      box-shadow: none;
+    }
   }
 
   &__media {
@@ -142,11 +161,11 @@ const stockBajo = computed(
     color: var(--text-primary);
   }
 
-  &__row {
+  &__foot {
     margin-top: auto;
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 6px;
   }
 
@@ -158,18 +177,43 @@ const stockBajo = computed(
   }
 
   &__stock {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--tone-off-bg);
+    color: var(--tone-off-fg);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+
+    &-ico {
+      flex: none;
+      opacity: 0.85;
+    }
+
+    &-num {
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    &-lbl {
+      font-weight: 600;
+      opacity: 0.8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     &--low {
-      font-weight: 700;
-      color: #c2410c;
+      background: var(--tone-warn-bg);
+      color: var(--tone-warn-fg);
     }
 
     &--out {
-      font-weight: 800;
+      background: var(--tone-bad-bg);
       color: var(--tone-bad-fg);
     }
   }
