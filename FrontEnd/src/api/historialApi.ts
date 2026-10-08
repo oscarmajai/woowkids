@@ -11,12 +11,12 @@ export interface DetalleProducto {
   nombre_combo_padre: string | null
   // Id de la instancia de combo a la que pertenece el hijo (puede faltar en órdenes viejas)
   id_combo_padre?: string | null
-  /** Renglón (id de detalle) del combo al que pertenece el hijo (M13). Null en
+  /** Renglón (id de detalle) del combo al que pertenece el hijo. Null en
    * productos sueltos, renglones de combo y órdenes viejas ambiguas. */
   detalle_padre_id?: string | null
 }
 
-/** Sucursal de la venta, para el encabezado del ticket (M12). */
+/** Sucursal de la venta, para el encabezado del ticket. */
 export interface SucursalTicket {
   nombre: string
   direccion?: string | null
@@ -30,7 +30,7 @@ export interface MetodoPagoDetalle {
   metodo_pago_nombre: string
   monto: number
   notas_pago: string | null
-  /** Últimos 4 dígitos de la tarjeta, opcionales (B9 B.1). */
+  /** Últimos 4 dígitos de la tarjeta, opcionales. */
   ultimos4?: string | null
 }
 
@@ -48,15 +48,15 @@ export interface DetalleOrden {
   comanda_id: string | null
   ticket_numero: string | null
   nombre_cliente: string | null
-  /** Puntos de lealtad ganados por esta venta; null si no aplica (B9 B.3). */
+  /** Puntos de lealtad ganados por esta venta; null si no aplica. */
   puntos_ganados?: number | null
-  /** Mesa del pedido, opcional (B9 B.2; solo aplica a comandas). */
+  /** Mesa del pedido, opcional (solo aplica a comandas). */
   mesa?: string | null
-  /** Cambio entregado al cliente; 0 si no hubo (M12). */
+  /** Cambio entregado al cliente; 0 si no hubo. */
   cambio?: number
-  /** Sucursal de la venta (M12). */
+  /** Sucursal de la venta. */
   sucursal?: SucursalTicket | null
-  /** Versión de la comanda para editarla sin pisar otra edición (B5). */
+  /** Versión de la comanda para editarla sin pisar otra edición. */
   modificado?: string | null
 }
 

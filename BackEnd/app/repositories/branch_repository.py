@@ -141,7 +141,7 @@ async def get_datos_operativos(
     conn: asyncpg.Connection, sucursal_id: UUID
 ) -> DatosOperativosSucursal | None:
     """Nombre, zona horaria y horario de operación de la sucursal: lo que el
-    calendario y Nueva reservación necesitan (B18), sin datos administrativos."""
+    calendario y Nueva reservación necesitan, sin datos administrativos."""
     row = await conn.fetchrow(
         "SELECT id, nombre, zona_horaria, hora_apertura, hora_cierre "
         "FROM public.sucursales WHERE id = $1",
@@ -306,13 +306,13 @@ async def get_indicadores_sucursal(
     """Indicadores de solo lectura sobre tablas ya existentes.
 
     `desde` y `hasta` son días completos en la zona horaria de la sucursal
-    (M4: antes se comparaba la fecha UTC y lo vendido después de las 18:00 de
+    (antes se comparaba la fecha UTC y lo vendido después de las 18:00 de
     México caía en el día siguiente).
 
     - ventas: lo cobrado en el rango, de todas las fuentes (comandas,
       estancias y eventos), neto del cambio entregado; sin comandas canceladas
-      (`estado_actual = 'C'` o `activo = FALSE`) ni reservaciones canceladas
-      (M5/A3). Cuenta el día de cada pago, no el de la orden.
+      (`estado_actual = 'C'` o `activo = FALSE`) ni reservaciones canceladas.
+      Cuenta el día de cada pago, no el de la orden.
     - ninos_atendidos: niños distintos con un detalle de registro cuya
       entrada cae en el rango.
     - eventos: reservaciones activas, no canceladas, con fecha_evento en el

@@ -19,7 +19,7 @@ function activateChildScan(childId: string, index: number) {
   setTimeout(() => childScanRefs.value[childId]?.focus(), 100)
 }
 
-// Niño cuya pulsera se está verificando con el servidor (B14).
+// Niño cuya pulsera se está verificando con el servidor.
 const verificandoChildId = ref<string | null>(null)
 
 async function onChildScanEnter(childId: string) {

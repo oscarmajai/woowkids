@@ -5,7 +5,7 @@ import type { Tutor, NinoActivo, PadresAuthState } from '@/types/padres'
 import { padresApi } from '@/api/padresApi'
 import { mensajeDeError } from '@/utils/errorHandler'
 
-// QA #31: el backend ahora canjea el código una sola vez por `/padres/auth`
+// El backend ahora canjea el código una sola vez por `/padres/auth`
 // y entrega un token de sesión corto (2h, scope PadreVisor) que el polling
 // usa via Authorization: Bearer (GET /padres/ninos-activos), sin volver a
 // mandar el código. Por eso aquí se persiste el TOKEN (no el código) en

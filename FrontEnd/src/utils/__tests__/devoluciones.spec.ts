@@ -24,7 +24,7 @@ function devolucion(extra: Partial<DevolucionArqueo> = {}): DevolucionArqueo {
   }
 }
 
-describe('devoluciones en el arqueo (A4)', () => {
+describe('devoluciones en el arqueo', () => {
   it('suma lo devuelto en todos los métodos', () => {
     expect(totalDevoluciones([fila('efectivo', 40), fila('tarjeta', 30), fila('otro', 0)])).toBe(70)
     expect(totalDevoluciones([])).toBe(0)

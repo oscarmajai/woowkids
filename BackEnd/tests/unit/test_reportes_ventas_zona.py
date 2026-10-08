@@ -1,4 +1,4 @@
-"""M4: los periodos del historial de ventas se calculan con la hora local de la
+"""Los periodos del historial de ventas se calculan con la hora local de la
 sucursal, no con la del servidor (UTC)."""
 
 from datetime import datetime

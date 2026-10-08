@@ -65,9 +65,33 @@ describe('descontarCambio', () => {
 
 describe('resolverMetodoPagoId', () => {
   const metodos: MetodosPago[] = [
-    { id: 'id-efectivo', nombre: 'Efectivo', descripcion: null, tipo: 'E', comision_porcentaje: null, requiere_referencia: false, activo: true },
-    { id: 'id-tarjeta', nombre: 'Tarjeta', descripcion: null, tipo: 'T', comision_porcentaje: null, requiere_referencia: false, activo: true },
-    { id: 'id-cupon-viejo', nombre: 'Cupones', descripcion: null, tipo: 'C', comision_porcentaje: null, requiere_referencia: false, activo: false },
+    {
+      id: 'id-efectivo',
+      nombre: 'Efectivo',
+      descripcion: null,
+      tipo: 'E',
+      comision_porcentaje: null,
+      requiere_referencia: false,
+      activo: true,
+    },
+    {
+      id: 'id-tarjeta',
+      nombre: 'Tarjeta',
+      descripcion: null,
+      tipo: 'T',
+      comision_porcentaje: null,
+      requiere_referencia: false,
+      activo: true,
+    },
+    {
+      id: 'id-cupon-viejo',
+      nombre: 'Cupones',
+      descripcion: null,
+      tipo: 'C',
+      comision_porcentaje: null,
+      requiere_referencia: false,
+      activo: false,
+    },
   ]
 
   it('traduce la categoría del teclado al id del método configurado', () => {

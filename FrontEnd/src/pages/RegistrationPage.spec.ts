@@ -62,7 +62,7 @@ function montar() {
   return { wrapper, store: useRegistrationStore() }
 }
 
-describe('RegistrationPage: abierta por URL o tras F5 (A14)', () => {
+describe('RegistrationPage: abierta por URL o tras F5', () => {
   beforeEach(() => {
     vi.mocked(fetchPulseras).mockReset()
     vi.mocked(productosApi.obtenerPreciosEstancia)
@@ -88,7 +88,18 @@ describe('RegistrationPage: abierta por URL o tras F5 (A14)', () => {
 
     expect(privacidadService.obtenerVigente).toHaveBeenCalledTimes(1)
     expect(store.avisoPrivacidad?.version).toBe(2)
-    expect(store.aceptaAvisoPrivacidad).toBe(false)
+    expect(store.aceptaAvisoPrivacidad).toBe(true)
+  })
+
+  it('muestra el aviso de privacidad al final del formulario, no al principio', async () => {
+    vi.mocked(fetchPulseras).mockResolvedValue([])
+    const { wrapper } = montar()
+    await flushPromises()
+
+    const html = wrapper.html()
+    const aviso = html.indexOf('consentimiento-privacidad-stub')
+    expect(aviso).toBeGreaterThan(html.indexOf('tutor-form-stub'))
+    expect(aviso).toBeGreaterThan(html.indexOf('children-section-stub'))
   })
 
   it('al montarse sin estado previo carga las pulseras y las tarifas', async () => {

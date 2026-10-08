@@ -1,4 +1,4 @@
-"""Aislamiento por sucursal de recursos consultados o modificados por id (C1).
+"""Aislamiento por sucursal de recursos consultados o modificados por id.
 
 Los routers lo llaman al inicio, antes de delegar al service del recurso:
 
@@ -44,7 +44,7 @@ NOMBRE_RECURSO: dict[str, str] = {
     "detalle_registro": "Registro",
 }
 
-# Recursos de género femenino: "Reservación no encontrada" (N15).
+# Recursos de género femenino: "Reservación no encontrada".
 RECURSOS_FEMENINOS: frozenset[str] = frozenset(
     {"presentacion_insumo", "compra", "pulsera", "caja", "reservacion", "comanda"}
 )

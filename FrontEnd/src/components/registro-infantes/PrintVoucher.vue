@@ -97,8 +97,8 @@ const branchName = computed(() => authStore.currentBranchName || 'Sucursal')
 const cashierName = computed(() => authStore.currentUser?.name || 'Cajero')
 
 async function generarQR() {
-  // El QR lleva el código opaco del portal de padres (A17), nunca el
-  // registroId: el UUID del registro ya no da acceso.
+  // El QR lleva el código opaco del portal de padres, nunca el
+  // registroId: el UUID del registro no da acceso.
   if (store.codigoAccesoPadres) {
     qrCodeUrl.value = await qrPortalPadres(store.codigoAccesoPadres)
   }

@@ -9,7 +9,7 @@ from pydantic_core import PydanticCustomError
 
 NombreRequerido = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
-# M2: la regla de la UI (mínimo 8) también se valida en el servidor. Solo al
+# La regla de la UI (mínimo 8) también se valida en el servidor. Solo al
 # fijar una contraseña (alta/edición): el login no la exige, para no dejar
 # fuera a cuentas viejas con contraseñas más cortas.
 PASSWORD_MIN_LENGTH = 8
@@ -26,7 +26,7 @@ def _validar_password(v: str) -> str:
 
 
 def _normalizar_email(v: str) -> str:
-    # M1: EmailStr solo pasa a minúsculas el dominio; el correo se guarda
+    # EmailStr solo pasa a minúsculas el dominio; el correo se guarda
     # completo en minúsculas para que no se dupliquen cuentas por mayúsculas.
     return v.strip().lower()
 
@@ -38,7 +38,7 @@ def _vacio_a_none(v: object) -> object:
 EmailUsuario = Annotated[EmailStr, AfterValidator(_normalizar_email)]
 PasswordNueva = Annotated[str, AfterValidator(_validar_password)]
 
-# PIN de caja (C1): 4 dígitos numéricos, igual que valida el front.
+# PIN de caja: 4 dígitos numéricos, igual que valida el front.
 PinCaja = Annotated[str, StringConstraints(pattern=r"^\d{4}$")]
 
 
@@ -60,7 +60,7 @@ class UserUpdateRequest(BaseModel):
     telefono: str | None = Field(default=None, max_length=20)
     role: str
     branch_id: UUID | None = None
-    # None (o "") = no cambiar; si viene, mínimo PASSWORD_MIN_LENGTH (M2).
+    # None (o "") = no cambiar; si viene, mínimo PASSWORD_MIN_LENGTH.
     password: Annotated[PasswordNueva | None, BeforeValidator(_vacio_a_none)] = None
     is_active: bool | None = None  # None = no cambiar
     pin: PinCaja | None = None  # None = no cambiar
@@ -87,7 +87,7 @@ class CambiarMiPinRequest(BaseModel):
     """PUT /usuarios/me/pin — el usuario cambia su propio PIN de caja.
 
     `actual` acepta el PIN vigente o, si el usuario aún no tiene PIN
-    configurado, su contraseña (decisión C1: "mientras el usuario no tenga
+    configurado, su contraseña (regla de negocio: "mientras el usuario no tenga
     PIN, se acepta su contraseña, igual que en el cierre").
     """
 

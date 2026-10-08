@@ -309,7 +309,7 @@ const FILTROS: FilterChip<Filtro>[] = [
   { label: 'Ajustes', value: 'A' },
 ]
 const filtro = ref<Filtro | null>('todos')
-// UX: un canje que consumió varios lotes se ve como un solo renglón.
+// Un canje que consumió varios lotes se ve como un solo renglón.
 const movimientosVisibles = computed(() =>
   agruparCanjes(store.movimientos).filter(
     (m) => filtro.value === 'todos' || m.tipo === filtro.value,

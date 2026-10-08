@@ -215,8 +215,8 @@ const TONO_TIPO: Record<TipoMetodoPago, 'info' | 'pink' | 'warn' | 'ok' | 'off'>
   O: 'off',
 }
 const sucursalNombre = computed(() => authStore.currentBranchName ?? 'esta sucursal')
-// B2: la activación es por sucursal; en "Todas las sucursales" (Administrador
-// del Sistema sin sucursal elegida) los toggles respondían 422.
+// La activación es por sucursal; en "Todas las sucursales" (Administrador
+// del Sistema sin sucursal elegida) los toggles responderían 422.
 const sinSucursal = computed(() => !authStore.currentBranchId)
 
 const columns: QTableColumn[] = [

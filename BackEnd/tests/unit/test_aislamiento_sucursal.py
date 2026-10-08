@@ -1,4 +1,4 @@
-"""C1 — Aislamiento por sucursal en la API (pruebas E2E 2026-10-03).
+"""Aislamiento por sucursal en la API.
 
 Barrido parametrizado de endpoints: un usuario de la sucursal B (rol con
 sucursal fija) pide datos de la sucursal A.
@@ -257,7 +257,7 @@ CASOS_403: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/api/turnos-caja/historial/resumen?sucursal_id={A}", {}),
     ("GET", f"/api/turnos-caja/historial/export?sucursal_id={A}", {}),
     ("GET", f"/api/cajas?sucursal_id={A}", {}),
-    # Horarios (M19): por sucursal; editar por id está en test_horarios_sucursal.py.
+    # Horarios: por sucursal; editar por id está en test_horarios_sucursal.py.
     ("GET", f"/api/horarios?sucursal_id={A}", {}),
     ("GET", f"/api/turnos-caja/turnos?sucursal_id={A}", {}),
     (

@@ -1,6 +1,6 @@
 """
 app/schemas/limites_inventario.py
-Límites de las cantidades y costos que llegan a inventario y compras (M3/M21).
+Límites de las cantidades y costos que llegan a inventario y compras.
 
 Sin límites, una cantidad como `1e12` desbordaba `numeric(12,3)` y una como
 `0.0004` pasaba `gt=0` pero se redondeaba a 0 en la columna y rompía su CHECK:

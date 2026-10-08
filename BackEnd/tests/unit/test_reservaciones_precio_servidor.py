@@ -1,7 +1,7 @@
-"""El alta y la edición de reservaciones usan el precio del servidor (C2) y la
-regla de liquidación a 7 días (C3). Sin BD: repositories simulados.
+"""El alta y la edición de reservaciones usan el precio del servidor y la
+regla de liquidación a 7 días. Sin BD: repositories simulados.
 
-Reproduce el ataque de las pruebas E2E (R-0011): Paquete Premium de máximo 30
+Reproduce un intento de manipular el precio desde el cliente: Paquete Premium de máximo 30
 invitados con 40, `precio_total: 1`, `anticipo: 0`, `estado: confirmada`."""
 
 from contextlib import asynccontextmanager
@@ -440,10 +440,10 @@ async def test_patch_ya_no_acepta_precio_base_ni_descuento_del_cliente(edicion: 
     assert edicion["actualizar"].await_args.args[2] == {"notas": "x"}
 
 
-# ── M15: extras por persona / por hora ───────────────────────────────────────
+# ── Extras por persona / por hora ───────────────────────────────────────────
 
 
-async def test_m15_alta_cobra_extra_por_hora_por_cada_hora(
+async def test_alta_cobra_extra_por_hora_por_cada_hora(
     repos: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Animador adicional $350 por hora, evento de 4 h: $1,400, no $350.
@@ -458,7 +458,7 @@ async def test_m15_alta_cobra_extra_por_hora_por_cada_hora(
     assert repos["crear_extra"].await_args.kwargs["precio_unitario"] == Decimal("350.00")
 
 
-async def test_m15_alta_cobra_extra_por_persona_por_cada_invitado(
+async def test_alta_cobra_extra_por_persona_por_cada_invitado(
     repos: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bolsita = {**EXTRA_ANIMADOR, "nombre": "Bolsita", "precio": Decimal("35"), "unidad": "persona"}
@@ -469,7 +469,7 @@ async def test_m15_alta_cobra_extra_por_persona_por_cada_invitado(
     assert repos["crear_extra"].await_args.kwargs["cantidad"] == 20
 
 
-async def test_m15_alta_con_el_total_viejo_de_cantidad_1_responde_409(
+async def test_alta_con_el_total_viejo_de_cantidad_1_responde_409(
     repos: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -481,7 +481,7 @@ async def test_m15_alta_con_el_total_viejo_de_cantidad_1_responde_409(
     repos["crear_extra"].assert_not_awaited()
 
 
-async def test_m15_editar_invitados_recalcula_extras_por_persona(edicion: dict) -> None:
+async def test_editar_invitados_recalcula_extras_por_persona(edicion: dict) -> None:
     extra_id = uuid4()
     edicion["actual"]["precio_extras"] = Decimal("1590.00")  # 890 + 20 x 35
     edicion["actual"]["precio_total"] = Decimal("14165.00")
@@ -500,7 +500,7 @@ async def test_m15_editar_invitados_recalcula_extras_por_persona(edicion: dict) 
     assert edicion["actualizar_extra"].await_args.args[1:] == (extra_id, {"cantidad": 25})
 
 
-async def test_m15_editar_horas_con_total_sin_extras_por_hora_responde_409(edicion: dict) -> None:
+async def test_editar_horas_con_total_sin_extras_por_hora_responde_409(edicion: dict) -> None:
     edicion["extras_guardados"].return_value = [
         {"id": uuid4(), "unidad": "hora", "precio_unitario": Decimal("350"), "cantidad": 4},
         {"id": uuid4(), "unidad": "evento", "precio_unitario": Decimal("890"), "cantidad": 1},
@@ -515,10 +515,10 @@ async def test_m15_editar_horas_con_total_sin_extras_por_hora_responde_409(edici
     edicion["actualizar_extra"].assert_not_awaited()
 
 
-# ── M18: auditoría ───────────────────────────────────────────────────────────
+# ── Auditoría ───────────────────────────────────────────────────────────────
 
 
-async def test_m18_alta_completa_guarda_quien_la_creo(repos: dict) -> None:
+async def test_alta_completa_guarda_quien_la_creo(repos: dict) -> None:
     usuario = uuid4()
     await reservaciones.crear_completa(_conn(), _request(), usuario, str(uuid4()))
     assert repos["reservacion"]["creado_por"] == usuario
@@ -526,13 +526,13 @@ async def test_m18_alta_completa_guarda_quien_la_creo(repos: dict) -> None:
     assert repos["crear_extra"].await_args.kwargs["creado_por"] == usuario
 
 
-async def test_m18_alta_simple_guarda_quien_la_creo(repos: dict) -> None:
+async def test_alta_simple_guarda_quien_la_creo(repos: dict) -> None:
     usuario = uuid4()
     await reservaciones.crear(_conn(), _reservacion(precio_total=Decimal("11700.00")), str(usuario))
     assert repos["reservacion"]["creado_por"] == usuario
 
 
-async def test_m18_edicion_guarda_quien_la_modifico(edicion: dict) -> None:
+async def test_edicion_guarda_quien_la_modifico(edicion: dict) -> None:
     usuario = uuid4()
     with pytest.raises(HTTPException):
         await reservaciones.actualizar(

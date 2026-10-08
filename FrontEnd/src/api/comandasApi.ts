@@ -32,7 +32,7 @@ export const comandasApi = {
   },
 
   /**
-   * A4: devuelve al cliente el dinero de una comanda ya entregada (T), sin
+   * Devuelve al cliente el dinero de una comanda ya entregada (T), sin
    * regresar su stock. Como la cancelación de una pagada: sin `tokenPinAdmin`
    * el backend responde 403 AUTORIZACION_ADMIN_REQUERIDA con el `turno_id`
    * para pedir el PIN; 409 DEVOLUCION_NO_APLICA si no está entregada o ya se
@@ -59,7 +59,7 @@ export const comandasApi = {
   /**
    * Quita productos de una comanda pendiente. Con `modificadoEsperado` (el
    * `modificado` de GET /pagos/detalles/comanda/{id}) el backend responde 409
-   * COMANDA_MODIFICADA si la orden cambió desde que se leyó (B5).
+   * COMANDA_MODIFICADA si la orden cambió desde que se leyó.
    */
   async modificarDetalles(
     comandaId: string,

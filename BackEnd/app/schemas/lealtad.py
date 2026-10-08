@@ -28,7 +28,7 @@ class ConfiguracionLealtadOut(ConfiguracionLealtadBase):
 
 
 class ConfiguracionCanjeOut(BaseModel):
-    """Lo mínimo que la caja necesita para canjear puntos (A6): valor del
+    """Lo mínimo que la caja necesita para canjear puntos: valor del
     punto y mínimo de canje de la sucursal. Solo lectura; no expone el
     porcentaje de retorno ni la auditoría de la configuración."""
 

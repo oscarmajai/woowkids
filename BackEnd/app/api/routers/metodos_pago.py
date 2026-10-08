@@ -62,10 +62,10 @@ async def activar_metodo_pago(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("metodos_pago:editar")),
 ) -> MetodosPagoOut:
-    # Activar/desactivar es una decisión de cada sucursal (regla C1): roles con
-    # sucursal fija, siempre la suya (403 si piden otra); AdministradorSistema,
-    # la del parámetro o la del selector. B2: sin ninguna (vista "Todas las
-    # sucursales") responde 422 SUCURSAL_REQUERIDA con un mensaje claro.
+    # Activar/desactivar es una decisión de cada sucursal (aislamiento por
+    # sucursal): roles con sucursal fija, siempre la suya (403 si piden otra);
+    # AdministradorSistema, la del parámetro o la del selector. Sin ninguna
+    # (vista "Todas las sucursales") responde 422 SUCURSAL_REQUERIDA con un mensaje claro.
     sucursal = resolver_sucursal_obligatoria(current_user, sucursal_id)
     return await svc.set_activacion(
         conn, metodo_pago_id, sucursal, body.activo, UUID(current_user.sub)

@@ -21,7 +21,7 @@ export interface TurnoItem {
   nombre: string
   horaInicio?: string
   horaFin?: string
-  /** M8: el horario corresponde a la hora local actual de la sucursal. */
+  /** El horario corresponde a la hora local actual de la sucursal. */
   vigente?: boolean
 }
 
@@ -81,14 +81,14 @@ export interface FilaMetodoPago {
   origen: 'sistema' | 'manual'
 }
 
-/** M7: lo cobrado en el turno por método (el efectivo, neto del cambio). */
+/** Lo cobrado en el turno por método (el efectivo, neto del cambio). */
 export interface VentaPorMetodo {
   metodo: string
   label: string
   total: number
 }
 
-/** B23: el conteo que el cajero ya envió, congelado hasta la revisión. */
+/** El conteo que el cajero ya envió, congelado hasta la revisión. */
 export interface ConteoGuardado {
   desgloseEfectivo: {
     billetes: Array<{ denominacion: number; cantidad: number }>
@@ -119,7 +119,7 @@ export interface FilaBalance {
   esperado: number
   /** declarado − esperado (positivo = sobrante, negativo = faltante) */
   diferencia: number
-  /** A4: lo devuelto a clientes con este método en el turno (ya restado de `esperado`). */
+  /** Lo devuelto a clientes con este método en el turno (ya restado de `esperado`). */
   devoluciones: number
 }
 
@@ -139,27 +139,27 @@ export interface TurnoActivoResponse {
   estado: EstadoTurno
   fondoInicial: number
   fechaApertura: string // ISO 8601
-  /** B13: notas capturadas al abrir la caja. */
+  /** Notas capturadas al abrir la caja. */
   observacionesApertura?: string | null
   /** Bruto: lo recibido, incluido el efectivo que se devolvió como cambio. */
   totalVentas: number
   totalRetiros: number
   totalIngresos: number
-  /** M6: "vendido en turno": número de tickets (no de pagos) y lo aplicado
+  /** "Vendido en turno": número de tickets (no de pagos) y lo aplicado
    * (recibido menos cambio, como el esperado del arqueo). */
   numeroVentas: number
   totalVendido: number
   totalCambio?: number
-  /** M7: efectivo que debería haber en el cajón ahora (negativo = caja en negativo).
+  /** Efectivo que debería haber en el cajón ahora (negativo = caja en negativo).
    * `null` si el backend no lo manda (versiones viejas). */
   efectivoEsperado?: number | null
   ventasPorMetodo?: VentaPorMetodo[]
   movimientos: MovimientoTurno[]
-  /** B23: solo con el conteo ya enviado (ESPERANDO_REVISION / BALANCE_REVELADO). */
+  /** Solo con el conteo ya enviado (ESPERANDO_REVISION / BALANCE_REVELADO). */
   conteoGuardado?: ConteoGuardado | null
-  /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO' (QA #8). */
+  /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO'. */
   adminEmail?: string | null
-  /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO' (QA #8). */
+  /** Solo poblado por el backend cuando estado === 'BALANCE_REVELADO'. */
   balancePorMetodo?: FilaBalance[]
 }
 
@@ -207,13 +207,13 @@ export interface ConfirmarCierrePayload {
   turnoId: string
   observaciones: string
   tipoCierre?: TipoCierre
-  /** Tokens de un solo uso emitidos al validar cada PIN (doble firma, QA #14). */
+  /** Tokens de un solo uso emitidos al validar cada PIN (doble firma). */
   tokenPinCajero?: string | null
   tokenPinAdmin?: string | null
 }
 
 /**
- * A16: para qué se emite el token del PIN de administrador. Cada token solo
+ * Para qué se emite el token del PIN de administrador. Cada token solo
  * sirve para su propósito: `cerrar` (revisión y confirmación del cierre de
  * caja) o `cancelar` (cancelar o devolver una orden cobrada).
  */
@@ -350,19 +350,19 @@ export interface DetalleArqueo extends ArqueoResumen {
   balancePorMetodo: FilaBalance[]
   observaciones: string
   adminNombre: string
-  /** B13: notas de la apertura de caja. */
+  /** Notas de la apertura de caja. */
   observacionesApertura?: string | null
   /** Ingresos de efectivo del turno, con su motivo. */
   ingresos?: Array<{ id: string; monto: number; observaciones: string | null; creado: string }>
-  /** A4: devoluciones a clientes registradas en el turno. */
+  /** Devoluciones a clientes registradas en el turno. */
   devoluciones?: DevolucionArqueo[]
 }
 
-/** A4: de dónde salió una devolución: cancelar una orden cobrada (su stock
+/** De dónde salió una devolución: cancelar una orden cobrada (su stock
  * regresó) o devolver una ya entregada (el stock no regresa). */
 export type OrigenDevolucion = 'cancelacion' | 'entregada'
 
-/** A4: devolución a un cliente que resta del esperado de su método en el arqueo. */
+/** Devolución a un cliente que resta del esperado de su método en el arqueo. */
 export interface DevolucionArqueo {
   id: string
   comandaId: string

@@ -4,7 +4,7 @@ import { tokenMemory } from '@/utils/tokenMemory'
 const SESSION_KEY = 'auth_session'
 const VIEWING_BRANCH_KEY = 'auth_viewing_branch'
 
-// C3 (cierra lo parcial de B8/QA #32): el access token ya no se guarda aquí
+// El access token ya no se guarda aquí
 // -- vive solo en memoria (ver utils/tokenMemory.ts) y se pierde al recargar
 // la página. El refresh token tampoco: vive en la cookie HttpOnly que puso
 // el backend (ver api/axiosClient.ts, authApi.refresh()). Este storage ya

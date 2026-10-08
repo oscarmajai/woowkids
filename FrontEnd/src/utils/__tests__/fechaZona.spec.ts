@@ -29,7 +29,7 @@ describe('primerDiaDelMesEnZona', () => {
   })
 })
 
-describe('rangoFechasInvertido (B1)', () => {
+describe('rangoFechasInvertido', () => {
   it('detecta desde posterior a hasta', () => {
     expect(rangoFechasInvertido('2026-10-31', '2026-10-01')).toBe(true)
   })

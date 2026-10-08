@@ -6,9 +6,8 @@ import HistorialView from '@/components/historial/HistorialView.vue'
 import { obtenerEstadisticas, obtenerHistorial } from '@/services/historialService'
 
 /**
- * N17: el AdministradorSistema en "Todas las sucursales" recibía 403 en el
- * historial. El historial es por sucursal: sin sucursal elegida no se consulta
- * y se pide elegir una.
+ * El historial es por sucursal: el AdministradorSistema en "Todas las
+ * sucursales" no tiene una elegida, así que no se consulta y se pide elegir una.
  */
 
 const auth = vi.hoisted(() => ({
@@ -42,7 +41,7 @@ const montar = () =>
     global: { stubs: { QPage: { template: '<div><slot /></div>' } } },
   })
 
-describe('HistorialView (N17)', () => {
+describe('HistorialView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(obtenerHistorial).mockClear()

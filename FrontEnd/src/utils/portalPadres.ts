@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 
 /**
  * URL del portal de padres que va en el QR del comprobante. Lleva el código
- * opaco que emite el backend (A17), nunca el registroId.
+ * opaco que emite el backend, nunca el registroId.
  */
 export function urlPortalPadres(codigo: string, origen = window.location.origin): string {
   return `${origen}/padres/access?code=${encodeURIComponent(codigo)}`

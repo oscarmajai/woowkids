@@ -1,4 +1,4 @@
-"""Precio y reglas de cobro de una reservación, calculados en el servidor (C2).
+"""Precio y reglas de cobro de una reservación, calculados en el servidor.
 
 El backend es la fuente de verdad del precio: el navegador manda lo que cree
 que cuesta el evento solo para detectar que su pantalla quedó vieja (si no
@@ -8,7 +8,7 @@ el asistente de alta (`FrontEnd/src/pages/NuevaReservacionPage.vue`,
 
     total = precio_base del paquete
           + niños x precio_hora_pulsera x horas facturables   (pulseras)
-          + Σ precio de cada extra x su cantidad según la unidad (M15)
+          + Σ precio de cada extra x su cantidad según la unidad
           + Σ precio_unitario x cantidad de cada producto adicional
 
 La cantidad de un extra depende de su `unidad`: "persona" se cobra por cada
@@ -72,7 +72,7 @@ UNIDAD_HORA = "hora"
 
 
 def cantidad_extra(unidad: str | None, invitados: int, horas: int, actual: int = 1) -> int:
-    """Veces que se cobra un extra según su unidad (M15).
+    """Veces que se cobra un extra según su unidad.
 
     "persona": una por invitado; "hora": una por hora facturable (mínimo 1);
     "evento" (o una unidad desconocida): se conserva `actual`, que en el alta
@@ -118,7 +118,7 @@ def recalcular_extras(
 class DesglosePrecio:
     precio_base: Decimal
     # Se guarda en `precio_personas_extra` por compatibilidad: hoy es el cargo
-    # de pulseras (B22).
+    # de pulseras.
     precio_pulseras: Decimal
     precio_extras: Decimal
     precio_productos: Decimal
@@ -142,7 +142,7 @@ def calcular_desglose(
     """Precio de una reservación nueva con los precios de catálogo.
 
     `extras`: pares (precio de catálogo, unidad) de cada extra elegido; la
-    cantidad sale de la unidad (`cantidad_extra`, M15).
+    cantidad sale de la unidad (`cantidad_extra`).
     `productos`: pares (precio_unitario de catálogo, cantidad).
     """
     horas = horas_facturables(hora_inicio, hora_fin)
@@ -193,7 +193,7 @@ def recalcular_total_edicion(
     """(pulseras, total) de una reservación existente al cambiarle invitados u
     horas. Igual que `recalcularReservacion()` del frontend: se reconstruye
     desde las partes guardadas y `precio_horas` se conserva (histórico).
-    `precio_extras`: el de los extras ya recalculados por persona/hora (M15);
+    `precio_extras`: el de los extras ya recalculados por persona/hora;
     si no se pasa, se conserva el guardado."""
     pulseras = calcular_pulseras(precio_hora_pulsera, numero_personas, horas_reservadas)
     cambios = {"precio_personas_extra": pulseras}
@@ -203,7 +203,7 @@ def recalcular_total_edicion(
 
 
 def porcentaje_anticipo(anticipo_porcentaje_paquete: Decimal | None) -> Decimal:
-    """Anticipo mínimo: el 30 % del negocio o el del paquete si es mayor (M16)."""
+    """Anticipo mínimo: el 30 % del negocio o el del paquete si es mayor."""
     if anticipo_porcentaje_paquete is None:
         return PORCENTAJE_ANTICIPO_MINIMO
     return max(PORCENTAJE_ANTICIPO_MINIMO, Decimal(anticipo_porcentaje_paquete))

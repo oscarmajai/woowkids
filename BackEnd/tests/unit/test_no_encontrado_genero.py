@@ -1,4 +1,4 @@
-"""N15 — `NoEncontrado` concuerda en género con el recurso: "Reservación no
+"""`NoEncontrado` concuerda en género con el recurso: "Reservación no
 encontrada", "Insumo no encontrado". Los repositories se mockean (sin BD)."""
 
 from datetime import UTC, datetime

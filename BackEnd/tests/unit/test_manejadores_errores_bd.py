@@ -1,4 +1,4 @@
-"""M3 — manejador global de errores de PostgreSQL (sin BD).
+"""Manejador global de errores de PostgreSQL (sin BD).
 
 Una app FastAPI mínima con los manejadores de ``app.exceptions.manejadores``
 y rutas que lanzan cada error de asyncpg: debe responder 409/422 con el

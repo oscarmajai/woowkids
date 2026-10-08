@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 066_compras_iva_folio.sql
--- WP B6, pendiente 6: IVA de la compra y folio de orden de compra. El folio
+-- IVA de la compra y folio de orden de compra. El folio
 -- sigue el mismo mecanismo de secuencia por sucursal que folios_sucursal
 -- (migración 050 / app/repositories/folio_repository.py), pero en una tabla
 -- propia porque esa es específica del folio de ticket de comanda (serie 'A',

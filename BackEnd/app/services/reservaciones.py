@@ -84,7 +84,7 @@ async def extra_de_catalogo(
 ) -> dict[str, Any]:
     """Extra vigente del catálogo de la sucursal (422 si no es de ella, 409 si
     ya no está disponible). De aquí salen su precio y su unidad, nunca del
-    request (C2/N11)."""
+    request."""
     extra = await extras_repository.obtener(conn, extra_id)
     if not extra or extra["sucursal_id"] not in (sucursal_id, None):
         raise _invalido("EXTRA_INVALIDO", "Un extra seleccionado no existe en esta sucursal.")
@@ -99,7 +99,7 @@ async def producto_de_catalogo(
     conn: asyncpg.Connection, producto_id: UUID, sucursal_id: UUID
 ) -> Producto:
     """Producto vigente del catálogo de la sucursal (422 / 409 igual que los
-    extras): de aquí sale su precio, nunca del request (C2/N11)."""
+    extras): de aquí sale su precio, nunca del request."""
     producto = await producto_repository.obtener(conn, producto_id)
     if not producto or producto.sucursal_id != str(sucursal_id):
         raise _invalido("PRODUCTO_INVALIDO", "Un producto adicional no existe en esta sucursal.")
@@ -159,8 +159,8 @@ async def _insertar(
     usuario_id: UUID,
 ) -> dict[str, Any]:
     """Inserta la reservación con el precio, anticipo y estado que decidió el
-    servidor: los del request se descartan (C2). Queda registrado quién la
-    levantó (M18)."""
+    servidor: los del request se descartan. Queda registrado quién la
+    levantó."""
     data = body.model_dump()
     data.update(
         creado_por=usuario_id,
@@ -185,10 +185,10 @@ async def crear(
 ) -> ReservacionesOut:
     """Alta sin cobro (POST /reservaciones): queda 'pendiente' y debe
     liquidarse una semana antes del evento. El precio lo calcula el servidor
-    con el paquete; si el del cliente no coincide, 409 (C2).
+    con el paquete; si el del cliente no coincide, 409.
 
     A 7 días o menos del evento no se puede reservar sin pagar: el scheduler
-    la cancelaría en menos de una hora (C3). Ese caso va por
+    la cancelaría en menos de una hora. Ese caso va por
     POST /reservaciones/completa con el pago del total."""
     paquete = await _paquete_de_sucursal(conn, body.paquete_id, body.sucursal_id)
     reservacion_precio.validar_cupo(paquete, body.numero_personas)
@@ -215,7 +215,7 @@ _CAMPOS_DE_PRECIO = {"numero_personas", "horas_reservadas", "precio_personas_ext
 
 # Campos que cambian el alcance del evento (invitados, horas, fecha u horario):
 # solo se editan dentro del plazo, hasta una semana antes del evento, igual que
-# en la pantalla de Reservaciones (N12). Los datos de contacto y las notas se
+# en la pantalla de Reservaciones. Los datos de contacto y las notas se
 # pueden corregir mientras la reservación no esté cerrada ni cancelada.
 _CAMPOS_DE_ALCANCE = _CAMPOS_DE_PRECIO | {"fecha_evento", "hora_inicio", "hora_fin"}
 
@@ -228,8 +228,8 @@ async def actualizar(
 ) -> ReservacionesOut:
     """Edición parcial. Una reservación cancelada o completada no se edita
     (409), el alcance solo cambia dentro del plazo y `estado` solo cambia por
-    la máquina de estados (A8/N12). Si cambian invitados u horas también se
-    recalculan los extras por persona o por hora (M15)."""
+    la máquina de estados. Si cambian invitados u horas también se
+    recalculan los extras por persona o por hora."""
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     cantidades_extras: dict[Any, int] = {}
     async with conn.transaction():
@@ -257,7 +257,7 @@ async def actualizar(
             updates.update(precio)
 
         if updates and usuario_id is not None:
-            updates["modificado_por"] = usuario_id  # M18
+            updates["modificado_por"] = usuario_id
         row = await reservaciones_repository.actualizar(conn, reservacion_id, updates)
         for extra_id, cantidad in cantidades_extras.items():
             await reservacion_extras_repository.actualizar(conn, extra_id, {"cantidad": cantidad})
@@ -275,7 +275,7 @@ async def cerrar(
     """Cierre del evento (POST /reservaciones/{id}/cerrar): pasa a 'completada'
     por la máquina de estados (evento ya iniciado y sin saldo) y AGREGA las
     notas del cierre a las existentes; antes se sobrescribían y se perdía, por
-    ejemplo, el motivo de una cancelación (A8)."""
+    ejemplo, el motivo de una cancelación."""
     async with conn.transaction():
         actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
         if not actual or not actual["activo"]:
@@ -361,7 +361,7 @@ async def _recalcular_precio_edicion(
     solo se compara: si no coincide, 409.
 
     Devuelve los campos a guardar en la reservación y la cantidad nueva de
-    cada extra por persona o por hora que cambió (M15)."""
+    cada extra por persona o por hora que cambió."""
     paquete = await paquetes_repository.obtener(conn, actual["paquete_id"])
     if paquete is None:
         raise NoEncontrado("Paquete")
@@ -418,11 +418,11 @@ async def _recalcular_precio_edicion(
 
 async def bloquear_para_partidas(conn: asyncpg.Connection, reservacion_id: UUID) -> dict[str, Any]:
     """Bloquea la reservación para agregar, cambiar o quitar un extra o un
-    producto (N11). Debe llamarse dentro de `conn.transaction()`.
+    producto. Debe llamarse dentro de `conn.transaction()`.
 
     Igual que el resto de cambios de alcance: 409 si está cancelada o cerrada
-    (máquina de estados, A8) o si ya falta una semana o menos para el evento
-    (N12). Más tarde, un saldo nuevo haría que el scheduler la cancelara por
+    (máquina de estados) o si ya falta una semana o menos para el evento.
+    Más tarde, un saldo nuevo haría que el scheduler la cancelara por
     falta de pago."""
     actual = await reservaciones_repository.obtener_para_actualizar(conn, reservacion_id)
     if not actual or not actual["activo"]:
@@ -439,7 +439,7 @@ async def recalcular_total_por_partidas(
     precio_total_cliente: Decimal | None = None,
 ) -> None:
     """Rehace `precio_extras`, `precio_productos` y `precio_total` desde los
-    extras y productos guardados, con las mismas reglas que el alta (C2).
+    extras y productos guardados, con las mismas reglas que el alta.
 
     Si el cliente mandó el total que esperaba y no coincide, 409
     PRECIO_CAMBIADO; si el nuevo total queda por debajo de lo ya pagado, 409.
@@ -484,8 +484,8 @@ async def crear_completa(
     usuario_id: UUID,
     apertura_caja_id: str,
 ) -> ReservacionCompletaResponse:
-    """Alta atómica de la reservación con sus extras, productos y pagos (QA
-    #10): si algo falla, nada se persiste. Reusa pagos_reservacion.completar()
+    """Alta atómica de la reservación con sus extras, productos y pagos:
+    si algo falla, nada se persiste. Reusa pagos_reservacion.completar()
     (cambio + lealtad + monto_pagado) dentro de la misma transacción -- los
     extras y productos se insertan por repository directo, sin la validación
     de scope de TokenData que ahí no aplica (el usuario ya quedó autorizado a
@@ -493,7 +493,7 @@ async def crear_completa(
 
     El servidor recalcula el precio (paquete, pulseras, extras y productos de
     catálogo), valida cupo, catálogo de la sucursal y anticipo mínimo (o el
-    100 % si el evento es en 7 días o menos), y decide el estado (C2/C3). Si
+    100 % si el evento es en 7 días o menos), y decide el estado. Si
     el total que vio el cliente no coincide, 409 y no se crea nada."""
     # Import diferido: evita el ciclo de imports de pagos_reservacion <->
     # reservaciones que ya existe entre sus services.
@@ -501,7 +501,7 @@ async def crear_completa(
 
     reservacion = body.reservacion
     async with conn.transaction():
-        # Todo lo que se cobra sale del catálogo y del paquete, no del request (C2).
+        # Todo lo que se cobra sale del catálogo y del paquete, no del request.
         paquete = await _paquete_de_sucursal(conn, reservacion.paquete_id, reservacion.sucursal_id)
         reservacion_precio.validar_cupo(paquete, reservacion.numero_personas)
         precios_extras = await _precios_extras(conn, body.extras, reservacion.sucursal_id)
@@ -539,7 +539,7 @@ async def crear_completa(
                 reservacion_id=reservacion_id,
                 extra_id=extra_item.extra_id,
                 # Por persona = invitados, por hora = horas del evento, por
-                # evento = 1 (M15); la cantidad del request se ignora.
+                # evento = 1; la cantidad del request se ignora.
                 cantidad=reservacion_precio.cantidad_extra(
                     unidad, reservacion.numero_personas, desglose.horas_reservadas
                 ),

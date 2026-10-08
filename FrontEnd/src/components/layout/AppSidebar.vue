@@ -12,8 +12,8 @@ import { sumarBadgesGrupo } from '@/utils/inventario'
 import CambiarPinDialog from '@/components/usuarios/CambiarPinDialog.vue'
 import type { NavGroup } from '@/types/navigation'
 
-// C1: diálogo "Cambiar mi PIN" en el menú del usuario. Toque mínimo de este
-// archivo (propiedad de C4): solo este ref y el botón/diálogo abajo.
+// Diálogo "Cambiar mi PIN" en el menú del usuario (el botón y el diálogo
+// están abajo).
 const showCambiarPin = ref(false)
 
 const auth = useAuthStore()
@@ -70,8 +70,8 @@ function toggleGroup(label: string): void {
   openGroups.value = next
 }
 
-// B7: Insumos y Reporte de Stock muestran las mismas alertas; el grupo las
-// cuenta una vez (antes las sumaba dos veces).
+// Insumos y Reporte de Stock muestran las mismas alertas; el grupo las
+// cuenta una sola vez, no dos.
 function groupBadge(group: NavGroup): number {
   return sumarBadgesGrupo(group.items.map((item) => badgeFor(item.routeName)))
 }
@@ -101,7 +101,7 @@ const showShift = computed(() => auth.hasRole('Cajero'))
 const shift = computed(() => {
   if (turno.estaOperando) {
     const desde = turno.fechaApertura ? format(new Date(turno.fechaApertura), 'HH:mm') : null
-    // "Vendido en turno" (B9 B.4): solo total y número de ventas, sin
+    // "Vendido en turno": solo total y número de ventas, sin
     // desglose por método ni efectivo esperado (conteo a ciegas).
     const ventas = `${turno.numeroVentas} ${turno.numeroVentas === 1 ? 'venta' : 'ventas'} · $${turno.totalVendido.toLocaleString('es-MX')}`
     const meta = [desde ? `desde ${desde}` : null, ventas].filter(Boolean).join(' · ')

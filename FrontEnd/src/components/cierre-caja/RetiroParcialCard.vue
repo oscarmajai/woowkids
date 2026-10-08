@@ -72,8 +72,8 @@
       </div>
       <div class="retiro-form__callout">
         <q-icon name="info" size="19px" />
-        El retiro afecta de inmediato el saldo en caja. Recaba la firma de quien recibe el
-        efectivo e imprime el comprobante.
+        El retiro afecta de inmediato el saldo en caja. Recaba la firma de quien recibe el efectivo
+        e imprime el comprobante.
       </div>
 
       <footer class="retiro-card__foot">

@@ -12,7 +12,7 @@ from app.schemas.limites_inventario import (
 )
 from app.schemas.textos import Nombre150
 
-# M3: los niveles de stock que captura el usuario, acotados a numeric(12,3).
+# Los niveles de stock que captura el usuario, acotados a numeric(12,3).
 # Solo en los schemas de entrada: InsumoOut hereda de InsumoBase y no debe
 # rechazar lo que ya está guardado.
 _DEC = DECIMALES_CANTIDAD
@@ -37,7 +37,7 @@ class InsumoCrear(InsumoBase):
     punto_reorden: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
     stock_maximo: Decimal | None = Field(None, ge=0, le=MAX_CANTIDAD, decimal_places=_DEC)
     # Costo de referencia al dar de alta (es el costo de la capa del stock
-    # inicial). M21: 6 decimales, como insumos.costo_unitario numeric(14,6).
+    # inicial). 6 decimales, como insumos.costo_unitario numeric(14,6).
     costo_unitario: Decimal | None = Field(
         None, ge=0, le=MAX_COSTO_UNITARIO, decimal_places=DECIMALES_COSTO
     )
@@ -47,9 +47,9 @@ class InsumoUpdate(BaseModel):
     """No permite cambiar unidad_base_id/unidad_compra_id ni stock_actual una
     vez creado el insumo: la unidad define en qué se guarda el stock (cambiarla
     requeriría reconvertir el stock existente) y stock_actual solo se moverá
-    a través de movimientos_inventario en fase 3.
+    a través de movimientos_inventario.
 
-    B9: tampoco `costo_unitario`. Es el promedio PEPS de las capas de costo y
+    Tampoco `costo_unitario`. Es el promedio PEPS de las capas de costo y
     `costeo_service` lo recalcula en cada movimiento, así que un valor editado
     a mano se perdía en silencio en el siguiente. El campo sigue en el schema
     solo para rechazarlo con un mensaje claro (422 COSTO_NO_EDITABLE en

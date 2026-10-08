@@ -1,4 +1,4 @@
-"""A6 — Canje de puntos desde caja, contra PostgreSQL real.
+"""Canje de puntos desde caja, contra PostgreSQL real.
 
 - Un Cajero (permisos reales del rol sembrado en el maestro) lee el valor del
   punto y el mínimo de canje de SU sucursal por GET /lealtad/configuracion/canje
@@ -43,9 +43,9 @@ async def _sembrar(conn: asyncpg.Connection) -> None:
     await conn.execute(
         f"""
         INSERT INTO public.sucursales (id, nombre, clave) VALUES
-          ('{SUC_A}', 'A6 Sucursal A', 'A6A'), ('{SUC_B}', 'A6 Sucursal B', 'A6B');
+          ('{SUC_A}', 'Lealtad Sucursal A', 'LEAA'), ('{SUC_B}', 'Lealtad Sucursal B', 'LEAB');
         INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, rol)
-          VALUES ('{CAJERO_A}', 'a6.cajero.a@woowkids.dev', 'x', 'A6 Cajero A', 3);
+          VALUES ('{CAJERO_A}', 'lealtad.cajero.a@woowkids.dev', 'x', 'Lealtad Cajero A', 3);
         INSERT INTO public.usuarios_sucursal (usuario_id, sucursal_id)
           VALUES ('{CAJERO_A}', '{SUC_A}');
         INSERT INTO public.configuracion_lealtad
@@ -62,7 +62,7 @@ def _token_cajero() -> str:
     return create_access_token(
         payload={
             "sub": CAJERO_A,
-            "email": "a6.cajero.a@woowkids.dev",
+            "email": "lealtad.cajero.a@woowkids.dev",
             "role": "Cajero",
             "branch_id": SUC_A,
             "permissions": get_permissions("Cajero"),

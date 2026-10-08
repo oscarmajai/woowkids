@@ -185,7 +185,7 @@ const onCambiarEstado = async (
     return true
   } catch (err) {
     console.error('[VisorCocina] onCambiarEstado:', err)
-    // A2: el backend rechaza (409) una transición que ya no aplica, p. ej. si
+    // El backend rechaza (409) una transición que ya no aplica, p. ej. si
     // otra pantalla avanzó o canceló la orden. Se muestra su mensaje y se
     // recarga el tablero para que refleje el estado real.
     $q.notify({

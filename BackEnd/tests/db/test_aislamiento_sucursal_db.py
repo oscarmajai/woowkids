@@ -1,4 +1,4 @@
-"""C1 — Aislamiento por sucursal contra PostgreSQL real.
+"""Aislamiento por sucursal contra PostgreSQL real.
 
 Siembra dos sucursales (A con datos de todos los módulos, B con su propio
 admin y caja abierta) en una BD **desechable** y, para cada endpoint de
@@ -52,10 +52,10 @@ SUC_B = _u(2)
 
 USUARIOS = {
     # clave: (id, email, rol_id, sucursal)
-    "admin_a": (_u(11), "c1.admin.a@woowkids.dev", 2, SUC_A),
-    "admin_b": (_u(12), "c1.admin.b@woowkids.dev", 2, SUC_B),
-    "cajero_b": (_u(13), "c1.cajero.b@woowkids.dev", 3, SUC_B),
-    "sistema": (_u(14), "c1.sistema@woowkids.dev", 1, None),
+    "admin_a": (_u(11), "aislamiento.admin.a@woowkids.dev", 2, SUC_A),
+    "admin_b": (_u(12), "aislamiento.admin.b@woowkids.dev", 2, SUC_B),
+    "cajero_b": (_u(13), "aislamiento.cajero.b@woowkids.dev", 3, SUC_B),
+    "sistema": (_u(14), "aislamiento.sistema@woowkids.dev", 1, None),
 }
 
 # Recursos de la sucursal A.
@@ -98,12 +98,12 @@ async def sembrar(conn: asyncpg.Connection) -> None:
     i = IDS
     sql = f"""
     INSERT INTO public.sucursales (id, nombre, clave) VALUES
-      ('{SUC_A}', 'C1 Sucursal A', 'C1A'), ('{SUC_B}', 'C1 Sucursal B', 'C1B')
+      ('{SUC_A}', 'Aislamiento Sucursal A', 'AISA'), ('{SUC_B}', 'Aislamiento Sucursal B', 'AISB')
       ON CONFLICT DO NOTHING;
     INSERT INTO public.usuarios (id, email, password_hash, nombre_completo, rol) VALUES
       {
         ", ".join(
-            f"('{uid}', '{email}', '{_HASH}', 'C1 {clave}', {rol})"
+            f"('{uid}', '{email}', '{_HASH}', 'Aislamiento {clave}', {rol})"
             for clave, (uid, email, rol, _s) in USUARIOS.items()
         )
     }
@@ -116,12 +116,13 @@ async def sembrar(conn: asyncpg.Connection) -> None:
     }
       ON CONFLICT DO NOTHING;
     INSERT INTO public.proveedores (id, sucursal_id, nombre)
-      VALUES ('{i["proveedor"]}', '{SUC_A}', 'C1 Proveedor A') ON CONFLICT DO NOTHING;
+      VALUES ('{i["proveedor"]}', '{SUC_A}', 'Aislamiento Proveedor A') ON CONFLICT DO NOTHING;
     INSERT INTO public.insumos (id, sucursal_id, nombre, unidad_base_id, unidad_compra_id)
-      VALUES ('{i["insumo"]}', '{SUC_A}', 'C1 Leche A', '{unidad}', '{unidad}')
+      VALUES ('{i["insumo"]}', '{SUC_A}', 'Aislamiento Leche A', '{unidad}', '{unidad}')
       ON CONFLICT DO NOTHING;
     INSERT INTO public.presentaciones_insumo (id, insumo_id, nombre, equivalencia_base)
-      VALUES ('{i["presentacion"]}', '{i["insumo"]}', 'C1 Caja', 12) ON CONFLICT DO NOTHING;
+      VALUES ('{i["presentacion"]}', '{i["insumo"]}', 'Aislamiento Caja', 12)
+      ON CONFLICT DO NOTHING;
     INSERT INTO public.compras (id, sucursal_id, proveedor_id)
       VALUES ('{i["compra"]}', '{SUC_A}', '{i["proveedor"]}') ON CONFLICT DO NOTHING;
     INSERT INTO public.detalle_compras
@@ -129,26 +130,28 @@ async def sembrar(conn: asyncpg.Connection) -> None:
       VALUES ('{i["detalle_compra"]}', '{i["compra"]}', '{i["insumo"]}', 1, 10, '{unidad}')
       ON CONFLICT DO NOTHING;
     INSERT INTO public.productos (id, sucursal_id, nombre, precio_unitario, tipo) VALUES
-      ('{i["producto"]}', '{SUC_A}', 'C1 Pizza A', 95, 'A'),
-      ('{i["producto2"]}', '{SUC_A}', 'C1 Refresco A', 22, 'B')
+      ('{i["producto"]}', '{SUC_A}', 'Aislamiento Pizza A', 95, 'A'),
+      ('{i["producto2"]}', '{SUC_A}', 'Aislamiento Refresco A', 22, 'B')
       ON CONFLICT DO NOTHING;
     INSERT INTO public.productos (id, sucursal_id, nombre, precio_unitario, tipo, es_combo)
-      VALUES ('{i["combo"]}', '{SUC_A}', 'C1 Combo A', 110, 'C', TRUE) ON CONFLICT DO NOTHING;
+      VALUES ('{i["combo"]}', '{SUC_A}', 'Aislamiento Combo A', 110, 'C', TRUE)
+      ON CONFLICT DO NOTHING;
     INSERT INTO public.producto_combo (combo_id, producto_id, cantidad)
       VALUES ('{i["combo"]}', '{i["producto"]}', 1) ON CONFLICT DO NOTHING;
     INSERT INTO public.paquetes (id, sucursal_id, nombre, precio_base, max_invitados)
-      VALUES ('{i["paquete"]}', '{SUC_A}', 'C1 Paquete A', 1000, 30) ON CONFLICT DO NOTHING;
+      VALUES ('{i["paquete"]}', '{SUC_A}', 'Aislamiento Paquete A', 1000, 30)
+      ON CONFLICT DO NOTHING;
     INSERT INTO public.tipos_evento (id, sucursal_id, nombre)
-      VALUES ('{i["tipo_evento"]}', '{SUC_A}', 'C1 Cumpleaños A') ON CONFLICT DO NOTHING;
+      VALUES ('{i["tipo_evento"]}', '{SUC_A}', 'Aislamiento Cumpleaños A') ON CONFLICT DO NOTHING;
     INSERT INTO public.paquete_tipos_evento (paquete_id, tipo_evento_id)
       VALUES ('{i["paquete"]}', '{i["tipo_evento"]}') ON CONFLICT DO NOTHING;
     INSERT INTO public.extras (id, sucursal_id, nombre, precio)
-      VALUES ('{i["extra"]}', '{SUC_A}', 'C1 Piñata A', 100) ON CONFLICT DO NOTHING;
+      VALUES ('{i["extra"]}', '{SUC_A}', 'Aislamiento Piñata A', 100) ON CONFLICT DO NOTHING;
     INSERT INTO public.pulseras (id, sucursal_id, pulsera_rfid)
       VALUES ('{i["pulsera"]}', '{SUC_A}', 'WK-9100001') ON CONFLICT DO NOTHING;
     INSERT INTO public.cajas (id, sucursal_id, codigo, nombre, numero) VALUES
-      ('{i["caja"]}', '{SUC_A}', 'C1-A', 'C1 Caja A', 91),
-      ('{i["caja_b"]}', '{SUC_B}', 'C1-B', 'C1 Caja B', 92)
+      ('{i["caja"]}', '{SUC_A}', 'AIS-A', 'Aislamiento Caja A', 91),
+      ('{i["caja_b"]}', '{SUC_B}', 'AIS-B', 'Aislamiento Caja B', 92)
       ON CONFLICT DO NOTHING;
     INSERT INTO public.apertura_caja (id, caja_id, cajero_id, turno_id, fondo_inicial, estado)
       VALUES
@@ -176,7 +179,7 @@ async def sembrar(conn: asyncpg.Connection) -> None:
       VALUES ('{i["pago_reservacion"]}', '{i["reservacion"]}', '{metodo}', 100)
       ON CONFLICT DO NOTHING;
     INSERT INTO public.comandas (id, sucursal_id, ticket_numero, total_final)
-      VALUES ('{i["comanda"]}', '{SUC_A}', 'C1-0001', 95) ON CONFLICT DO NOTHING;
+      VALUES ('{i["comanda"]}', '{SUC_A}', 'AIS-0001', 95) ON CONFLICT DO NOTHING;
     INSERT INTO public.tutores (id, sucursal_id, nombre_completo, telefono)
       VALUES ('{i["tutor"]}', '{SUC_A}', 'Tutor Privado A', '3300000002')
       ON CONFLICT DO NOTHING;
@@ -266,7 +269,7 @@ def _venta() -> dict[str, Any]:
         "detalles_comanda": [
             {
                 "producto_id": IDS["producto"],
-                "nombre": "C1 Pizza A",
+                "nombre": "Aislamiento Pizza A",
                 "cantidad": 1,
                 "precio_unitario": 95,
                 "subtotal": 95,
@@ -291,7 +294,7 @@ CASOS: list[Caso] = [
         403,
         json=lambda s: {
             "sucursal_id": s,
-            "nombre": "C1 Insumo nuevo",
+            "nombre": "Aislamiento Insumo nuevo",
             "unidad_base_id": IDS["_unidad"],
             "unidad_compra_id": IDS["_unidad"],
         },
@@ -312,19 +315,24 @@ CASOS: list[Caso] = [
         "POST",
         "/api/insumos/{insumo}/presentaciones",
         404,
-        json=lambda s: {"nombre": "C1 Six", "equivalencia_base": 6},
+        json=lambda s: {"nombre": "Aislamiento Six", "equivalencia_base": 6},
     ),
     Caso(
         "PATCH",
         "/api/insumos/{insumo}/presentaciones/{presentacion}",
         404,
-        json=lambda s: {"nombre": "C1 Caja 12"},
+        json=lambda s: {"nombre": "Aislamiento Caja 12"},
     ),
     Caso("DELETE", "/api/insumos/{insumo}/presentaciones/{presentacion}", 404),
     Caso("GET", "/api/proveedores?sucursal_id={suc}", 403),
-    Caso("POST", "/api/proveedores", 403, json=lambda s: {"sucursal_id": s, "nombre": "C1 P2"}),
+    Caso(
+        "POST",
+        "/api/proveedores",
+        403,
+        json=lambda s: {"sucursal_id": s, "nombre": "Aislamiento Proveedor 2"},
+    ),
     Caso("GET", "/api/proveedores/{proveedor}", 404),
-    Caso("PATCH", "/api/proveedores/{proveedor}", 404, json=lambda s: {"nombre": "C1 P"}),
+    Caso("PATCH", "/api/proveedores/{proveedor}", 404, json=lambda s: {"nombre": "Aislamiento P"}),
     Caso("GET", "/api/compras?sucursal_id={suc}", 403),
     Caso(
         "POST",
@@ -344,7 +352,7 @@ CASOS: list[Caso] = [
         },
     ),
     Caso("GET", "/api/compras/{compra}", 404),
-    Caso("PATCH", "/api/compras/{compra}", 404, json=lambda s: {"notas": "C1"}),
+    Caso("PATCH", "/api/compras/{compra}", 404, json=lambda s: {"notas": "Aislamiento"}),
     Caso("POST", "/api/compras/{compra}/recibir", 404),
     # 409 si ya se recibió (en el barrido con uvicorn el estado se acumula).
     Caso("POST", "/api/compras/{compra}/cancelar", 404, positivo=(200, 409)),
@@ -358,14 +366,14 @@ CASOS: list[Caso] = [
         403,
         form=lambda s: {
             "sucursal_id": s,
-            "nombre": "C1 Hot dog",
+            "nombre": "Aislamiento Hot dog",
             "precio_unitario": 50,
             "tipo": "A",
         },
     ),
     Caso("GET", "/api/productos/{producto}", 404),
     Caso("GET", "/api/productos/{combo}/combo-hijos", 404),
-    Caso("PATCH", "/api/productos/{producto}", 404, form=lambda s: {"descripcion": "C1"}),
+    Caso("PATCH", "/api/productos/{producto}", 404, form=lambda s: {"descripcion": "Aislamiento"}),
     Caso("GET", "/api/productos/{producto}/receta", 404),
     Caso("PUT", "/api/productos/{producto}/receta/{insumo}", 404, json=lambda s: {"cantidad": 1}),
     Caso("DELETE", "/api/productos/{producto}/receta/{insumo}", 404, positivo=(204, 404)),
@@ -375,10 +383,10 @@ CASOS: list[Caso] = [
         "POST",
         "/api/paquetes",
         403,
-        json=lambda s: {"sucursal_id": s, "nombre": "C1 Paquete 2", "precio_base": 10},
+        json=lambda s: {"sucursal_id": s, "nombre": "Aislamiento Paquete 2", "precio_base": 10},
     ),
     Caso("GET", "/api/paquetes/{paquete}", 404),
-    Caso("PATCH", "/api/paquetes/{paquete}", 404, json=lambda s: {"descripcion": "C1"}),
+    Caso("PATCH", "/api/paquetes/{paquete}", 404, json=lambda s: {"descripcion": "Aislamiento"}),
     Caso("POST", "/api/paquetes/{paquete}/duplicar", 404),
     Caso("GET", "/api/paquete-tipos-evento/{paquete}", 404),
     Caso("DELETE", "/api/paquete-tipos-evento/{paquete}/{tipo_evento}", 404),
@@ -393,18 +401,31 @@ CASOS: list[Caso] = [
     ),
     Caso("PATCH", "/api/pulseras/{pulsera}", 404, json=lambda s: {"activo": True}),
     Caso(
-        "POST", "/api/extras", 403, json=lambda s: {"sucursal_id": s, "nombre": "C1 E", "precio": 1}
+        "POST",
+        "/api/extras",
+        403,
+        json=lambda s: {"sucursal_id": s, "nombre": "Aislamiento E", "precio": 1},
     ),
     Caso("GET", "/api/extras/{extra}", 404),
-    Caso("PATCH", "/api/extras/{extra}", 404, json=lambda s: {"descripcion": "C1"}),
-    Caso("POST", "/api/tipos-evento", 403, json=lambda s: {"sucursal_id": s, "nombre": "C1 T"}),
+    Caso("PATCH", "/api/extras/{extra}", 404, json=lambda s: {"descripcion": "Aislamiento"}),
+    Caso(
+        "POST",
+        "/api/tipos-evento",
+        403,
+        json=lambda s: {"sucursal_id": s, "nombre": "Aislamiento T"},
+    ),
     Caso("GET", "/api/tipos-evento/{tipo_evento}", 404),
-    Caso("PATCH", "/api/tipos-evento/{tipo_evento}", 404, json=lambda s: {"descripcion": "C1"}),
+    Caso(
+        "PATCH",
+        "/api/tipos-evento/{tipo_evento}",
+        404,
+        json=lambda s: {"descripcion": "Aislamiento"},
+    ),
     # ── Reservaciones (datos personales) ──
     Caso("GET", f"/api/reservaciones/disponibilidad?sucursal_id={{suc}}&{_FECHA}", 403),
     Caso("GET", "/api/reservaciones/evento-cercano/{suc}", 403),
     Caso("GET", "/api/reservaciones/{reservacion}", 404),
-    Caso("PATCH", "/api/reservaciones/{reservacion}", 404, json=lambda s: {"notas": "C1"}),
+    Caso("PATCH", "/api/reservaciones/{reservacion}", 404, json=lambda s: {"notas": "Aislamiento"}),
     Caso("POST", "/api/reservaciones", 403, json=_reservacion),
     Caso("GET", "/api/reservacion-extras/reservacion/{reservacion}", 404),
     Caso("GET", "/api/reservacion-extras/{reservacion_extra}", 404),
@@ -432,7 +453,12 @@ CASOS: list[Caso] = [
     ),
     Caso("GET", "/api/pagos-reservacion/reservacion/{reservacion}", 404),
     Caso("GET", "/api/pagos-reservacion/{pago_reservacion}", 404),
-    Caso("PATCH", "/api/pagos-reservacion/{pago_reservacion}", 404, json=lambda s: {"notas": "C1"}),
+    Caso(
+        "PATCH",
+        "/api/pagos-reservacion/{pago_reservacion}",
+        404,
+        json=lambda s: {"notas": "Aislamiento"},
+    ),
     Caso(
         "POST",
         "/api/pagos-reservacion",
@@ -445,7 +471,7 @@ CASOS: list[Caso] = [
     ),
     Caso("DELETE", "/api/reservacion-extras/{reservacion_extra}", 404),
     Caso("DELETE", "/api/reservacion-productos/{reservacion_producto}", 404),
-    # N-A1: un pago registrado no se borra (409); el alcance se valida antes.
+    # Un pago registrado no se borra (409); el alcance se valida antes.
     Caso("DELETE", "/api/pagos-reservacion/{pago_reservacion}", 404, positivo=(409,)),
     Caso("DELETE", "/api/reservaciones/{reservacion}", 404),
     # ── Cajas y arqueos ──
@@ -454,7 +480,7 @@ CASOS: list[Caso] = [
     Caso("GET", "/api/turnos-caja/historial/resumen?sucursal_id={suc}", 403),
     Caso("GET", "/api/turnos-caja/{apertura}/retiros", 404),
     Caso("GET", "/api/cajas?sucursal_id={suc}", 403),
-    Caso("PATCH", "/api/cajas/{caja}", 404, json=lambda s: {"nombre": "C1 Caja A2"}),
+    Caso("PATCH", "/api/cajas/{caja}", 404, json=lambda s: {"nombre": "Aislamiento Caja 2"}),
     # ── Estancias, comandas y pagos ──
     Caso("GET", "/api/estancias/activos/{suc}", 403),
     Caso("GET", "/api/estancias/productos/{suc}", 403),
@@ -476,7 +502,7 @@ CASOS: list[Caso] = [
     Caso("GET", "/api/pagos/detalles/estancia/{registro}", 404),
     Caso("GET", "/api/pagos/detalles/reservacion/{reservacion}", 404),
     Caso("PATCH", "/api/comandas/{comanda}/estado", 404, json=lambda s: {"estado_actual": "E"}),
-    # Producto de otra sucursal: lo rechaza el cálculo de precios del servidor (C2).
+    # Producto de otra sucursal: lo rechaza el cálculo de precios del servidor.
     Caso("POST", "/api/pagos/completar", 422, json=lambda s: _venta()),
     # ── Lealtad y sucursal ──
     Caso("GET", "/api/lealtad/configuracion?sucursal_id={suc}", 403),

@@ -143,7 +143,7 @@ async def login(
             branch_id=sucursal_efectiva,
             branch_name=branch_name,
             permissions=permissions,
-            # B3: antes siempre False (solo /auth/me lo calculaba).
+            # Se calcula aquí igual que en /auth/me.
             tiene_pin=bool(usuario["pin_hash"]),
             debe_cambiar_password=debe_cambiar_password,
         ),
@@ -217,7 +217,7 @@ async def refresh_access_token(
             branch_id=sucursal_efectiva,
             branch_name=branch_name,
             permissions=permissions,
-            # B3: antes siempre False (solo /auth/me lo calculaba).
+            # Se calcula aquí igual que en /auth/me.
             tiene_pin=bool(usuario["pin_hash"]),
             debe_cambiar_password=usuario["debe_cambiar_password"],
         ),

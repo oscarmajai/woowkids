@@ -147,7 +147,7 @@ async def crear_comanda(
     usan las comandas automáticas de eventos, cuyo ingreso ya se cobró como
     anticipo/liquidación en pagos_reservacion (registrarlo aquí lo contaría dos
     veces y descuadraría el arqueo), y POST /comandas, que crea la comanda sin
-    cobrarla (N10).
+    cobrarla.
 
     metodo_pago_id va en None temporalmente: el módulo de métodos de pago para
     comandas todavía no está integrado (columna nullable a propósito mientras tanto).
@@ -156,7 +156,7 @@ async def crear_comanda(
 
     async with conn.transaction():
         if apertura_caja_id is not None:
-            # N1: el turno debe seguir ABIERTA bajo bloqueo hasta que la venta
+            # El turno debe seguir ABIERTA bajo bloqueo hasta que la venta
             # confirme.
             await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
         comanda = await comanda_repository.crear_comanda_con_detalles(
@@ -193,11 +193,11 @@ async def crear_comanda_pos(
     current_user: TokenData,
 ) -> Comanda:
     """POST /comandas: como crear_comanda, pero con los precios y el total
-    recalculados con el catálogo de la sucursal (C2); 409 si el cliente
+    recalculados con el catálogo de la sucursal; 409 si el cliente
     mandó otros. Las comandas automáticas de eventos no pasan por aquí: usan
     el precio del paquete, no el del catálogo.
 
-    N10: la comanda se crea SIN cobrar, así que no registra ningún movimiento
+    La comanda se crea SIN cobrar, así que no registra ningún movimiento
     de venta en la caja. Antes registraba el total como venta sin método de
     pago, que el arqueo contaba como efectivo esperado aunque nadie hubiera
     pagado. Lo cobrado entra a la caja con su método al pagar (POST
@@ -221,7 +221,7 @@ async def listar_pendientes(conn: asyncpg.Connection, current_user: TokenData) -
     return comandas
 
 
-# A2: máquina de estados de la comanda. Solo avanza un paso a la vez
+# Máquina de estados de la comanda. Solo avanza un paso a la vez
 # (P → E → L → T) y se cancela (C) desde los estados en que sigue en cocina.
 # T (entregada) y C (cancelada) son terminales: lo entregado ya consumió sus
 # insumos, así que no se cancela ni se revierte su stock.
@@ -276,14 +276,14 @@ async def cambiar_estado(
     token_pin_admin: str | None = None,
 ) -> Comanda | None:
     """
-    Cambia el estado de una comanda siguiendo la máquina de estados (A2) y
-    notifica a los clientes conectados (una sola vez, M27). Registra auditoría
+    Cambia el estado de una comanda siguiendo la máquina de estados y
+    notifica a los clientes conectados (una sola vez). Registra auditoría
     (modificado, modificado_por). Retorna None si la comanda no existe.
 
     Cancelar ('C') exige motivo, desactiva la comanda y revierte el stock y
     los puntos de lealtad. Todo bajo el bloqueo de la fila de la comanda: la
     reversión ocurre una sola vez aunque lleguen cancelaciones simultáneas.
-    Si la comanda tiene pagos (A4), además exige `token_pin_admin` (PIN de un
+    Si la comanda tiene pagos, además exige `token_pin_admin` (PIN de un
     administrador de la sucursal) y registra la devolución en el turno de
     caja abierto de quien cancela (ver devolucion_service).
     """
@@ -383,7 +383,7 @@ async def devolver_entregada(
     motivo: str,
     token_pin_admin: str | None = None,
 ) -> Comanda | None:
-    """A4: devuelve al cliente el dinero de una comanda ya entregada (T).
+    """Devuelve al cliente el dinero de una comanda ya entregada (T).
 
     Igual que cancelar una comanda cobrada: exige motivo y el token de PIN de
     un administrador de la sucursal (403 AUTORIZACION_ADMIN_REQUERIDA con el
@@ -448,7 +448,7 @@ async def devolver_entregada(
 
 
 def ids_con_hijos_de_combo(detalles: list[DetalleComanda], ids: list[str]) -> list[str]:
-    """`ids` más los hijos de combo cuyos renglones padre están en `ids` (M13),
+    """`ids` más los hijos de combo cuyos renglones padre están en `ids`,
     sin repetir y en el orden original."""
     seleccionados = set(ids)
     extra = [
@@ -473,14 +473,14 @@ async def modificar_comanda_parcial(
     Retorna None si la comanda no existe o no está en estado 'P'.
     Notifica a cocina vía WebSocket después de la modificación.
 
-    A4: quitar todos los productos de una comanda cobrada equivale a
+    Quitar todos los productos de una comanda cobrada equivale a
     cancelarla, y eso exige la autorización y la devolución de cambiar_estado:
     responde 409 para que el cliente use ese flujo.
 
-    M13: quitar el renglón de un combo quita también sus productos (los hijos
+    Quitar el renglón de un combo quita también sus productos (los hijos
     con detalle_padre_id = ese renglón).
 
-    B5: `modificado_esperado` (opcional) es el `modificado` de la comanda que
+    `modificado_esperado` (opcional) es el `modificado` de la comanda que
     vio el cliente; si cambió, 409 COMANDA_MODIFICADA sin tocar nada.
     """
     if modificado_esperado is not None:

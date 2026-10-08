@@ -1,4 +1,4 @@
-"""M1 — el correo de los usuarios no distingue mayúsculas.
+"""El correo de los usuarios no distingue mayúsculas.
 
 Pruebas con BD real: tests/db/test_usuarios_sesion_db.py.
 """
@@ -62,7 +62,7 @@ def _usuario_record(**overrides):
 _BASE = {"full_name": "Juan", "role": ROL_CAJERO}
 
 
-# ── M1: correo normalizado ─────────────────────────────────────────────────
+# ── Correo normalizado ─────────────────────────────────────────────────────
 
 
 def test_alta_y_edicion_normalizan_el_correo():

@@ -8,7 +8,7 @@ import {
   MENSAJE_STOCK_CONTADO,
 } from '@/utils/ajusteStock'
 
-describe('ajusteStock (B8 / inventario B14)', () => {
+describe('ajusteStock', () => {
   it('la cantidad negativa del ajuste manual no es válida', () => {
     expect(esCantidadAjusteValida(-5)).toBe(false)
     expect(reglaCantidadAjuste(-5)).toBe(MENSAJE_CANTIDAD_AJUSTE)

@@ -1,7 +1,7 @@
 """
 app/api/routers/unidades_medida.py
 Router de unidades de medida — solo lectura, el catálogo se siembra por
-migración (fase 1 de inventario). El router nunca accede a un repository ni
+migración. El router nunca accede a un repository ni
 escribe SQL.
 """
 

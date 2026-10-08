@@ -31,7 +31,7 @@ async def crear(
     insumo = await insumo_repository.obtener(conn, insumo_id)
     if not insumo:
         raise NoEncontrado("Insumo")
-    # M22: un insumo eliminado no admite presentaciones nuevas.
+    # Un insumo eliminado no admite presentaciones nuevas.
     if not insumo["activo"]:
         raise RecursoInactivoError(
             f"El insumo «{insumo['nombre']}» está eliminado; no se le pueden agregar "

@@ -38,7 +38,7 @@ import { mensajeDeError } from '@/utils/errorHandler'
 import { printTicketElement } from '@/utils/ticketPrinting'
 
 /**
- * N5: reimpresión del comprobante de entrada desde Control de Acceso. El
+ * Reimpresión del comprobante de entrada desde Control de Acceso. El
  * código nuevo se pide hasta que el cajero confirma (pedirlo revoca el QR
  * anterior), y después el mismo diálogo permite volver a imprimir.
  */

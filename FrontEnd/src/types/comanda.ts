@@ -49,7 +49,7 @@ export interface DetalleComanda {
   // Instancia de combo: identifica la unidad a la que pertenece el hijo
   // (permite separar combos múltiples en el visor de cocina).
   id_combo_padre?: string | null
-  // Renglón (id de detalle) del combo al que pertenece el hijo (M13).
+  // Renglón (id de detalle) del combo al que pertenece el hijo.
   detalle_padre_id?: string | null
 }
 

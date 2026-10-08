@@ -64,7 +64,7 @@ function montar() {
   })
 }
 
-describe('CheckoutPage: el cargo extra se cobra antes de dar la salida (UX)', () => {
+describe('CheckoutPage: el cargo extra se cobra antes de dar la salida', () => {
   beforeEach(() => {
     vi.mocked(cotizarCheckout).mockReset()
     vi.mocked(checkout).mockReset()

@@ -1,4 +1,4 @@
-"""Pendiente B5 #6: GET /sucursales/{id}/indicadores (ventas, niños, eventos,
+"""GET /sucursales/{id}/indicadores (ventas, niños, eventos,
 cajas abiertas), de solo lectura sobre tablas existentes."""
 
 from datetime import date
@@ -93,7 +93,7 @@ async def test_sucursal_inexistente_lanza_not_found():
 
 @pytest.mark.asyncio
 async def test_rango_invertido_lanza_error_sin_consultar():
-    """B1: desde > hasta respondía 200 con ceros (y el CSV, ceros)."""
+    """desde > hasta responde error en vez de 200 con ceros (y el CSV, ceros)."""
     consulta = AsyncMock()
     with (
         patch("app.services.branch_service.get_indicadores_sucursal", consulta),

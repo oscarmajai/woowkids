@@ -79,7 +79,7 @@ _SELECT = f"""
 
 
 def normalizar_email(email: str) -> str:
-    """M1: los correos no distinguen mayúsculas ni espacios alrededor. Se
+    """Los correos no distinguen mayúsculas ni espacios alrededor. Se
     guardan y se buscan siempre así (índice único sobre lower(email), 089)."""
     return email.strip().lower()
 
@@ -101,7 +101,7 @@ async def get_usuario_by_id(conn: asyncpg.Connection, user_id: UUID) -> UsuarioR
     return _row_to_record(row) if row else None
 
 
-# A10: filtro de estado del listado. None = todos (activos e inactivos).
+# Filtro de estado del listado. None = todos (activos e inactivos).
 _FILTRO_ACTIVO_SQL = "($1::boolean IS NULL OR u.activo = $1)"
 
 
@@ -129,7 +129,7 @@ async def get_usuarios_by_branch(
 async def email_exists(
     conn: asyncpg.Connection, email: str, excluir_id: UUID | None = None
 ) -> bool:
-    """M1: compara sin distinguir mayúsculas e incluye usuarios inactivos (el
+    """Compara sin distinguir mayúsculas e incluye usuarios inactivos (el
     correo sigue siendo de esa cuenta, que se puede reactivar)."""
     row = await conn.fetchrow(
         """
@@ -396,7 +396,7 @@ async def get_autorizador_por_email(
     conn: asyncpg.Connection, email: str, sucursal_id: UUID | str | None, permiso: str
 ) -> dict[str, Any] | None:
     """Usuario activo por correo con lo necesario para decidir si puede
-    autorizar en una sucursal (A16): si su rol tiene ``permiso`` y si está
+    autorizar en una sucursal: si su rol tiene ``permiso`` y si está
     asignado (activo) a ``sucursal_id``."""
     sucursal_uuid = UUID(str(sucursal_id)) if sucursal_id else None
     row = await conn.fetchrow(

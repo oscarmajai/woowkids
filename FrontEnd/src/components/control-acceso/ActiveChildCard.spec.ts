@@ -34,7 +34,7 @@ const montar = (child: ActiveChild) =>
     global: { stubs: { BaseDialog: true, FotosRegistroDialog: true } },
   })
 
-describe('ActiveChildCard: notas / alergias (M26)', () => {
+describe('ActiveChildCard: notas / alergias', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
@@ -56,7 +56,7 @@ describe('ActiveChildCard: notas / alergias (M26)', () => {
   })
 })
 
-describe('ActiveChildCard: reimprimir comprobante (N5)', () => {
+describe('ActiveChildCard: reimprimir comprobante', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })

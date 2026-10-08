@@ -29,7 +29,7 @@ async def consume_ws_ticket(
     ticket_hash: str,
 ) -> dict[str, Any] | None:
     """Marca el ticket como usado de forma atómica y devuelve sus claims, o
-    None si no existe, ya se usó o expiró (de un solo uso, QA #32)."""
+    None si no existe, ya se usó o expiró (de un solo uso)."""
     row = await conn.fetchrow(
         """
         UPDATE public.ws_tickets

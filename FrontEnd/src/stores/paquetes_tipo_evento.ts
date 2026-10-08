@@ -44,7 +44,7 @@ export const usePaquetesTipoEventoStore = defineStore('paquetes_tipo_evento', {
       )
     },
     /**
-     * Deja al paquete con exactamente los tipos de evento `despues` (M17):
+     * Deja al paquete con exactamente los tipos de evento `despues`:
      * asocia los nuevos y desasocia los que se quitaron, partiendo de `antes`.
      */
     async sincronizar(paquete_id: string, antes: string[], despues: string[]) {

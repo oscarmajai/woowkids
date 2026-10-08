@@ -83,7 +83,7 @@ describe('useTicketComanda', () => {
     expect(itemsTicket.value.filter((i) => !i.es_hijo_combo)).toHaveLength(2)
   })
 
-  describe('actualizarPrecios (C2: el backend rechazó el cobro por precio viejo)', () => {
+  describe('actualizarPrecios (el backend rechazó el cobro por precio viejo)', () => {
     const pizza = {
       id: 'pizza',
       nombre: 'Pizza individual',

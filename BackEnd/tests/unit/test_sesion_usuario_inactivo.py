@@ -1,4 +1,4 @@
-"""A11 — el token y el refresh token de un usuario desactivado o eliminado
+"""El token y el refresh token de un usuario desactivado o eliminado
 ya no sirven.
 
 Pruebas con BD real: tests/db/test_usuarios_sesion_db.py.
@@ -66,7 +66,7 @@ def _usuario_record(**overrides):
 _BASE = {"full_name": "Juan", "role": ROL_CAJERO}
 
 
-# ── A11: token de usuario inactivo o inexistente ───────────────────────────
+# ── Token de usuario inactivo o inexistente ────────────────────────────────
 
 
 def _jwt(role: str = ROL_CAJERO, sub: str | None = None) -> str:

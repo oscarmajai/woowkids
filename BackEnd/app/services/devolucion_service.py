@@ -1,6 +1,6 @@
 """
 app/services/devolucion_service.py
-A4: devolución al cliente de una comanda ya cobrada, al cancelarla (P/E/L) o
+Devolución al cliente de una comanda ya cobrada, al cancelarla (P/E/L) o
 al devolver una ya entregada (T, comanda_service.devolver_entregada).
 
 Antes, cancelar una orden pagada no movía la caja (el efectivo esperado del

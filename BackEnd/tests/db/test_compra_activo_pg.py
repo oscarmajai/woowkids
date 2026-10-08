@@ -1,5 +1,6 @@
-"""B10 contra PostgreSQL real: `PATCH activo=false` sobre una compra recibida
-respondía 200 sin efecto (seguía en el listado y el stock no se revertía)."""
+"""Contra PostgreSQL real: `PATCH activo=false` sobre una compra recibida
+responde 409 en vez de 200 sin efecto (seguiría en el listado y el stock no se
+revertiría)."""
 
 import asyncpg
 import pytest
@@ -11,7 +12,7 @@ from tests.db.conftest import Escenario
 from tests.db.inventario_datos import crear_compra, crear_insumo, linea, unidad
 
 
-async def test_b10_compra_recibida_no_acepta_activo_false(
+async def test_compra_recibida_no_acepta_activo_false(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:

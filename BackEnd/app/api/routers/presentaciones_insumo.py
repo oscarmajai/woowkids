@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/insumos", tags=["Presentaciones de Insumo"])
 async def _asegurar_presentacion(
     conn: asyncpg.Connection, current_user: TokenData, insumo_id: UUID, presentacion_id: UUID
 ) -> None:
-    """C1: el insumo de la ruta y la presentación deben ser de la sucursal de
+    """El insumo de la ruta y la presentación deben ser de la sucursal de
     la sesión (404 si no)."""
     await alcance_service.asegurar_recurso(conn, current_user, "insumo", insumo_id)
     await alcance_service.asegurar_recurso(

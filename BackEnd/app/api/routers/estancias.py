@@ -92,7 +92,7 @@ async def onboarding(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
-    # C1: la entrada se registra en la sucursal de la sesión (403 si no).
+    # La entrada se registra en la sucursal de la sesión (403 si no).
     data.sucursalId = resolver_sucursal_obligatoria(current_user, data.sucursalId)
     if data.reservacionId is not None:
         await alcance_service.asegurar_recurso(
@@ -140,7 +140,7 @@ async def pago_estancia_extra(
     response_model=ComprobanteEstanciaResponse,
     summary="Reimprimir comprobante de entrada",
     description=(
-        "N5 — re-emite el código del QR del portal de padres de un registro "
+        "Re-emite el código del QR del portal de padres de un registro "
         "con niños en estancia (el código anterior deja de valer) y devuelve "
         "los datos para imprimir el comprobante de nuevo. 404 si el registro "
         "no es de la sucursal; 409 REGISTRO_NO_ACTIVO si ya no hay niños dentro."
@@ -233,7 +233,7 @@ async def estancias_ws(
     a los clientes de la sucursal correspondiente (ver app/core/ws_manager.py),
     para refrescar Control de Acceso sin necesidad de polling.
 
-    QA #32: el ticket efímero (?ticket=..., ver POST /auth/ws-ticket) reemplaza
+    El ticket efímero (?ticket=..., ver POST /auth/ws-ticket) reemplaza
     al JWT crudo en la URL; ?token=... se sigue aceptando mientras
     settings.WS_ACEPTA_JWT sea true. Va por query param porque el handshake WS
     nativo del navegador no admite headers custom."""

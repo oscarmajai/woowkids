@@ -91,7 +91,7 @@ describe('recalcularReservacion', () => {
     expect(recalcularReservacion(casiLiquidada, 50, { invitados: 1 }).anticipoExcede).toBe(true)
   })
 
-  it('compara contra todo lo pagado, no solo contra el anticipo (C3)', () => {
+  it('compara contra todo lo pagado, no solo contra el anticipo', () => {
     // Anticipo de 2010 + abonos: ya se pagaron 6600 aunque `anticipo` no cambie.
     const conAbonos = { ...RESERVACION, anticipo: '2010', monto_pagado: '6600' } as Reservaciones
     expect(recalcularReservacion(conAbonos, 50, { invitados: 1 }).anticipoExcede).toBe(true)
@@ -120,7 +120,7 @@ describe('recalcularReservacion', () => {
     expect(regreso.precio_total).toBe(RESERVACION.precio_total)
   })
 
-  it('recalcula los extras por persona y por hora (M15), igual que el servidor', () => {
+  it('recalcula los extras por persona y por hora, igual que el servidor', () => {
     const conExtras = {
       ...RESERVACION,
       precio_extras: '1850', // 10 × 35 + 3 × 350 + 450
@@ -150,7 +150,7 @@ describe('faltanPulserasHoy (UX Nueva reservación)', () => {
   })
 
   it('no compara las libres de hoy contra un evento futuro', () => {
-    // E2E: "La sucursal tiene 14 pulseras y el evento pide 20" para un evento en 3 semanas.
+    // Caso: "La sucursal tiene 14 pulseras y el evento pide 20" para un evento en 3 semanas.
     expect(faltanPulserasHoy(14, 20, 21)).toBe(false)
   })
 
@@ -160,7 +160,7 @@ describe('faltanPulserasHoy (UX Nueva reservación)', () => {
   })
 })
 
-describe('resumenPorCobrar (N13)', () => {
+describe('resumenPorCobrar', () => {
   it('no suma las reservaciones canceladas aunque tengan pagos y saldo', () => {
     const r = [
       { id: 'a', estado: 'confirmada', saldo_pendiente: '5330.00' },
@@ -173,7 +173,7 @@ describe('resumenPorCobrar (N13)', () => {
   })
 })
 
-describe('detallePulseras (B19)', () => {
+describe('detallePulseras', () => {
   it('desglosa el cargo guardado en precio_personas_extra como pulseras', () => {
     // R-0008: "Personas extra $2,520" era 12 pulseras × 3 h × $70.
     const r = { numero_personas: 12, horas_reservadas: 3, precio_personas_extra: '2520.00' }
@@ -186,7 +186,7 @@ describe('detallePulseras (B19)', () => {
   })
 })
 
-describe('cantidadExtra (M15)', () => {
+describe('cantidadExtra', () => {
   it('por persona = invitados, por hora = horas, por evento = 1', () => {
     expect(cantidadExtra('persona', 12, 3)).toBe(12)
     expect(cantidadExtra('hora', 12, 3)).toBe(3)
@@ -217,7 +217,7 @@ describe('plazo de liquidación', () => {
     expect(fechaLimiteLiquidacion('2027-02-25').toISOString().slice(0, 10)).toBe('2027-02-18')
   })
 
-  it('N-A2: el aviso del comprobante nombra la fecha límite y la cancelación', () => {
+  it('el aviso del comprobante nombra la fecha límite y la cancelación', () => {
     const fecha = fechaLimiteLiquidacionTexto('2027-02-25')
     expect(fecha).toContain('18')
     expect(fecha).toContain('2027')

@@ -17,7 +17,7 @@ const linea = (detalle_id: string, pendiente: number, ahora: LineaRecepcionUI['a
   ahora,
 })
 
-describe('armarRecepcion (A12)', () => {
+describe('armarRecepcion', () => {
   it('manda todas las líneas, incluidas las que quedan en 0', () => {
     const payload = armarRecepcion([
       linea('caja', 2, 1),

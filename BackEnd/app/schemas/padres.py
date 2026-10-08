@@ -18,7 +18,7 @@ class SucursalInfo(BaseModel):
 
 
 class LealtadPadreInfo(BaseModel):
-    """WP B4, pendiente 5: saldo de puntos de lealtad del tutor, mostrado en
+    """Saldo de puntos de lealtad del tutor, mostrado en
     la tarjeta "Tus puntos Woow" del dashboard del portal de padres."""
 
     saldo: int
@@ -67,7 +67,7 @@ class PadreDashboardResponse(BaseModel):
 
 
 class PadreNinosActivosResponse(BaseModel):
-    """QA #31 — respuesta del polling autenticado con el token de `/padres/auth`
+    """Respuesta del polling autenticado con el token de `/padres/auth`
     (Authorization: Bearer), sin volver a mandar el código."""
 
     ninosActivos: list[NinoActivoResponse]  # noqa: N815

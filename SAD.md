@@ -1,22 +1,22 @@
 # SAD — Software Architecture Document
-## Sistema Mercury · FEC
+## Woow Kids (proyecto Mercury)
 
-**Versión:** 1.1  
-**Fecha:** 2026-06-30  
-**Autor:** Generado a partir del código en `integration/develop`, ya mergeada y pusheada a `develop` en ambos repos (pendiente promover a `main`)
+**Versión del documento:** 2.0  
+**Fecha:** 2026-10-05  
+**Alcance:** monorepo completo (`FrontEnd/` y `BackEnd/`), rama `develop`
 
 ---
 
 ## Tabla de contenidos
 
 1. [Visión general del sistema](#1-visión-general-del-sistema)
-2. [Repositorios y estructura de proyecto](#2-repositorios-y-estructura-de-proyecto)
+2. [Repositorio y estructura de proyecto](#2-repositorio-y-estructura-de-proyecto)
 3. [Arquitectura del BackEnd](#3-arquitectura-del-backend)
 4. [Arquitectura del FrontEnd](#4-arquitectura-del-frontend)
 5. [Base de datos](#5-base-de-datos)
 6. [Autenticación y autorización](#6-autenticación-y-autorización)
 7. [Comunicación FrontEnd ↔ BackEnd](#7-comunicación-frontend--backend)
-8. [Flujo Git e integración de ramas](#8-flujo-git-e-integración-de-ramas)
+8. [Flujo Git y releases](#8-flujo-git-y-releases)
 9. [Calidad de código](#9-calidad-de-código)
 10. [Catálogo de módulos](#10-catálogo-de-módulos)
 11. [Reglas que NO se deben romper](#11-reglas-que-no-se-deben-romper)
@@ -26,29 +26,49 @@
 
 ## 1. Visión general del sistema
 
-Mercury es un sistema "todo en uno" para franquicias de restaurantes y centros de entretenimiento familiar (FEC). Gestiona:
+Woow Kids es un sistema "todo en uno" para franquicias de entretenimiento infantil (FEC). Gestiona:
 
-- **Check-in y registro de infantes** — control de entrada/salida con RFID
-- **Comandas y caja** — punto de venta para cocina y cajero
-- **Reservaciones y eventos** — calendario, paquetes, pagos
-- **Sucursales y usuarios** — administración multisucursal con roles
+- **Estancias**: registro de niños y tutores, entrada y salida con pulseras RFID, cobro por tiempo.
+- **Caja (POS) y cocina**: comandas, cobros, turnos y cierres de caja.
+- **Eventos y reservaciones**: calendario, paquetes, extras y pagos.
+- **Inventario**: insumos, proveedores, compras, recetas de productos y movimientos (kardex, costeo FIFO).
+- **Lealtad**: puntos por celular y sucursal, con canje.
+- **Administración multisucursal**: sucursales, usuarios, roles y permisos, horarios, aviso de privacidad y respaldos.
+- **Portal de padres**: consulta de la estancia en curso con un código de acceso.
 
-El sistema está dividido en dos repositorios independientes que se comunican por HTTP REST:
+Todo el código vive en un solo repositorio (monorepo). El FrontEnd es una SPA que habla con el BackEnd por HTTP REST y WebSockets bajo el prefijo `/api`:
 
 ```
-[FrontEnd — Vue 3 + Quasar]  ──HTTP──▶  [BackEnd — FastAPI + PostgreSQL]
-  github: sistemasiq/mercurio-frontend      github: sistemasiq/mercurio-backend
+Navegador
+   │
+   ▼
+nginx ──── archivos estáticos de la SPA (Vue 3 + Quasar)
+   │
+   └── /api ──▶ BackEnd (FastAPI + asyncpg) ──▶ PostgreSQL
+                         │
+                         └──▶ MinIO (fotos, documentos)
 ```
+
+Se despliega de dos formas (ver [`README.md`](README.md)):
+
+- **Contenedores separados** (`docker-compose.yml`): `db`, `minio`, `backend`, `respaldos` y `frontend`.
+- **Contenedor único** (`Dockerfile.allinone` + `docker/allinone/`): nginx, API, PostgreSQL y MinIO bajo `supervisord`, con los datos en el volumen `/data`.
 
 ---
 
-## 2. Repositorios y estructura de proyecto
+## 2. Repositorio y estructura de proyecto
 
 ```
 Mercury/
-├── SAD.md              ← este documento
-├── BackEnd/            ← API REST (Python / FastAPI)
-└── FrontEnd/           ← SPA (Vue 3 / Quasar / TypeScript)
+├── README.md                  ← cómo levantar el sistema
+├── CONTRIBUTING.md            ← Git Flow, commits y calidad
+├── SAD.md                     ← este documento
+├── docker-compose.yml         ← stack de contenedores separados
+├── Dockerfile.allinone        ← imagen todo en uno
+├── docker/allinone/           ← nginx, supervisord, TLS y arranque de la imagen todo en uno
+├── .github/                   ← CI (ci.yml), release (release.yml) y cálculo de versión
+├── BackEnd/                   ← API REST y WebSockets (Python / FastAPI)
+└── FrontEnd/                  ← SPA (Vue 3 / Quasar / TypeScript)
 ```
 
 ### BackEnd
@@ -60,18 +80,35 @@ BackEnd/
 │   ├── core/
 │   │   ├── config.py            # Settings con pydantic-settings (lee .env)
 │   │   ├── database.py          # Pool asyncpg + dependencia get_db
-│   │   └── security.py          # JWT, bcrypt, refresh tokens
+│   │   ├── security.py          # JWT, bcrypt, refresh tokens, tickets de WebSocket
+│   │   ├── object_storage.py    # Cliente S3 de MinIO
+│   │   ├── roles.py             # Roles estructurales (AdministradorSistema, Administrador)
+│   │   ├── scope.py             # Regla de aislamiento por sucursal
+│   │   └── ws_manager.py        # Conexiones WebSocket por sucursal
 │   ├── api/
-│   │   ├── deps.py              # Dependencias: get_current_user, require_role, require_permission
+│   │   ├── deps.py              # get_current_user, require_role, require_permission
 │   │   └── routers/             # Un archivo por recurso
 │   ├── schemas/                 # Modelos Pydantic v2 (request / response, NO son tablas)
-│   ├── services/                # Lógica de negocio
-│   └── repositories/            # Acceso a BD (SQL crudo con asyncpg)
+│   ├── services/                # Lógica de negocio (incluye los schedulers del lifespan)
+│   ├── repositories/            # Acceso a BD (SQL crudo con asyncpg)
+│   ├── models/                  # Entidades de dominio como dataclasses (sin ORM)
+│   ├── exceptions/              # Excepciones HTTP y manejadores globales
+│   └── utils/                   # Utilidades (exportación CSV)
 ├── sql/
-│   └── migrations/              # Archivos .sql versionados (001_, 002_, …)
+│   ├── migrations/              # Archivos .sql versionados (001_, 002_, …)
+│   ├── schema_maestro.sql       # BD completa generada desde las migraciones
+│   └── seed_local.sql           # Datos de prueba para desarrollo
+├── tests/
+│   ├── unit/                    # Pruebas sin BD
+│   └── db/                      # Pruebas contra un PostgreSQL real (TEST_DATABASE_URL)
+├── docker/                      # entrypoint.sh (migraciones, SECRET_KEY, admin inicial) y respaldos.sh
+├── scripts/                     # Schema maestro, BD local, prueba de migraciones, respaldos
+├── docs/                        # Guías (autenticación, aviso de privacidad)
+├── Dockerfile
+├── docker-compose.dev.yml       # PostgreSQL + MinIO para desarrollo
 ├── requirements.txt
 ├── requirements-dev.txt
-├── pyproject.toml               # Ruff + mypy + commitlint
+├── pyproject.toml               # Ruff + mypy + pytest
 └── .env.example
 ```
 
@@ -81,24 +118,33 @@ BackEnd/
 FrontEnd/
 ├── src/
 │   ├── main.ts                  # Entry point Vue
+│   ├── App.vue
 │   ├── boot/
 │   │   └── setupPlugins.ts      # Inicializa Quasar, Pinia, router, guards, inactividad
 │   ├── api/                     # Llamadas HTTP (solo arma y dispara la request)
 │   ├── services/                # Lógica de negocio del cliente (orquesta api/)
 │   ├── stores/                  # Estado global con Pinia
-│   ├── composables/             # Lógica reutilizable (use*)
+│   ├── composables/             # Lógica reutilizable (use*), incluido el menú lateral
 │   ├── router/
 │   │   ├── index.ts             # Definición de rutas
-│   │   └── guards.ts            # Guardias de autenticación y roles
-│   ├── layouts/                 # Layouts de Quasar (AuthLayout, MainLayout, SysAdminLayout, AdminLayout)
+│   │   └── guards.ts            # Guardias de autenticación, permisos y turno de caja
+│   ├── layouts/                 # AuthLayout, AppShell, PublicLayout, PadresLayout
 │   ├── pages/                   # Vistas ruteadas
-│   ├── components/              # Componentes reutilizables
+│   ├── components/              # Componentes por módulo, ui/ (kit base) y layout/ (sidebar, topbar)
 │   ├── types/                   # Interfaces y tipos TypeScript compartidos
-│   └── utils/                   # Funciones puras de utilidad
+│   ├── utils/                   # Funciones puras de utilidad
+│   └── css/app.scss             # Paleta, tipografía y variables CSS globales
+├── .husky/                      # Hooks de Git del monorepo (pre-commit, commit-msg)
+├── Dockerfile                   # Build con Node + nginx
+├── nginx.conf                   # Sirve la SPA y hace proxy de /api al backend
 ├── package.json
+├── quasar.config.ts
 ├── vite.config.ts
+├── vitest.config.ts
 └── tsconfig.json
 ```
+
+Las pruebas del FrontEnd viven junto al código, en carpetas `__tests__/`.
 
 ---
 
@@ -108,15 +154,20 @@ FrontEnd/
 
 | Tecnología | Versión | Uso |
 |---|---|---|
-| Python | 3.14 | Lenguaje |
-| FastAPI | 0.115.x | Framework HTTP |
+| Python | 3.12 (imagen y CI; mínimo 3.11) | Lenguaje |
+| FastAPI | 0.115.x | Framework HTTP y WebSockets |
+| Uvicorn | 0.34.x | Servidor ASGI |
 | asyncpg | 0.31.x | Driver PostgreSQL (async) |
 | Pydantic v2 | 2.10.x | Validación y schemas |
 | pydantic-settings | 2.7.x | Variables de entorno |
 | python-jose | 3.3.x | JWT |
-| bcrypt | 5.0.x | Hash de contraseñas |
-| Ruff | — | Lint y formato |
-| mypy | — | Type checking |
+| bcrypt | 5.0.x | Hash de contraseñas y PIN |
+| boto3 | 1.35.x | Cliente S3 para MinIO |
+| ReportLab | 5.0.x | Comprobantes en PDF |
+| PostgreSQL | 16 | Base de datos |
+| Ruff | 0.8.x | Lint y formato |
+| mypy | 1.13.x | Type checking |
+| pytest | 8.3.x | Pruebas |
 
 ### 3.2 Flujo de una request
 
@@ -175,39 +226,73 @@ async def listar(conn: asyncpg.Connection = Depends(get_db)) -> list[UserOut]:
     return await user_service.listar_todos(conn)
 ```
 
+El pool tiene tamaño y tiempos límite configurables (`DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE`, `DB_POOL_ACQUIRE_TIMEOUT`, `DB_COMMAND_TIMEOUT`). Si una petición no consigue conexión a tiempo, la API responde 503 en lugar de quedarse colgada.
+
 ### 3.4 Configuración
 
-Toda la configuración viene del archivo `.env` mediante `pydantic-settings`. **Nunca hardcodear** credenciales, URLs de BD, secret keys ni CORS origins en el código.
+Toda la configuración viene de variables de entorno (o del archivo `.env`) mediante `pydantic-settings`. **Nunca hardcodear** credenciales, URLs de BD, secret keys ni CORS origins en el código.
 
 ```python
-# app/core/config.py — las Settings se leen de .env automáticamente
+# app/core/config.py — extracto
 class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     database_url: str
     cors_origins: list[str] = ["http://localhost:5173"]
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str
+    minio_secret_key: str
 ```
 
-Variables requeridas en `.env` (ver `.env.example`):
-- `SECRET_KEY` — clave de firma JWT
-- `DATABASE_URL` — cadena de conexión PostgreSQL
-- `CORS_ORIGINS` — lista separada por comas (opcional en dev)
+Variables principales (ver `BackEnd/.env.example` y, para los contenedores, `.env.example` de la raíz):
+
+| Variable | Uso |
+|---|---|
+| `SECRET_KEY` | Clave de firma JWT. En contenedor, si viene vacía, `docker/entrypoint.sh` genera una y la guarda en la BD. La API rechaza la clave de fábrica. |
+| `DATABASE_URL` | Cadena de conexión PostgreSQL. |
+| `CORS_ORIGINS` | Lista JSON de orígenes permitidos. |
+| `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_SECURE` | Almacenamiento de archivos. |
+| `COOKIE_SECURE` | Marca la cookie del refresh token como `Secure` (requiere HTTPS). |
+| `REFRESH_EN_BODY`, `WS_ACEPTA_JWT`, `EXIGIR_PIN_TOKEN` | Compatibilidad con clientes anteriores (ver [§12](#12-deuda-técnica-activa)). |
 
 ### 3.5 Entry point y lifespan
 
-El entry point es **`app/main.py`**. No existe `main.py` en la raíz. El lifespan inicializa el pool de conexiones y carga el caché de permisos:
+El entry point es **`app/main.py`**. No existe `main.py` en la raíz. El lifespan inicializa el pool de conexiones, carga el caché de permisos, asegura que exista el bucket de MinIO y arranca dos tareas periódicas:
 
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    await create_pool()                          # inicializa pool asyncpg
+    await create_pool()                                   # pool asyncpg
     async with get_pool().acquire() as conn:
-        await load_cache(conn)                   # carga permisos en memoria
+        await load_cache(conn)                            # permisos en memoria
+    await ensure_bucket()                                 # bucket de MinIO
+    scheduler_task = asyncio.create_task(loop_comandas_eventos())
+    vencidas_task = asyncio.create_task(loop_reservaciones_vencidas())
     yield
+    scheduler_task.cancel()
+    vencidas_task.cancel()
     await close_pool()
 ```
 
-Para correr en desarrollo: `uvicorn app.main:app --reload`
+Para correr en desarrollo: `uvicorn app.main:app --reload` (ver [`BackEnd/SETUP.md`](BackEnd/SETUP.md)). Sin MinIO disponible el arranque no termina.
+
+### 3.6 Tiempo real (WebSockets)
+
+Comandas (`/api/comandas/ws`) y estancias (`/api/estancias/ws`) notifican cambios por WebSocket. `app/core/ws_manager.py` agrupa las conexiones por sucursal. El cliente se autentica con un ticket de un solo uso que pide a `POST /api/auth/ws-ticket` (vigencia de 30 s), para no poner el JWT en la URL.
+
+### 3.7 Archivos
+
+Fotos de niños, identificaciones de tutores, imágenes de productos y demás documentos se guardan en MinIO (API S3) y se sirven a través de la API (`/api/uploads`). Las imágenes de productos son públicas (se muestran en `<img>`); el resto exige sesión y se autoriza por recurso (permiso y sucursal).
+
+### 3.8 Arranque en contenedor y respaldos
+
+`BackEnd/docker/entrypoint.sh` prepara la BD antes de levantar la API:
+
+1. Si la BD está vacía, la crea con `sql/schema_maestro.sql` (y `sql/seed_local.sql` si `SEED_DEMO=true`).
+2. Aplica las migraciones pendientes y las registra en `public.schema_migraciones`. Antes de migrar una BD con datos guarda un respaldo.
+3. Resuelve `SECRET_KEY` y crea el administrador de sistema inicial, que debe cambiar su contraseña al entrar.
+
+Los respaldos programados de BD y archivos los hace `scripts/respaldos.py` (servicio `respaldos` en el compose, proceso propio en la imagen todo en uno).
 
 ---
 
@@ -219,14 +304,16 @@ Para correr en desarrollo: `uvicorn app.main:app --reload`
 |---|---|---|
 | Vue 3 | 3.5.x | Framework UI |
 | TypeScript | 6.x | Lenguaje |
-| Quasar | 2.x | Componentes UI + build |
+| Quasar | 2.x | Componentes UI |
 | Pinia | 3.x | Estado global |
-| Vue Router | 4.x | Enrutamiento |
+| Vue Router | 4.x | Enrutamiento (history mode) |
 | Axios | 1.x | HTTP client |
-| Vite | 8.x | Build tool |
+| Vite | 8.x | Build tool y dev server |
 | ESLint + Prettier | — | Lint y formato |
-| vue-tsc | — | Type checking |
-| Vitest | — | Tests unitarios |
+| vue-tsc | 3.x | Type checking |
+| Vitest | 4.x | Tests unitarios y de componentes |
+
+La tipografía (Plus Jakarta Sans) y los íconos van empaquetados en el build: la aplicación no necesita internet en operación.
 
 ### 4.2 Flujo de datos
 
@@ -238,10 +325,10 @@ Service (src/services/*.ts)
     │  Orquesta llamadas HTTP. Contiene lógica de presentación compleja.
     ▼
 API Module (src/api/*.ts)
-    │  Solo arma la request y la dispara con axiosClient. Sin lógica.
+    │  Solo arma la request y la dispara con apiClient. Sin lógica.
     ▼
-axiosClient (src/api/axiosClient.ts)
-    │  Instancia Axios con interceptores de auth y refresh automático.
+apiClient (src/api/axiosClient.ts)
+    │  Instancia Axios con interceptores de auth, refresh automático y errores.
     ▼
 BackEnd REST API
 ```
@@ -277,44 +364,47 @@ export default {
 </script>
 ```
 
+Los componentes base reutilizables (`PageHeader`, `DataTableCard`, `BaseDialog`, `KpiCard`, `StatusBadge`, `StateBlock`, `TablePager`) están en `src/components/ui/`.
+
 ### 4.4 Layouts y enrutamiento
 
-El router define cuatro layouts según el rol del usuario:
-
-| Layout | Ruta base | Roles |
+| Layout | Rutas | Quién |
 |---|---|---|
-| `AuthLayout` | `/login` | Público |
-| `MainLayout` | `/home` | Cajero, Cocina, Administrador |
-| `SysAdminLayout` | `/sysadmin` | AdministradorSistema |
-| `AdminLayout` | `/admin` | Administrador (módulo eventos/reservaciones) |
+| `AuthLayout` | `/login`, `/cambiar-password` | Público / usuario que debe cambiar su contraseña |
+| `AppShell` | `/home`, `/pos/*`, `/estancias/*`, `/eventos/*`, `/usuarios`, `/sucursales`, `/reportes/*`, catálogos… | Personal autenticado (sidebar + topbar) |
+| `PublicLayout` | `/aviso-de-privacidad` | Público |
+| `PadresLayout` | `/padres/*` | Tutores con código de acceso |
 
-El guard en `src/router/guards.ts` valida autenticación y roles en cada navegación:
+El menú lateral se arma en `src/composables/useAppNavigation.ts` y se filtra por permisos. El guard en `src/router/guards.ts` corre en cada navegación:
 
 ```typescript
-// Flujo del guard
-// 1. Si requiresAuth y no autenticado → intenta refresh → sino redirige a /login
-// 2. Si publicOnly y ya autenticado → redirige al home del rol
-// 3. Si meta.roles definido → verifica que el usuario tenga uno de esos roles
+// Flujo del guard (resumen)
+// 1. Si requiresAuth y no autenticado → intenta refresh → si no, redirige a /login
+// 2. Si publicOnly y ya autenticado → redirige a /home
+// 3. Si el usuario debe cambiar su contraseña → redirige a /cambiar-password
+// 4. Si meta.permissions o meta.roles definidos → verifica que el usuario tenga alguno
+// 5. Si meta.requiresTurno → exige un turno de caja abierto
 ```
 
-Siempre definir `meta.requiresAuth` y `meta.roles` en las rutas protegidas:
+Las rutas protegidas se declaran con `meta.requiresAuth` y, preferentemente, con permisos (los roles son datos editables, los permisos no):
 
 ```typescript
 {
   path: 'cocina',
-  name: 'cocina',
+  name: 'pos-cocina',
   component: () => import('@/components/comandas/VisorCocina.vue'),
-  meta: { requiresAuth: true, roles: ['Cocina'] as UserRole[], title: 'Visor Cocina' },
+  meta: { permissions: ['restaurante:gestionar_cocina'], title: 'Visor Cocina' },
 }
 ```
 
 ### 4.5 Manejo de errores HTTP
 
-El `axiosClient` tiene interceptores que:
-1. Adjuntan el Bearer token a cada request.
-2. En un 401: intentan refresh automático una sola vez.
-3. Si el refresh falla o no hay refresh token: disparan el evento `auth:unauthorized` → el boot de la app hace logout y redirige a login.
-4. Si hay múltiples requests en vuelo durante el refresh: las encolan y reintentan con el nuevo token.
+El `apiClient` tiene interceptores que:
+1. Adjuntan el Bearer token (que vive solo en memoria) a cada request y, para AdministradorSistema, el header `X-Sucursal-Vista` con la sucursal elegida en el selector.
+2. En un 401: intentan refresh automático una sola vez (con la cookie HttpOnly del refresh token).
+3. Si el refresh falla: disparan el evento `auth:unauthorized` → el boot de la app hace logout y redirige a login.
+4. Si hay múltiples requests en vuelo durante el refresh: comparten el mismo refresh y reintentan con el nuevo token.
+5. Normalizan cualquier error a `ApiError { statusCode, code, message, details? }`.
 
 **No re-implementes este flujo** en ningún otro módulo. Todos los módulos usan `apiClient` de `@/api/axiosClient`.
 
@@ -324,76 +414,88 @@ El `axiosClient` tiene interceptores que:
 
 ### 5.1 Motor y acceso
 
-- **Motor:** PostgreSQL
+- **Motor:** PostgreSQL 16
 - **Driver:** asyncpg (directo, sin ORM)
 - **Queries:** SQL parametrizado (`$1`, `$2`, ...)
 - **Pool:** inicializado en el lifespan de la app, accesible via `get_pool()`
 
-### 5.2 Esquema base (migration 001)
+### 5.2 Esquema base
 
 ```
+public.roles
+  id | nombre | descripcion             ← los roles son filas, no un ENUM
+
 public.usuarios
-  id UUID PK | email | password_hash | nombre_completo | rol (enum) | activo | auditoría
+  id UUID PK | email | password_hash | nombre_completo | rol FK → roles | pin_hash | debe_cambiar_password | activo | auditoría
 
 public.sucursales
-  id UUID PK | nombre | direccion | telefono | activo | clave | auditoría
+  id UUID PK | nombre | direccion | telefono | correo | clave | activo | auditoría
 
 public.usuarios_sucursal
   id UUID PK | usuario_id FK → usuarios | sucursal_id FK → sucursales | activo | auditoría
+
+public.permisos / public.rol_permisos
+  catálogo de permisos (codigo = "modulo:accion") y su asignación por rol
 ```
 
-Todos los IDs son `UUID` generados con `gen_random_uuid()`. Todas las tablas tienen campos de auditoría: `creado`, `creado_por`, `modificado`, `modificado_por`, `activo`.
+Los IDs de las entidades son `UUID` generados con `gen_random_uuid()`. Las tablas de negocio llevan campos de auditoría (`creado`, `creado_por`, `modificado`, `modificado_por`) y borrado lógico con `activo`.
 
-### 5.3 Roles (enum en BD)
+### 5.3 Roles
 
-```sql
-CREATE TYPE public.rol_tipo AS ENUM (
-    'AdministradorSistema',
-    'Administrador',
-    'Cajero',
-    'Cocina'
-);
-```
+Los roles viven en la tabla `public.roles` y se administran desde el catálogo de roles de la aplicación. Las migraciones siembran:
 
-- **AdministradorSistema**: acceso global, sin entrada en `usuarios_sucursal`.
-- **Administrador**: una o más sucursales asignadas.
-- **Cajero / Cocina**: exactamente una sucursal asignada.
+- **AdministradorSistema**: acceso global, sin entrada en `usuarios_sucursal`. No se le puede quitar ningún permiso.
+- **Administrador**: una o más sucursales asignadas en `usuarios_sucursal`.
+- **Cajero**, **Cocina**, **Personal de atención de niños** y cualquier rol creado desde la UI: exactamente una sucursal.
+
+Solo `AdministradorSistema` y `Administrador` tienen comportamiento especial en el código (`app/core/roles.py`). Lo demás se decide por permisos.
 
 ### 5.4 Migraciones
 
-Las migraciones son archivos SQL en `sql/migrations/` con prefijo numérico incremental:
+Las migraciones son archivos SQL en `BackEnd/sql/migrations/` con prefijo numérico incremental:
 
 ```
 001_initial_schema.sql         — usuarios, sucursales, usuarios_sucursal
 002_token_blacklist.sql        — blacklist de access tokens
 003_refresh_tokens.sql         — tabla de refresh tokens
-004_roles_permisos.sql         — sistema de permisos granular por rol
-005_remove_future_permisos.sql — limpieza de permisos sin endpoints implementados
+004_roles_permisos.sql         — tabla de roles y permisos granulares
+…
 ```
 
-**Regla:** nunca modificar una migración ya aplicada. Siempre crear un archivo nuevo con el siguiente número.
+- `sql/schema_maestro.sql` se **genera** aplicando todas las migraciones (`scripts/generar_schema_maestro.sh`) y sirve para crear una BD nueva. El CI verifica que esté al día.
+- Al arrancar, el contenedor aplica solo las migraciones que falten y las registra en `public.schema_migraciones` (ver [§3.8](#38-arranque-en-contenedor-y-respaldos)).
+- Cada migración corre en una transacción junto con su registro: no lleva `BEGIN`/`COMMIT` propios.
+
+**Regla:** nunca modificar una migración ya publicada. Siempre crear un archivo nuevo con el siguiente número y regenerar el maestro.
 
 ---
 
 ## 6. Autenticación y autorización
 
+Detalle de endpoints y ejemplos en [`BackEnd/docs/auth-guide.md`](BackEnd/docs/auth-guide.md).
+
 ### 6.1 Flujo de login
 
 ```
-FrontEnd                           BackEnd
-   │                                  │
-   │  POST /auth/login                │
-   │  { email, password, rememberMe } │
-   │ ─────────────────────────────── ▶│
-   │                                  │ Verifica credenciales
-   │                                  │ Genera access_token (JWT) + refresh_token
-   │ ◀─────────────────────────────── │
-   │  { token, refreshToken,          │
-   │    expiresIn, user }             │
-   │                                  │
-   │  Guarda en sessionStorage        │
-   │  Adjunta Bearer en cada request  │
+FrontEnd                              BackEnd
+   │                                     │
+   │  POST /api/auth/login               │
+   │  { email, password, rememberMe,     │
+   │    sucursalId? }                    │
+   │ ──────────────────────────────────▶ │
+   │                                     │ Verifica credenciales
+   │                                     │ Genera access token (JWT) + refresh token
+   │ ◀────────────────────────────────── │
+   │  { token, expires_in, user, … }     │
+   │  Set-Cookie: refresh_token          │
+   │  (HttpOnly; SameSite=Strict;        │
+   │   Path=/api/auth)                   │
+   │                                     │
+   │  Access token en memoria            │
+   │  Bearer en cada request             │
 ```
+
+Un Administrador con dos o más sucursales recibe primero `{ requires_branch_selection: true, sucursales: [...] }` y repite el login con `sucursalId`.
 
 ### 6.2 JWT (access token)
 
@@ -404,6 +506,7 @@ FrontEnd                           BackEnd
   "email": "usuario@ejemplo.com",
   "role": "Cajero",
   "branch_id": "uuid-de-sucursal",
+  "permissions": ["pos:acceder", "..."],
   "jti": "uuid-único-del-token",
   "iat": 1234567890,
   "exp": 1234571490
@@ -411,19 +514,19 @@ FrontEnd                           BackEnd
 ```
 
 - El `jti` se verifica contra la blacklist en cada request protegida.
-- El rol viaja en el token. El backend lo valida en cada endpoint; el frontend lo usa para mostrar/ocultar UI.
+- El backend valida cada permiso contra el caché de permisos por rol (no contra la lista del token), así que un cambio de permisos aplica de inmediato. El frontend recibe la lista en `user.permissions` y la usa para mostrar u ocultar UI.
 
 ### 6.3 Refresh token
 
-- Se genera en login y se almacena hasheado (SHA-256) en la tabla `refresh_tokens`.
-- El FrontEnd lo envía al interceptor de Axios en 401 → `POST /auth/refresh`.
+- Es un valor aleatorio opaco que se almacena hasheado (SHA-256) en la tabla `refresh_tokens`.
+- Viaja en la cookie HttpOnly `refresh_token`. Ante un 401, el interceptor de Axios llama a `POST /api/auth/refresh`.
 - Cada refresh invalida el token anterior y emite uno nuevo (rotación).
 
 ### 6.4 Protección de endpoints en el BackEnd
 
 ```python
 from app.api.deps import require_role, require_permission, get_current_user
-from app.schemas.auth import RoleEnum
+from app.core.roles import ROL_SISTEMA
 
 # Cualquier usuario autenticado
 @router.get("/me")
@@ -431,21 +534,23 @@ async def me(user: TokenData = Depends(get_current_user)):
     ...
 
 # Solo un rol específico
-@router.post("/usuarios")
-async def crear(user: TokenData = Depends(require_role(RoleEnum.administrador_sistema))):
+@router.get("/sistema/respaldos")
+async def estado_respaldos(user: TokenData = Depends(require_role(ROL_SISTEMA))):
     ...
 
-# Por código de permiso (más granular)
-@router.delete("/sucursales/{id}")
-async def eliminar(user: TokenData = Depends(require_permission("sucursales:eliminar"))):
+# Por código de permiso (preferido)
+@router.patch("/sucursales/{id}/deactivate")
+async def desactivar(user: TokenData = Depends(require_permission("sucursales:eliminar"))):
     ...
 ```
+
+Además del permiso, cada consulta se limita a la sucursal de la sesión (`app/core/scope.py`): un rol con sucursal fija que pide datos de otra recibe 403, y un recurso de otra sucursal pedido por id responde 404.
 
 ### 6.5 Protección de rutas en el FrontEnd
 
 ```typescript
 // En router/index.ts:
-meta: { requiresAuth: true, roles: ['AdministradorSistema'] as UserRole[] }
+meta: { requiresAuth: true, permissions: ['usuarios:listar'] }
 
 // El guard en router/guards.ts lo verifica automáticamente.
 // No añadir lógica de auth en los componentes.
@@ -461,92 +566,111 @@ La sesión se cierra automáticamente tras 15 minutos de inactividad (configurad
 
 ### 7.1 URL base
 
-Configurada en `.env` del FrontEnd:
+Configurada en el `.env` del FrontEnd (o como argumento de build de la imagen):
 ```
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
-En producción esta variable apunta al dominio real de la API.
+En las imágenes Docker vale `/api`: nginx sirve la SPA y redirige `/api` (incluidos los WebSockets) al backend, así que navegador y API comparten origen.
 
 ### 7.2 Patrón de módulo API
 
 Cada recurso tiene su propio archivo en `src/api/`:
 
 ```typescript
-// src/api/usersApi.ts — SOLO arma la request, sin lógica
+// src/api/<recurso>Api.ts — SOLO arma la request, sin lógica (simplificado)
 import { apiClient } from './axiosClient'
-import type { User } from '@/types/user'
+import type { Paquetes } from '@/types/paquetes'
 
-export const usersApi = {
-  list: () => apiClient.get<User[]>('/usuarios').then(r => r.data),
-  getById: (id: string) => apiClient.get<User>(`/usuarios/${id}`).then(r => r.data),
-  create: (body: CreateUserRequest) => apiClient.post<User>('/usuarios', body).then(r => r.data),
+export const paquetesApi = {
+  listar: (sucursal_id?: string) =>
+    apiClient
+      .get<Paquetes[]>('/paquetes', { params: sucursal_id ? { sucursal_id } : undefined })
+      .then((r) => r.data),
+  obtener: (id: string) => apiClient.get<Paquetes>(`/paquetes/${id}`).then((r) => r.data),
 }
 ```
 
 ### 7.3 Proxy de desarrollo
 
-En `vite.config.ts` hay un proxy para evitar CORS en desarrollo local. No se necesita configuración adicional.
+En `vite.config.ts` hay un proxy de `/api` (con WebSockets) hacia `http://127.0.0.1:8000`, o hacia `VITE_PROXY_TARGET` si está definida.
+
+### 7.4 Formato de errores
+
+El backend responde los errores de negocio como `{ "detail": { "code": "...", "message": "..." } }`; los 422 de validación de FastAPI traen `detail` como lista. El `apiClient` normaliza ambos formatos (ver [§4.5](#45-manejo-de-errores-http)).
 
 ---
 
-## 8. Flujo Git e integración de ramas
+## 8. Flujo Git y releases
 
-### 8.1 Estructura de ramas
+Las reglas completas están en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-```
-main                ← producción, solo fast-forward desde develop
-  └── develop       ← integración validada
-        └── integration/develop   ← staging de merges (aquí se resuelven conflictos)
-              ├── feature/<issue>-<descripcion>
-              ├── fix/<issue>-<descripcion>
-              └── hotfix/<descripcion>   (solo urgencias sobre main)
-```
-
-### 8.2 Ciclo de vida de una feature
+### 8.1 Estructura de ramas (Git Flow)
 
 ```
-1. Crear rama desde develop actualizado:
+main                         ← producción: cada llegada publica un release
+  ├── hotfix/<descripcion>   ← urgencias, salen de main
+  └── develop                ← integración
+        ├── feature/<issue>-<descripcion>
+        ├── fix/<issue>-<descripcion>
+        └── release/<version>
+```
+
+### 8.2 Ciclo de vida de un cambio
+
+```
+1. Crear la rama desde develop actualizado:
    git checkout develop && git pull && git checkout -b feature/42-nueva-funcionalidad
 
-2. Desarrollar con commits atómicos y conventional commits.
+2. Desarrollar con commits atómicos (Conventional Commits).
 
-3. Cuando está lista → hacer merge en integration/develop (nunca directamente a develop).
-   git checkout integration/develop
-   git merge --no-ff feature/42-nueva-funcionalidad
+3. Abrir un Pull Request hacia develop. El CI verifica la parte que cambió.
 
-4. Resolver conflictos en integration/develop.
+4. Revisar y mergear el PR en develop.
 
-5. Después de probar → merge integration/develop → develop → main.
+5. Para publicar: llevar develop a main por Pull Request (con una rama release/<version>
+   cuando haga falta preparar la versión). El workflow de release corre el CI completo,
+   calcula la versión, crea el tag y publica la imagen.
 ```
 
-### 8.3 Orden de integración actual
+Un cambio que toca FrontEnd y BackEnd a la vez va en **una sola rama y un solo PR**.
 
-Ver los CLAUDE.md de cada repo para el orden oficial. El BackEnd se integra antes que el FrontEnd porque el FrontEnd depende de los contratos de la API.
+### 8.3 Versionado
 
-**Estado a 2026-06-30:** `integration/develop` ya fue mergeada a `develop` en ambos repos (BackEnd `3a23f10`, FrontEnd `7216dff`) y `develop` ya fue pusheada a `origin` en ambos. Detalle completo del proceso de integración (commits, conflictos resueltos, deuda técnica cerrada) en `INTEGRACION.md`. Pendiente: testing de integración y promoción `develop` → `main`.
+La versión la calcula `release.yml` (con `.github/scripts/siguiente_version.sh`) a partir de los commits desde el último tag `vX.Y.Z`:
+
+| Commits desde el último tag | Sube |
+|---|---|
+| `tipo!:` o `BREAKING CHANGE` | mayor |
+| `feat:` | menor |
+| cualquier otro | parche |
+
+Cada release publica `ghcr.io/<owner>/woowkids:vX.Y.Z` y `:latest` y crea el GitHub Release.
 
 ### 8.4 Conventional Commits
 
-Formato obligatorio: `<tipo>: <descripción en minúscula, imperativo, sin punto final>`
+Formato obligatorio, **sin scope**: `<tipo>: <descripción en minúscula, imperativo, sin punto final>`. Lo valida el hook `commit-msg` (commitlint).
 
 | Tipo | Cuándo usarlo |
 |---|---|
 | `feat` | Nueva funcionalidad |
 | `fix` | Corrección de bug |
-| `chore` | Tareas de mantenimiento (deps, config, merges) |
+| `chore` | Tareas de mantenimiento (deps, config) |
 | `refactor` | Refactorización sin cambio de comportamiento |
 | `docs` | Documentación |
 | `style` | Formato, espacios (sin cambio lógico) |
 | `test` | Tests |
 | `perf` | Mejora de rendimiento |
-| `build` | Sistema de build, CI |
+| `build` | Sistema de build, dependencias, imágenes |
+| `ci` | Workflows de CI/CD |
 | `revert` | Reversión de commit |
+
+Los issues se referencian en el cuerpo con `Refs #N` o `Closes #N`.
 
 ```
 ✅  feat: agregar endpoint de reactivacion de sucursales
 ✅  fix: corregir validacion de token expirado en guard
-✅  chore: merge feature/auth-login en integration/develop
+❌  feat(auth): agregar login                              ← con scope
 ❌  Feat: Agregar endpoint de reactivación de Sucursales.   ← mayúscula, punto final
 ❌  update stuff                                            ← sin tipo
 ```
@@ -555,30 +679,39 @@ Formato obligatorio: `<tipo>: <descripción en minúscula, imperativo, sin punto
 
 ## 9. Calidad de código
 
-### BackEnd — correr antes de cada commit
+Los mismos comandos que corre el CI. Deben pasar antes de cada commit.
+
+### BackEnd (en `BackEnd/`)
 
 ```bash
-ruff check . --fix   # lint
-ruff format .        # formato
-mypy app             # type check
-pytest               # tests
+ruff check .            # lint
+ruff format --check .   # formato (ruff format . para aplicarlo)
+mypy app                # type check
+pytest tests/unit       # tests unitarios
 ```
 
-El pre-commit hook corre ruff, ruff-format y mypy automáticamente. Si alguno falla, el commit se cancela. **Corrige el error, no lo evadas.**
+El CI corre además `pytest tests/db` contra un PostgreSQL real, regenera el schema maestro para verificar que esté al día y prueba el control de migraciones del arranque con la imagen construida. Si cambias migraciones, corre `scripts/generar_schema_maestro.sh` y commitea el maestro.
 
-### FrontEnd — correr antes de cada commit
+### FrontEnd (en `FrontEnd/`)
 
 ```bash
-npm run lint         # ESLint + Prettier
-npm run type-check   # vue-tsc
-npm run test         # Vitest
+npx eslint src            # ESLint + Prettier
+npm run type-check        # vue-tsc
+npx vitest run --dir src  # Vitest
 ```
 
-El pre-commit hook (Husky + lint-staged) corre ESLint, Prettier y vue-tsc automáticamente.
+### Hooks de Git
 
-### Reglas de tipo (ambos repos)
+Se instalan con `npm install` dentro de `FrontEnd/` y aplican a todo el monorepo:
 
-- **BackEnd:** type hints obligatorios en toda función pública. No usar `Any` salvo con `# type: ignore` documentado.
+- **pre-commit:** verifica solo la parte con archivos en stage. FrontEnd: lint-staged (ESLint + Prettier) y vue-tsc. BackEnd: ruff y mypy (si existe `BackEnd/.venv`).
+- **commit-msg:** commitlint con Conventional Commits sin scope.
+
+Si un hook falla, **corrige el error, no lo evadas**.
+
+### Reglas de tipo
+
+- **BackEnd:** type hints obligatorios en toda función pública (mypy en modo estricto). No usar `Any` salvo con `# type: ignore` documentado.
 - **FrontEnd:** TypeScript estricto. Evitar `any`. Tipar todo lo que cruce una frontera (respuestas API, props, eventos).
 
 ---
@@ -587,40 +720,53 @@ El pre-commit hook (Husky + lint-staged) corre ESLint, Prettier y vue-tsc autom�
 
 ### BackEnd
 
-| Módulo | Router | Service | Repository | Estado |
-|---|---|---|---|---|
-| Auth | `routers/auth.py` | `auth_service.py` | `user_repo`, `token_repo`, `refresh_token_repo` | ✅ Producción |
-| Usuarios | `routers/users.py` | `user_service.py` | `user_repository.py` | ✅ Producción |
-| Sucursales | `routers/branches.py` | `branch_service.py` | `branch_repository.py` | ✅ Producción |
-| Permisos | `routers/permissions.py` | `permission_service.py` | `permission_repository.py` | ✅ Producción |
-| Registro infantes | `api/routers/estancias.py` | `services/estancias.py` | `repositories/estancias.py` + varios | ✅ Producción |
-| Comandas | `api/routers/comandas.py` | `comanda_service.py` | `comanda_repository.py` (asyncpg) | ✅ Producción |
-| Productos | `api/routers/productos.py` | `producto_service.py` | `producto_repository.py` (asyncpg) | ✅ Producción |
-| Eventos/Reservaciones | `api/routers/reservaciones.py` + varios | `services/reservaciones.py` + varios | varios (asyncpg, capas clásicas) | ✅ Producción |
+Cada módulo sigue router → service → repository. Los routers están en `app/api/routers/`.
+
+| Módulo | Routers |
+|---|---|
+| Autenticación | `auth.py` (login, refresh, logout, me, ws-ticket) |
+| Usuarios, roles y permisos | `users.py`, `permissions.py` |
+| Sucursales y horarios | `branches.py`, `horarios.py` |
+| Estancias y pulseras | `estancias.py`, `pulseras.py`, `documentos.py` |
+| Portal de padres | `padres.py` |
+| Caja (POS) y cocina | `comandas.py`, `pagos.py`, `metodos_pago.py`, `turnos_caja.py`, `cajas_admin.py` |
+| Productos | `productos.py`, `producto_insumos.py` (recetas) |
+| Inventario | `insumos.py`, `presentaciones_insumo.py`, `unidades_medida.py`, `proveedores.py`, `compras.py`, `movimientos_inventario.py` |
+| Eventos y reservaciones | `reservaciones.py`, `reservacion_extras.py`, `reservacion_productos.py`, `pagos_reservacion.py`, `paquetes.py`, `paquete_tipos_evento.py`, `tipos_evento.py`, `extras.py` |
+| Lealtad | `lealtad.py` |
+| Privacidad | `privacidad.py` (aviso de privacidad, ver [`BackEnd/docs/aviso-privacidad.md`](BackEnd/docs/aviso-privacidad.md)) |
+| Sistema | `sistema.py` (estado de los respaldos) |
+
+La documentación interactiva de todos los endpoints está en `/docs` (Swagger) del backend.
 
 ### FrontEnd
 
-| Módulo | Pages | Store | API | Estado |
-|---|---|---|---|---|
-| Auth / Login | `pages/auth/LoginPage.vue` | `stores/auth.ts` | `axiosClient.ts` | ✅ Producción |
-| SysAdmin | `pages/sysadmin/` | `stores/auth.ts` | `usersApi.ts`, `branchesApi.ts` | ✅ Producción |
-| Sucursales | `pages/locations/SucursalesPage.vue` + componentes | `stores/sucursales.ts` | `api/sucursales.ts` | ✅ Producción |
-| Registro infantes | `pages/RegistrationPage.vue`, `AccessControlPage.vue` | `registration.ts`, `accessControl.ts` | `onboardingClient.ts` | ✅ Producción |
-| Comandas / Caja | `components/CajaComponent.vue`, `VisorCocina.vue` | `comandaStore.ts` | `api/` | 🔧 En desarrollo |
-| Eventos / Reservaciones | `pages/ReservacionesPage.vue`, `CalendarioPage.vue` | `stores/reservaciones.ts` + varios | `api/reservaciones.ts` + varios | 🔧 En desarrollo |
-| Pagos | `pages/PagosPage.vue` | `stores/pagos_reservacion.ts` | `api/pagos_reservacion.ts` | 🔧 En desarrollo |
+| Módulo | Rutas | Páginas principales |
+|---|---|---|
+| Autenticación | `/login`, `/cambiar-password` | `pages/auth/` |
+| Inicio | `/home` | `pages/home/HomePage.vue` |
+| Caja (POS) y cocina | `/pos/caja`, `/pos/cocina`, `/pos/cierre`, `/pos/historial`, `/pos/historial-arqueos` | `components/DashboardComponent.vue`, `components/comandas/VisorCocina.vue`, `CierreCajaPage.vue`, `components/historial/HistorialView.vue`, `HistorialArqueosPage.vue` |
+| Estancias | `/estancias/*` | `RegistrationPage.vue`, `AccessControlPage.vue`, `CheckoutPage.vue`, `PulserasPage.vue`, `RegistroPulserasPage.vue` |
+| Eventos y reservaciones | `/eventos/*` | `DashboardPage.vue` (resumen), `ReservacionesPage.vue`, `NuevaReservacionPage.vue`, `CalendarioPage.vue`, `CierreEventoPage.vue`, `PagosPage.vue` |
+| Catálogos | `/productos`, `/extras`, `/paquetes`, `/tipos-evento`, `/metodos-pago` | páginas homónimas en `pages/` |
+| Inventario | `/insumos`, `/insumos/:id/kardex`, `/proveedores`, `/compras` | `InsumosPage.vue`, `KardexInsumoPage.vue`, `ProveedoresPage.vue`, `ComprasPage.vue` |
+| Reportes | `/reportes/*` | `sysadmin/SysAdminDashboardPage.vue`, `ReporteInventarioPage.vue`, `ReporteCogsPage.vue` |
+| Administración | `/usuarios`, `/roles`, `/sucursales`, `/admin/horarios`, `/admin/cajas`, `/admin/aviso-privacidad` | `sysadmin/UsersPage.vue`, `RolesPage.vue`, `locations/SucursalesPage.vue`, `pages/admin/` |
+| Lealtad | `/lealtad/configuracion`, `/lealtad/kardex`, `/lealtad/reporte` | `LealtadConfiguracionPage.vue`, `KardexLealtadPage.vue`, `ReporteLealtadPage.vue` |
+| Portal de padres | `/padres/*` | `pages/padres/` |
+| Aviso de privacidad (público) | `/aviso-de-privacidad` | `AvisoPrivacidadPage.vue` |
 
 ---
 
 ## 11. Reglas que NO se deben romper
 
-Esta sección documenta errores reales encontrados durante la integración de ramas. Cada regla tiene un ejemplo del problema y la solución correcta.
+Cada regla tiene un ejemplo del problema y la solución correcta. El código hace referencia a estas reglas por su número (p. ej. "Regla 11.1 SAD"), así que la numeración se mantiene.
 
 ---
 
 ### 11.1 BackEnd: NO usar ORM — solo asyncpg con SQL crudo
 
-**Problema encontrado:** `feature/modulo-comandas` importó SQLAlchemy, creó modelos con `Base`, usó `Session` y `db.query(...)`. Esto contradice la arquitectura del proyecto y causa conflictos con el pool asyncpg.
+**Problema:** usar SQLAlchemy (modelos con `Base`, `Session`, `db.query(...)`) contradice la arquitectura del proyecto y causa conflictos con el pool asyncpg.
 
 ```python
 # ❌ PROHIBIDO — SQLAlchemy ORM
@@ -645,15 +791,13 @@ async def get_comandas(conn: asyncpg.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 ```
 
-**Por qué:** El proyecto usa asyncpg desde el inicio. Mezclar SQLAlchemy rompe el pool de conexiones, el manejo de transacciones y la inyección de dependencias de FastAPI.
-
-> **Estado:** resuelto el 2026-06-30 (commits `634bfa5` y `fb7f169`) — comandas, productos y eventos ya están migrados a asyncpg. La regla se mantiene vigente para evitar que vuelva a introducirse.
+**Por qué:** El proyecto usa asyncpg desde el inicio. Mezclar SQLAlchemy rompe el pool de conexiones, el manejo de transacciones y la inyección de dependencias de FastAPI. Las entidades de dominio que hagan falta van como dataclasses en `app/models/`.
 
 ---
 
 ### 11.2 BackEnd: NO crear archivos `database.py`, `config.py` o `main.py` alternativos
 
-**Problema encontrado:** Varias ramas crearon sus propios `app/database.py`, `app/config.py` y `main.py` (en la raíz) duplicando la funcionalidad ya existente en `app/core/`.
+**Problema:** duplicar en otro lugar la funcionalidad que ya existe en `app/core/` y `app/main.py` crea dos fuentes de verdad.
 
 ```
 # ❌ ARCHIVOS QUE NO DEBEN EXISTIR:
@@ -670,28 +814,26 @@ from app.core.database import get_db
 from app.core.config import settings
 ```
 
-> **Estado:** resuelto el 2026-06-30 (commit `aab0173`) — se eliminaron los archivos vestigiales de la raíz de `app/`.
-
 ---
 
 ### 11.3 BackEnd: NO hardcodear usuarios de prueba en el código
 
-**Problema encontrado:** Algunas ramas incluían diccionarios de usuarios hardcodeados en `main.py` para testing:
+**Problema:** diccionarios de usuarios hardcodeados para pruebas terminan siendo una puerta trasera.
 
 ```python
 # ❌ PROHIBIDO
 USERS = {
-    "oscarmajai": {"password": "123456", "roles": ["admin"]}
+    "demo": {"password": "123456", "roles": ["admin"]}
 }
 ```
 
-Usa la BD real con las migraciones aplicadas y los usuarios de prueba documentados en `docs/auth-guide.md`.
+Usa la BD con las migraciones aplicadas y los usuarios de prueba de `sql/seed_local.sql` (ver [`BackEnd/SETUP.md`](BackEnd/SETUP.md)).
 
 ---
 
 ### 11.4 BackEnd: NO hacer queries SQL en routers ni en services
 
-**Problema encontrado:** Algunas implementaciones pusieron SQL directamente en el router o en el service.
+**Problema:** SQL directamente en el router o en el service rompe la separación de capas.
 
 ```python
 # ❌ INCORRECTO — SQL en router
@@ -719,7 +861,7 @@ async def get_all(conn):
 
 ### 11.5 FrontEnd: NO usar `$route` ni `$router` en templates o scripts
 
-**Problema encontrado:** `feature/events` usaba `$route` y `$router` en plantillas Vue, que no son resolvibles por TypeScript en componentes `<script setup>`.
+**Problema:** `$route` y `$router` en plantillas no son resolvibles por TypeScript en componentes `<script setup>`.
 
 ```vue
 <!-- ❌ INCORRECTO — $route/$router no tipados en <script setup> -->
@@ -748,7 +890,7 @@ const router = useRouter()
 
 ### 11.6 FrontEnd: NO hacer llamadas HTTP desde componentes o stores directamente con axios
 
-**Problema encontrado:** Algunas ramas importaban axios directamente en componentes o stores para hacer requests.
+**Problema:** importar axios directamente para hacer requests se salta la autenticación, el refresh y el manejo de errores.
 
 ```typescript
 // ❌ INCORRECTO — axios directo en un store
@@ -760,7 +902,7 @@ const cargar = async () => {
 ```
 
 ```typescript
-// ✅ CORRECTO — usar apiClient de axiosClient.ts
+// ✅ CORRECTO — usar apiClient de axiosClient.ts (a través de api/ y services/)
 import { apiClient } from '@/api/axiosClient'
 
 const cargar = async () => {
@@ -772,9 +914,7 @@ const cargar = async () => {
 
 ### 11.7 FrontEnd: NO duplicar scripts en package.json
 
-**Problema encontrado:** `feature/events` añadió entradas duplicadas en la sección `scripts` de `package.json` (`preview`, `lint`, `format`).
-
-Antes de añadir o modificar `package.json`, revisar que el script no exista ya.
+Antes de añadir o modificar la sección `scripts` de `package.json`, revisar que el script no exista ya. Un script duplicado se pisa en silencio con el último.
 
 ---
 
@@ -806,30 +946,28 @@ const inc = () => count.value++
 
 ### 11.9 Git: NO hacer force push a `develop` o `main`
 
-**Problema encontrado:** `develop` en el FrontEnd fue force-pusheado al commit inicial, borrando el historial de la rama base.
+**Consecuencia:** reescribir el historial de una rama compartida desincroniza todos los clones y complica los merges futuros.
 
-**Consecuencia:** Todos los forks locales de `develop` quedan desincronizados. Los merges futuros se complican.
-
-**Regla:** `git push --force` solo es aceptable en ramas personales (`feature/`, `fix/`) que nadie más tenga. Nunca en `develop`, `main` ni `integration/develop`.
+**Regla:** `git push --force` solo es aceptable en ramas personales (`feature/`, `fix/`) que nadie más use. Nunca en `develop` ni en `main`.
 
 ---
 
-### 11.10 Git: NO mergear directamente a `develop` — usar `integration/develop`
+### 11.10 Git: NO pushear directo a `main` ni a `develop` — todo entra por Pull Request
 
 ```
 # ❌ INCORRECTO
 git checkout develop
-git merge feature/mi-modulo         # puede introducir conflictos sin control
+git merge feature/mi-modulo && git push      # sin revisión ni CI
 
 # ✅ CORRECTO
-git checkout integration/develop
-git merge --no-ff feature/mi-modulo  # resuelves conflictos aquí
-# → después de probar → integration/develop → develop → main
+git push -u origin feature/mi-modulo
+# → abrir un Pull Request hacia develop, esperar el CI y mergear desde ahí
+# → para publicar, Pull Request de develop (o release/<version>) hacia main
 ```
 
 ---
 
-### 11.11 Ambos repos: NO commitear sin pasar los hooks
+### 11.11 NO commitear sin pasar los hooks
 
 Los pre-commit hooks validan lint, formato y tipos. Si un hook falla, el commit se cancela:
 
@@ -838,22 +976,19 @@ Los pre-commit hooks validan lint, formato y tipos. Si un hook falla, el commit 
 git commit --no-verify -m "feat: esto lo revisamos después"
 ```
 
-Si el hook falla por un error legítimo en tu código, corrígelo. Si el hook falla por un problema de entorno (tool no instalada), repórtalo al equipo — no lo saltes.
+Si el hook falla por un error legítimo en tu código, corrígelo. Si falla por un problema de entorno (herramienta no instalada), arregla el entorno; saltarlo solo se acepta con una razón documentada en el commit.
 
 ---
 
 ## 12. Deuda técnica activa
 
-| ID | Repositorio | Descripción | Impacto | Urgencia | Estado |
-|---|---|---|---|---|---|
-| DT-01 | BackEnd | `app/api/routers/comandas.py` y `productos.py` usaban SQLAlchemy — incompatible con asyncpg | Los endpoints de comandas/productos no funcionaban en producción con el pool actual | Alta | ✅ Resuelta 2026-06-30 (`634bfa5`) |
-| DT-02 | BackEnd | Archivos duplicados: `app/database.py`, `app/db/database.py`, `app/config.py`, `app/models.py` (raíz) — vestigios de ramas no limpiadas | Confusión al nuevo desarrollador sobre cuál importar | Media | ✅ Resuelta 2026-06-30 (`aab0173`) |
-| DT-03 | BackEnd | El módulo de eventos usaba arquitectura DDD (`domain/`, `application/`, `infrastructure/`) distinta al resto del proyecto | Inconsistencia que dificultaba el mantenimiento | Media | ✅ Resuelta 2026-06-30 (`8dc7bd8`, `fb7f169`) — eliminada la capa DDD, eventos migrado a capas clásicas asyncpg |
-| DT-04 | BackEnd | `app/api/router/` (sin 's') y `app/routes/` coexistían con `app/api/routers/` — tres ubicaciones de routers | Confusión sobre dónde va un router nuevo | Media | ✅ Resuelta 2026-06-30 (`644c055`) — todo consolidado en `app/api/routers/` |
-| DT-05 | FrontEnd | `src/pages/SucursalesPage.vue` duplica `src/pages/locations/SucursalesPage.vue` | El router apunta a la versión correcta (`locations/SucursalesPage.vue`), pero la otra page queda huérfana sin referencias | Baja | ⚠️ Activa |
-| DT-06 | Ambos | No hay tests de integración entre FrontEnd y BackEnd (BackEnd: `tests/` sin archivos más allá de `__init__.py`) | Los contratos de API pueden divergir silenciosamente | Alta | ⚠️ Activa |
-
-Detalle completo de los merges y fixes que cerraron DT-01 a DT-04 en `INTEGRACION.md`.
+| ID | Parte | Descripción | Impacto | Urgencia |
+|---|---|---|---|---|
+| DT-01 | Ambos | No hay pruebas de contrato o de punta a punta entre FrontEnd y BackEnd: las pruebas del FrontEnd simulan la API y las del BackEnd no ejercitan al cliente. | Los contratos de API pueden divergir sin que el CI lo detecte. | Alta |
+| DT-02 | BackEnd | Siguen activos caminos de compatibilidad con clientes anteriores: refresh token también en el body (`REFRESH_EN_BODY`), JWT en la URL de los WebSockets (`WS_ACEPTA_JWT`) y la opción de no exigir el token de PIN al confirmar un turno (`EXIGIR_PIN_TOKEN`). | Superficie de ataque mayor de la necesaria; el cliente actual ya usa cookie y ticket. | Media |
+| DT-03 | BackEnd | Nombres de archivo inconsistentes en `services/` y `repositories/`: conviven `*_service.py` / `*_repository.py` con nombres sueltos (`estancias.py`, `registros.py`, `chekouts.py`). | Cuesta encontrar el módulo correcto y adivinar dónde va uno nuevo. | Baja |
+| DT-04 | FrontEnd | Dos módulos de API para paquetes (`src/api/paquetes.ts` y `src/api/paquetesApi.ts`) con la misma interfaz, y nombres de stores mezclados (`metodos_pago.ts` junto a `turnoCaja.ts`). | Duplicación y confusión sobre cuál importar. | Baja |
+| DT-05 | BackEnd | Pendientes del aviso de privacidad: consentimiento expreso para datos de salud, eliminación automática al vencer los plazos de conservación y constancia de consentimiento en reservaciones (detalle en [`BackEnd/docs/aviso-privacidad.md`](BackEnd/docs/aviso-privacidad.md)). | Cumplimiento de la LFPDPPP. | Alta |
 
 ---
 

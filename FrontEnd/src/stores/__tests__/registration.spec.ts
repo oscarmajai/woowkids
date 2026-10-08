@@ -93,7 +93,7 @@ describe('registration store: pagos en completeRegistration', () => {
     expect(store.submitError).toBeTruthy()
   })
 
-  it('guarda el código opaco del portal de padres que devuelve el backend (A17)', async () => {
+  it('guarda el código opaco del portal de padres que devuelve el backend', async () => {
     const store = prepararRegistroListo()
 
     await store.proceedToRFID([], 0, 100, 100)
@@ -107,7 +107,7 @@ describe('registration store: pagos en completeRegistration', () => {
   })
 })
 
-describe('registration store: referencia de pago (N8)', () => {
+describe('registration store: referencia de pago', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(postOnboarding).mockReset()
@@ -231,13 +231,13 @@ describe('registration store: aviso de privacidad (LFPDPPP)', () => {
     expect(store.step).toBe('rfid')
   })
 
-  it('reset limpia la aceptación del tutor anterior', () => {
-    const store = prepararRegistroListo()
+  it('reset vuelve a dejar la aceptación marcada por defecto y quita la negativa', () => {
+    const store = prepararRegistroListo({ aceptaAviso: false })
     store.rechazaFinalidadesSecundarias = true
 
     store.reset()
 
-    expect(store.aceptaAvisoPrivacidad).toBe(false)
+    expect(store.aceptaAvisoPrivacidad).toBe(true)
     expect(store.rechazaFinalidadesSecundarias).toBe(false)
   })
 
@@ -249,5 +249,27 @@ describe('registration store: aviso de privacidad (LFPDPPP)', () => {
 
     expect(store.avisoPrivacidad).toBeNull()
     expect(store.errorAviso).toContain('No se pudo cargar el aviso de privacidad')
+  })
+})
+
+describe('registration store: modo evento', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('deja capturar fotos y más niños; solo fija el nombre y el teléfono del tutor', () => {
+    const store = useRegistrationStore()
+    store.cambiarModo('evento')
+
+    expect(store.isLocked).toBe(false)
+    expect(store.datosTutorFijos).toBe(true)
+  })
+
+  it('en el paso de pulseras ya no se edita nada', () => {
+    const store = useRegistrationStore()
+    store.step = 'rfid'
+
+    expect(store.isLocked).toBe(true)
+    expect(store.datosTutorFijos).toBe(true)
   })
 })

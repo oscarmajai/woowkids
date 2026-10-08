@@ -65,9 +65,11 @@ export const useRegistrationStore = defineStore('registration', () => {
   const eventoNoEncontrado = ref(false)
 
   const isEventoMode = computed(() => modo.value === 'evento')
-  const isLocked = computed(
-    () => isEventoMode.value || step.value === 'rfid' || step.value === 'complete',
-  )
+  // Pasos de pulseras y listo: el formulario ya no se edita.
+  const isLocked = computed(() => step.value === 'rfid' || step.value === 'complete')
+  // En modo evento el nombre y el teléfono vienen de la reservación; las
+  // fotos, el segundo tutor y los niños se siguen capturando.
+  const datosTutorFijos = computed(() => isLocked.value || isEventoMode.value)
 
   const tutor = ref<TutorData>({
     fullName: '',
@@ -96,7 +98,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   const noPreciosDisponibles = ref(false)
 
   const registroId = ref('')
-  // Código del QR del portal de padres (A17): solo lo devuelve el backend al
+  // Código del QR del portal de padres: solo lo devuelve el backend al
   // crear el registro; no es el registroId.
   const codigoAccesoPadres = ref('')
   const totalFromServer = ref<number | null>(null)
@@ -105,13 +107,14 @@ export const useRegistrationStore = defineStore('registration', () => {
   const advertenciaEfectivoFromServer = ref<string | null>(null)
 
   // ── Aviso de privacidad (LFPDPPP) ─────────────────────────────────────────
-  // El tutor debe aceptar la versión vigente antes de registrar la entrada;
+  // El tutor debe aceptar la versión vigente antes de registrar la entrada
+  // (la casilla viene marcada; el cajero la desmarca si el tutor no acepta);
   // las finalidades voluntarias (lealtad y promociones) se aceptan salvo que
   // se niegue (consentimiento tácito).
   const avisoPrivacidad = ref<AvisoPrivacidad | null>(null)
   const cargandoAviso = ref(false)
   const errorAviso = ref<string | null>(null)
-  const aceptaAvisoPrivacidad = ref(false)
+  const aceptaAvisoPrivacidad = ref(true)
   const rechazaFinalidadesSecundarias = ref(false)
   const avisoAceptado = computed(
     () => aceptaAvisoPrivacidad.value && avisoPrivacidad.value !== null,
@@ -190,7 +193,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     }
   }
 
-  // A14: la página de registro carga por sí misma lo que necesita (tarifas y
+  // La página de registro carga por sí misma lo que necesita (tarifas y
   // pulseras libres de la sucursal), aunque se abra por URL o tras F5. Si
   // Control de Acceso acaba de traer las pulseras, no se vuelven a pedir.
   // El turno lo garantiza el guard de ruta (`requiresTurno`).
@@ -252,7 +255,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   const hours = computed(() => HOUR_OPTIONS[tutor.value.estimatedTime] ?? 1)
 
   // ── Cálculo de tarifa por tramos, por niño ────────────────────────────────
-  // Cada niño puede contratar un tiempo distinto (B2 #4); en modo evento
+  // Cada niño puede contratar un tiempo distinto; en modo evento
   // todos usan horasEvento (el tiempo lo define el evento, no el selector).
 
   // Misma regla que el backend (tramos ordenados; en un extremo compartido,
@@ -297,7 +300,7 @@ export const useRegistrationStore = defineStore('registration', () => {
   }
 
   /**
-   * Valida una pulsera escaneada para un niño (B14). Si no está entre las
+   * Valida una pulsera escaneada para un niño. Si no está entre las
    * libres que tiene la página, se consulta al servidor para distinguir una
    * pulsera inexistente de una ya asignada a otro niño o desactivada.
    */
@@ -614,7 +617,7 @@ export const useRegistrationStore = defineStore('registration', () => {
         void cargarAvisoPrivacidad()
         submitError.value = err.message
       } else if (err?.statusCode === 422 && err?.message) {
-        // N8: p. ej. un pago con tarjeta o transferencia sin referencia.
+        // P. ej. un pago con tarjeta o transferencia sin referencia.
         submitError.value = err.message
       } else {
         submitError.value = 'No se pudo completar el registro. Intenta de nuevo.'
@@ -635,7 +638,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     cambioFromModal.value = 0
     puntosARedimirValue.value = 0
     descuentoPuntosValue.value = 0
-    aceptaAvisoPrivacidad.value = false
+    aceptaAvisoPrivacidad.value = true
     rechazaFinalidadesSecundarias.value = false
     tutor.value = {
       fullName: '',
@@ -655,6 +658,7 @@ export const useRegistrationStore = defineStore('registration', () => {
     modo,
     isEventoMode,
     isLocked,
+    datosTutorFijos,
     eventoSeleccionado,
     isLoadingEvento,
     eventoNoEncontrado,

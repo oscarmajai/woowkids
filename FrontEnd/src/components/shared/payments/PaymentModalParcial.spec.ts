@@ -6,9 +6,9 @@ import PaymentModal from './PaymentModal.vue'
 import type { MetodosPago } from '@/types/metodos_pago'
 
 /**
- * A7: en Pagos › "Registrar pago — Abono…" y en el Cierre de evento, "Confirmar
- * pago" se deshabilitaba si el monto no cubría todo el saldo: no había forma de
- * registrar un abono parcial desde la UI.
+ * En Pagos › "Registrar pago — Abono…" y en el Cierre de evento se puede
+ * registrar un abono parcial: "Confirmar pago" no exige que el monto cubra
+ * todo el saldo.
  */
 
 const METODOS: MetodosPago[] = [

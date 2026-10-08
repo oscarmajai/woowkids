@@ -135,7 +135,7 @@ async function ejecutarImpresion() {
           <span>{{ orden.motivo_cancelacion || 'Cancelación sin motivo especificado' }}</span>
         </div>
 
-        <!-- Info en pantalla únicamente (B9 B.1/B.3): no forma parte del ticket
+        <!-- Info en pantalla únicamente: no forma parte del ticket
              térmico impreso, que no se toca. -->
         <div v-if="puntosGanados !== null" class="receipt-card__info">
           <q-icon name="stars" size="18px" />

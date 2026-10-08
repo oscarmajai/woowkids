@@ -1,4 +1,4 @@
-"""A17 — el código del portal de padres es opaco, aleatorio, se guarda
+"""El código del portal de padres es opaco, aleatorio, se guarda
 hasheado, caduca y deja de valer al hacer checkout del último niño. El UUID
 del registro ya no sirve como código. Los repositories se mockean (sin BD)."""
 

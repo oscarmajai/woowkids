@@ -92,7 +92,7 @@ async def get_users(
     current_user: TokenData = Depends(require_permission("usuarios:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[UserResponse]:
-    """`estado`: activos (por defecto), inactivos o todos (A10)."""
+    """`estado`: activos (por defecto), inactivos o todos."""
     return await list_users(conn, current_user, estado)
 
 

@@ -1,4 +1,4 @@
-"""Pendiente B9 B.2: mesa del pedido, opcional, en la comanda."""
+"""Mesa del pedido, opcional, en la comanda."""
 
 from decimal import Decimal
 from uuid import uuid4

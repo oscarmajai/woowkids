@@ -1,7 +1,7 @@
 """
 app/repositories/pin_token_repository.py
-Tokens de un solo uso emitidos al validar el PIN de cajero/administrador
-(QA #14). Cada token guarda su propósito (A16): ``cerrar`` para el cierre de
+Tokens de un solo uso emitidos al validar el PIN de cajero/administrador.
+Cada token guarda su propósito: ``cerrar`` para el cierre de
 caja (POST /turnos-caja/confirmar exige uno de cada rol) y ``cancelar`` para
 cancelaciones y devoluciones de órdenes cobradas.
 """

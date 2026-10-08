@@ -1,6 +1,6 @@
 """
 app/repositories/folio_repository.py
-Folio de ticket secuencial por sucursal (QA #21). `siguiente_folio` hace un
+Folio de ticket secuencial por sucursal. `siguiente_folio` hace un
 UPDATE ... RETURNING atómico (si dos cobros llegan a la vez para la misma
 sucursal, Postgres serializa las dos filas y cada una obtiene un número
 distinto sin necesidad de un lock explícito).

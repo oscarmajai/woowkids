@@ -1,6 +1,6 @@
 """
 app/repositories/unidad_medida_repository.py
-Catálogo global de unidades de medida (fase 1 de inventario). Sembrado por
+Catálogo global de unidades de medida. Sembrado por
 migración, sin CRUD desde la API — solo lectura para poblar selects al crear
 un insumo.
 """

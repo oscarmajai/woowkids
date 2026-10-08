@@ -274,7 +274,7 @@ onBeforeUnmount(() => {
         dense
         class="q-mb-md"
         lazy-rules
-        :readonly="store.isLocked"
+        :readonly="store.datosTutorFijos"
         :maxlength="DB_LIMITS.GUARDIAN.NAME_MAX_LENGTH"
         :rules="[
           (val) => !!val || 'El nombre completo es obligatorio',
@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
             dense
             mask="##########"
             lazy-rules
-            :readonly="store.isLocked"
+            :readonly="store.datosTutorFijos"
             :rules="[
               (val) => !!val || 'El teléfono es obligatorio',
               (val) => val.length === 10 || 'El teléfono debe tener exactamente 10 dígitos',

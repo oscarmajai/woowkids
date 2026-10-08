@@ -1,5 +1,5 @@
 """Unit test de app.services.reservaciones.crear(): asigna folio legible
-(pendiente "Folio legible de reservación", migración 053) antes de insertar."""
+(migración 053) antes de insertar."""
 
 from datetime import date, time
 from decimal import Decimal
@@ -36,7 +36,7 @@ async def test_crear_asigna_el_folio_antes_de_insertar(monkeypatch):
     monkeypatch.setattr(
         reservaciones_repository, "siguiente_folio", AsyncMock(return_value="R-0042")
     )
-    # crear() recalcula el precio con el paquete y revisa el plazo (C2/C3):
+    # crear() recalcula el precio con el paquete y revisa el plazo:
     # paquete de $500 sin pulseras y evento lejano.
     monkeypatch.setattr(
         paquetes_repository,

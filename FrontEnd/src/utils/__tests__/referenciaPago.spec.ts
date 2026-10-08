@@ -11,7 +11,7 @@ const pago = (method: string, authCode?: string): AppliedPayment => ({
   authCode,
 })
 
-describe('referenciaDePago (N8)', () => {
+describe('referenciaDePago', () => {
   it('toma el folio capturado en el teclado de cobro', () => {
     expect(referenciaDePago(pago('Tarjeta', ' 4821 '))).toBe('4821')
   })

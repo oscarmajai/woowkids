@@ -6,7 +6,7 @@ import HorariosPage from '@/pages/admin/HorariosPage.vue'
 import type { Horario } from '@/types/horario'
 
 /**
- * M19: los horarios son por sucursal. El Administrador de sucursal crea y
+ * Los horarios son por sucursal. El Administrador de sucursal crea y
  * edita los suyos; los globales (sucursalId null) solo el AdministradorSistema.
  */
 
@@ -50,7 +50,7 @@ const montar = () =>
 const botones = (wrapper: ReturnType<typeof montar>, etiqueta: string) =>
   wrapper.findAll('button').filter((b) => b.attributes('aria-label') === etiqueta)
 
-describe('HorariosPage (M19)', () => {
+describe('HorariosPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     auth.isSistema = false

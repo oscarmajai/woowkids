@@ -49,7 +49,7 @@ describe('TicketReservacion', () => {
     expect(texto).toContain('$4,130.00') // 5900 - 1770
   })
 
-  it('N-A2: avisa la fecha límite real para liquidar, no "el día del evento"', () => {
+  it('avisa la fecha límite real para liquidar, no "el día del evento"', () => {
     // El sistema cancela la reservación si sigue debiendo 7 días antes.
     const texto = montar({ fechaLimiteLiquidacion: '13 ago 2026' }).text()
     expect(texto).toContain('Liquida el saldo a más tardar el 13 ago 2026')

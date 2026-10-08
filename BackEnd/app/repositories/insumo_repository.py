@@ -56,7 +56,7 @@ async def obtener(conn: asyncpg.Connection, insumo_id: UUID) -> dict[str, Any] |
 async def bloquear_por_ids(conn: asyncpg.Connection, insumo_ids: list[UUID]) -> None:
     """Bloquea (FOR UPDATE) las filas de estos insumos en orden de `id` hasta el
     fin de la transacción en curso; el llamador DEBE estar dentro de
-    `conn.transaction()`. N3: tomar los bloqueos siempre en el mismo orden evita
+    `conn.transaction()`. Tomar los bloqueos siempre en el mismo orden evita
     que dos operaciones sobre los mismos insumos se traben entre sí (antes
     `recibir` los bloqueaba en el orden de las líneas, por nombre, y con
     nombres repetidos dos recepciones podían bloquearlos en orden distinto)."""

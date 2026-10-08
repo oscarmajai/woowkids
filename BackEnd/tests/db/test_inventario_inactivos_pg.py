@@ -1,5 +1,5 @@
-"""M22 contra PostgreSQL real: compras, movimientos y presentaciones sobre
-insumos o proveedores eliminados (borrado lógico) se aceptaban; ahora 409."""
+"""Contra PostgreSQL real: compras, movimientos y presentaciones sobre insumos
+o proveedores eliminados (borrado lógico) responden 409."""
 
 from decimal import Decimal
 
@@ -21,7 +21,7 @@ from tests.db.inventario_datos import (
 )
 
 
-async def test_m22_compra_con_proveedor_eliminado_responde_409(
+async def test_compra_con_proveedor_eliminado_responde_409(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:
@@ -42,7 +42,7 @@ async def test_m22_compra_con_proveedor_eliminado_responde_409(
         )
 
 
-async def test_m22_compra_con_insumo_eliminado_responde_409(
+async def test_compra_con_insumo_eliminado_responde_409(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:
@@ -54,7 +54,7 @@ async def test_m22_compra_con_insumo_eliminado_responde_409(
         assert exc.value.status_code == 409
 
 
-async def test_m22_movimientos_y_presentaciones_sobre_insumo_eliminado_responden_409(
+async def test_movimientos_y_presentaciones_sobre_insumo_eliminado_responden_409(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:

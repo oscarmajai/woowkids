@@ -3,8 +3,8 @@ import { useRouter } from 'vue-router'
 import StateBlock from '@/components/ui/StateBlock.vue'
 
 /**
- * B12: ruta inexistente con sesión activa. Antes el comodín redirigía a
- * /login y mostraba el formulario aunque la sesión era válida.
+ * Ruta inexistente con sesión activa: se muestra esta página en vez de
+ * redirigir a /login, porque la sesión sigue siendo válida.
  */
 const router = useRouter()
 

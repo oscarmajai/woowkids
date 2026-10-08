@@ -30,7 +30,7 @@ from app.services.permission_service import get_permissions
 async def _get_lealtad_tutor(
     conn: asyncpg.Connection, sucursal_id: UUID, telefono: str
 ) -> LealtadPadreInfo:
-    """WP B4, pendiente 5 — saldo de puntos de lealtad del tutor (celular =
+    """Saldo de puntos de lealtad del tutor (celular =
     telefono del tutor), para la tarjeta "Tus puntos Woow" del portal de
     padres. No requiere que exista configuracion_lealtad para la sucursal:
     sin movimientos, el saldo simplemente es 0."""
@@ -45,7 +45,7 @@ class TokenAccesoInvalidoError(Exception):
     pass
 
 
-# A17 — vigencia máxima del código del QR (además deja de valer al hacer
+# Vigencia máxima del código del QR (además deja de valer al hacer
 # checkout del último niño del registro) y de la sesión que se obtiene con él.
 VIGENCIA_CODIGO_ACCESO = timedelta(hours=24)
 VIGENCIA_SESION_PADRE = timedelta(hours=2)
@@ -57,7 +57,7 @@ _LONGITUD_MAXIMA_CODIGO = 128
 async def emitir_codigo_acceso(
     conn: asyncpg.Connection, registro_id: UUID, usuario_id: UUID | None
 ) -> str:
-    """A17 — emite el código opaco del QR del comprobante para un registro y
+    """Emite el código opaco del QR del comprobante para un registro y
     revoca cualquier código anterior del mismo registro (un solo código vigente
     por registro: reimprimir el comprobante debe invalidar el QR viejo).
     Devuelve el código en claro; en BD solo queda su sha256."""
@@ -74,7 +74,7 @@ async def emitir_codigo_acceso(
 
 
 async def revocar_codigos_acceso(conn: asyncpg.Connection, registro_id: UUID) -> None:
-    """A17 — el QR deja de valer al hacer checkout de todos los niños."""
+    """El QR deja de valer al hacer checkout de todos los niños."""
     await codigos_acceso_padres.revocar_codigos_de_registro(conn, registro_id)
 
 
@@ -163,7 +163,7 @@ def _build_nino_activo(hijo: dict[str, Any], now: datetime) -> NinoActivoRespons
 
 
 async def get_padre_dashboard(conn: asyncpg.Connection, raw_code: str) -> PadreDashboardResponse:
-    """A17 — canjea el código opaco del QR por una sesión de padre. El código
+    """Canjea el código opaco del QR por una sesión de padre. El código
     se busca por su sha256 (índice único): no se compara el código en claro y
     la respuesta es la misma excepción para código mal formado, inexistente,
     revocado, expirado o de un registro ya cerrado. Los códigos viejos (el
@@ -224,7 +224,7 @@ async def get_padre_dashboard(conn: asyncpg.Connection, raw_code: str) -> PadreD
 async def get_ninos_activos(
     conn: asyncpg.Connection, registro_id: UUID
 ) -> PadreNinosActivosResponse:
-    """QA #31 — polling autenticado con el token de sesión del padre (no vuelve
+    """Polling autenticado con el token de sesión del padre (no vuelve
     a canjear el código). Si el registro ya no está activo (p. ej. se cerró o
     se revocó), el token deja de servir: el front recibe 400 y cierra sesión."""
     registro = await conn.fetchrow(

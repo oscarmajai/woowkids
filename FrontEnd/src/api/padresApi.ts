@@ -11,7 +11,7 @@ export const padresApi = {
     }
   },
 
-  // QA #31: polling autenticado con el token de la sesión (Authorization:
+  // Polling autenticado con el token de la sesión (Authorization:
   // Bearer), no con el código. rawApiClient (no apiClient) porque el token
   // del padre no es el del staff que el interceptor global inyecta.
   async ninosActivos(token: string): Promise<PadreNinosActivosResponse> {

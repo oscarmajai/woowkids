@@ -41,7 +41,7 @@ const DTO: ComprobanteEstanciaDto = {
   ],
 }
 
-describe('reimpresión del comprobante (N5)', () => {
+describe('reimpresión del comprobante', () => {
   beforeEach(() => {
     vi.mocked(reimprimirComprobante).mockReset()
     vi.mocked(QRCode.toDataURL).mockClear()

@@ -46,7 +46,7 @@ async def obtener_configuracion_canje(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("lealtad:redimir")),
 ) -> ConfiguracionCanjeOut:
-    """A6: el cajero tiene lealtad:redimir pero no lealtad:gestionar_configuracion,
+    """El cajero tiene lealtad:redimir pero no lealtad:gestionar_configuracion,
     así que GET /configuracion le respondía 403 y la caja no podía canjear.
     Este endpoint solo expone lo que el cobro necesita y no permite modificar."""
     return await svc.obtener_configuracion_canje(conn, current_user, sucursal_id)
@@ -104,7 +104,7 @@ async def exportar_reporte(
     current_user: TokenData = Depends(require_permission("lealtad:ver_reporte")),
 ) -> StreamingResponse:
     """Mismos filtros que `/lealtad/reporte`; entrega el top de clientes
-    como descarga CSV (patrón de B7)."""
+    como descarga CSV (mismo patrón que los demás reportes)."""
     reporte = await svc.obtener_reporte(conn, current_user, sucursal_id, desde, hasta)
     filas = (c.model_dump() for c in reporte.top_clientes)
     return csv_streaming_response(_REPORTE_CSV_CAMPOS, filas, "reporte_lealtad.csv")

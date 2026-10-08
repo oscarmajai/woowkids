@@ -1,6 +1,6 @@
-"""Máquina de estados de la reservación (A8) y reglas del PATCH (N12).
+"""Máquina de estados de la reservación y reglas del PATCH.
 
-E2E: R-0008 estaba cancelada y se "cerró" como completada a las 01:51 para un
+Caso cubierto: una reservación cancelada se "cerraba" como completada a las 01:51 para un
 evento de las 16:00, y el cierre borró la nota de cancelación. El PATCH además
 aceptaba cualquier `estado` y editaba fuera de plazo. Sin BD: repositories
 simulados; el SQL real se prueba en tests/db/test_reservacion_estados_pg.py."""

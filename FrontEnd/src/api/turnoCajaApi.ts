@@ -66,7 +66,7 @@ function mapTurnoActivo(raw: any): TurnoActivoResponse {
       (m: any) => ({ metodo: m.metodo, totalVentas: Number(m.total_ventas) }),
     ),
     conteoGuardado: mapConteoGuardado(raw.conteo_guardado),
-    // QA #8: solo vienen poblados cuando estado === 'BALANCE_REVELADO'.
+    // Solo vienen poblados cuando estado === 'BALANCE_REVELADO'.
     adminEmail: raw.admin_email ?? null,
     balancePorMetodo: mapBalancePorMetodo(raw.balance_por_metodo),
   }
@@ -221,7 +221,7 @@ export const turnoCajaApi = {
    * en el selector global en vez de devolver la de cualquier otra sucursal.
    * Sin turno activo (o no en esa sucursal) devuelve `null`: se pide con
    * `opcional=true` para que el backend responda 200 con null en vez de un 404
-   * que ensuciaba la consola en cada página (B4).
+   * que ensuciaba la consola en cada página.
    */
   async obtenerActivo(sucursalId?: string | null): Promise<TurnoActivoResponse | null> {
     const { data } = await apiClient.get(`${BASE}/activo`, {
@@ -292,7 +292,7 @@ export const turnoCajaApi = {
     return data
   },
 
-  /** El `token_pin` devuelto solo sirve para `proposito` (A16). */
+  /** El `token_pin` devuelto solo sirve para `proposito`. */
   async validarPinAdmin(
     turnoId: string,
     adminEmail: string,

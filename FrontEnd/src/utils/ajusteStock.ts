@@ -1,5 +1,5 @@
 /**
- * Validación del diálogo "Registrar ajuste" de Insumos (B8 / inventario B14).
+ * Validación del diálogo "Registrar ajuste" de Insumos.
  *
  * `v-model.number` deja un número, o `''` cuando el input se vacía o trae algo
  * que no se puede convertir. El backend exige cantidad > 0 en el ajuste manual

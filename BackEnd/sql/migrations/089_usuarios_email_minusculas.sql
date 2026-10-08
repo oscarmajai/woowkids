@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 089_usuarios_email_minusculas.sql
--- M1: los correos distinguían mayúsculas (uq_usuarios_email es sensible a
+-- Los correos distinguían mayúsculas (uq_usuarios_email es sensible a
 -- ellas): se podían crear dos cuentas con el mismo correo escrito distinto y
 -- el login fallaba con otra capitalización. El backend ya guarda y busca los
 -- correos en minúsculas; aquí:

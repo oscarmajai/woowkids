@@ -28,12 +28,12 @@ from app.services import alcance_service, producto_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
-# B20: el catálogo con precios lo consumen las pantallas que venden: POS
+# El catálogo con precios lo consumen las pantallas que venden: POS
 # (pos:acceder), Nueva reservación (reservaciones:crear) y Cierre de evento
 # (reservaciones:editar). Ninguna pantalla de estancias lo usa (el check-in usa
 # /productos/estancia), así que atención e inventario ya no lo leen.
 _PERMISOS_CATALOGO = ("pos:acceder", "reservaciones:crear", "reservaciones:editar")
-# B20: el listado completo (con inactivos) es de la pantalla Productos; Paquetes
+# El listado completo (con inactivos) es de la pantalla Productos; Paquetes
 # también lo usa para elegir los alimentos incluidos.
 _PERMISOS_ADMIN = ("inventario:gestionar_productos", "paquetes:crear", "paquetes:editar")
 
@@ -69,7 +69,7 @@ async def listar_productos_admin(
 
     El sucursal_id que manda el cliente solo se respeta para
     AdministradorSistema (que puede filtrar por cualquier sucursal); para
-    el resto de roles el alcance siempre viene del JWT (C1: 403 si piden
+    el resto de roles el alcance siempre viene del JWT (403 si piden
     otra sucursal).
     """
     return await producto_service.listar_todos(conn, resolver_sucursal(current_user, sucursal_id))
@@ -108,7 +108,7 @@ async def crear_producto(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
-    # C1: el producto se crea en la sucursal de la sesión (403 si el payload
+    # El producto se crea en la sucursal de la sesión (403 si el payload
     # trae otra) y los productos de un combo deben ser de esa sucursal (404).
     body.sucursal_id = resolver_sucursal_obligatoria(current_user, body.sucursal_id)
     await alcance_service.asegurar_recursos(
@@ -132,7 +132,7 @@ async def actualizar_producto(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
 
-    # M20: desactivar (activo=false) equivale a eliminar: exige el mismo
+    # Desactivar (activo=false) equivale a eliminar: exige el mismo
     # permiso que DELETE. Antes bastaba con el de gestionar.
     if body.activo is False:
         exigir_permiso(current_user, "inventario:eliminar_producto")

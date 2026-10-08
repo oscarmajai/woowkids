@@ -1,8 +1,8 @@
 """
 app/services/compra_service.py
 Lógica de negocio para compras a proveedor. Al recibir una compra convierte
-cada línea a la unidad base del insumo y genera movimientos de entrada
-(fase 3). SAD §3.2: el service orquesta repositorios, nunca escribe SQL
+cada línea a la unidad base del insumo y genera movimientos de entrada.
+SAD §3.2: el service orquesta repositorios, nunca escribe SQL
 directamente.
 """
 
@@ -42,7 +42,7 @@ async def _construir_out(conn: asyncpg.Connection, compra: dict[str, Any]) -> Co
 
 
 def _validar_proveedor_activo(proveedor: dict[str, Any]) -> None:
-    """M22: un proveedor eliminado (borrado lógico) no admite compras nuevas."""
+    """Un proveedor eliminado (borrado lógico) no admite compras nuevas."""
     if not proveedor["activo"]:
         raise RecursoInactivoError(
             f"El proveedor «{proveedor['nombre']}» está eliminado; no se le pueden "
@@ -51,7 +51,7 @@ def _validar_proveedor_activo(proveedor: dict[str, Any]) -> None:
 
 
 def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
-    """M22: un insumo eliminado (borrado lógico) no se puede comprar."""
+    """Un insumo eliminado (borrado lógico) no se puede comprar."""
     if not insumo["activo"]:
         raise RecursoInactivoError(
             f"El insumo «{insumo['nombre']}» está eliminado; no se puede agregar a una compra."
@@ -59,7 +59,7 @@ def _validar_insumo_activo(insumo: dict[str, Any]) -> None:
 
 
 def _validar_cantidad_base(cantidad_base: Decimal, insumo: dict[str, Any]) -> None:
-    """M3: la cantidad convertida a la unidad base es la que se suma al stock
+    """La cantidad convertida a la unidad base es la que se suma al stock
     (numeric(12,3)). Una línea válida en su unidad puede salirse de rango al
     convertirla (9,999,999 kg = 9,999,999,000 g) o redondearse a 0 (0.0004 g):
     antes eso daba 500 al recibir."""
@@ -95,7 +95,7 @@ async def _validar_y_calcular_base(
     """Valida la línea y devuelve (cantidad_base, costo_base) expresados en
     la unidad_base_id del insumo. Se bifurca según cuál campo trae la línea:
     unidad_medida_id (factor global entre unidades) o presentacion_id
-    (equivalencia directa y específica del insumo, fase 7)."""
+    (equivalencia directa y específica del insumo)."""
     if presentacion_id is not None:
         presentacion = await presentacion_insumo_repository.obtener(conn, presentacion_id)
         if not presentacion:
@@ -169,14 +169,14 @@ async def listar(conn: asyncpg.Connection, sucursal_id: UUID | None = None) -> l
 async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpdate) -> CompraOut:
     updates = body.model_dump(exclude_unset=True)
     async with conn.transaction():
-        # Bajo el mismo bloqueo que recibir/cancelar (C5): el estado que se
+        # Bajo el mismo bloqueo que recibir/cancelar: el estado que se
         # revisa abajo no puede cambiar antes del UPDATE.
         compra = await compra_repository.bloquear(conn, compra_id)
         if not compra:
             raise NoEncontrado("Compra")
-        # B10: `activo=false` sobre una compra con mercancía recibida respondía
-        # 200 sin efecto (la compra seguía en el listado y el stock no se
-        # revertía). Una compra recibida no se desactiva; una pendiente se
+        # `activo=false` sobre una compra con mercancía recibida no tendría
+        # efecto (la compra seguiría en el listado y el stock no se
+        # revertiría). Una compra recibida no se desactiva; una pendiente se
         # cancela con POST /compras/{id}/cancelar.
         if "activo" in updates and compra["estado"] in ("R", "PARCIAL"):
             raise Conflicto(
@@ -191,7 +191,7 @@ async def actualizar(conn: asyncpg.Connection, compra_id: UUID, body: CompraUpda
 
 async def editar(conn: asyncpg.Connection, compra_id: UUID, body: CompraEditar) -> CompraOut:
     """Reemplaza proveedor, notas y líneas de una compra que sigue en 'P'."""
-    # C5: bajo el bloqueo de la compra, para que una recepción simultánea no
+    # Bajo el bloqueo de la compra, para que una recepción simultánea no
     # quede registrada sobre líneas que esta edición borra y reinserta.
     async with conn.transaction():
         compra = await compra_repository.bloquear(conn, compra_id)
@@ -244,8 +244,8 @@ def cantidades_a_recibir(
 
     - `lineas is None`: todo lo pendiente de cada línea (recibir completa).
     - Con `lineas`: lo que diga cada una; una línea de la compra que no venga
-      cuenta como 0 (A12: antes se recibía completa). Pedir más de lo pendiente
-      (M23: antes se recortaba en silencio), un detalle ajeno a la compra o
+      cuenta como 0 (antes se recibía completa). Pedir más de lo pendiente
+      (antes se recortaba en silencio), un detalle ajeno a la compra o
       repetido responde 422 sin tocar nada.
 
     Lanza Conflicto si la compra ya no tiene nada pendiente."""
@@ -301,7 +301,7 @@ async def recibir(
     lineas = body.lineas if body else None
 
     async with conn.transaction():
-        # C5: bloquear la compra y releer estado, detalles y pendientes DENTRO de
+        # Bloquear la compra y releer estado, detalles y pendientes DENTRO de
         # la transacción. Antes se leían fuera y sin bloqueo: N recepciones
         # simultáneas veían el mismo pendiente y sumaban el stock N veces. Ahora
         # la segunda espera a que la primera confirme y ve la compra ya recibida
@@ -316,7 +316,7 @@ async def recibir(
         # Se valida TODA la recepción antes de mover stock: una línea inválida
         # no deja aplicadas a medias las anteriores.
         a_recibir = cantidades_a_recibir(detalles, lineas)
-        # N3: bloquear de una vez los insumos a mover, en orden de id. Antes el
+        # Bloquear de una vez los insumos a mover, en orden de id. Antes el
         # bloqueo lo tomaba cada UPDATE de stock en el orden de las líneas (por
         # nombre del insumo) y dos recepciones con los mismos insumos podían
         # bloquearlos en orden distinto y trabarse (deadlock).
@@ -374,7 +374,7 @@ async def recibir(
 
 
 async def cancelar(conn: asyncpg.Connection, compra_id: UUID) -> CompraOut:
-    # C5: mismo bloqueo que recibir. El UPDATE condicionado de marcar_cancelada ya
+    # Mismo bloqueo que recibir. El UPDATE condicionado de marcar_cancelada ya
     # impedía cancelar una compra recibida, pero sin el bloqueo una cancelación que
     # llegaba durante una recepción podía responder con el estado viejo.
     async with conn.transaction():

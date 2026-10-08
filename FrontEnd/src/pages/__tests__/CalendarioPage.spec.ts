@@ -8,10 +8,10 @@ import { branchService } from '@/services/branchService'
 import type { Reservaciones } from '@/types/reservaciones'
 
 /**
- * A9: la vista Mes entraba en un bucle de 1,100+ GET /reservaciones en pocos
- * segundos. El rango de la carga salía de la cuadrícula, que se recalcula con
- * los eventos cargados, y el watch observaba un arreglo nuevo en cada
- * evaluación: cada respuesta disparaba otra carga.
+ * La vista Mes no debe entrar en un bucle de GET /reservaciones: si el rango
+ * de la carga saliera de la cuadrícula, que se recalcula con los eventos
+ * cargados, el watch observaría un arreglo nuevo en cada evaluación y cada
+ * respuesta dispararía otra carga.
  */
 
 vi.mock('@/api/reservacionesApi', () => ({
@@ -80,7 +80,7 @@ describe('CalendarioPage (vista Mes)', () => {
     setActivePinia(createPinia())
     listarMock.mockReset()
     // La respuesta llega en otra vuelta del reloj, como una petición real: con
-    // el bucle de A9 el contador sube sin congelar la prueba.
+    // ese bucle el contador sube sin congelar la prueba.
     listarMock.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve([reservacionDeHoy()]), 0)),
     )
@@ -122,7 +122,7 @@ describe('CalendarioPage (vista Mes)', () => {
     expect(listarMock.mock.calls[1]![1]).not.toBe(listarMock.mock.calls[0]![1])
   })
 
-  it('pide el horario por el endpoint que la cajera sí puede leer (B18)', async () => {
+  it('pide el horario por el endpoint que la cajera sí puede leer', async () => {
     montar()
     for (let i = 0; i < 5; i++) await flushPromises()
     expect(branchService.getHorario).toHaveBeenCalledWith('suc-1')

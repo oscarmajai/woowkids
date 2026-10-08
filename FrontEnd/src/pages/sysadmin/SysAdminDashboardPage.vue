@@ -18,8 +18,8 @@ import { nombreArchivoIndicadores } from '@/utils/nombreArchivo'
 
 const router = useRouter()
 
-// Exportar indicadores (C2): mismo rango por defecto que DetailBranchPage.vue
-// (el mes en curso, en la zona horaria de la sucursal: M4).
+// Exportar indicadores: mismo rango por defecto que DetailBranchPage.vue
+// (el mes en curso, en la zona horaria de la sucursal).
 const exportandoId = ref<string | null>(null)
 
 async function exportarIndicadores(branch: Branch) {

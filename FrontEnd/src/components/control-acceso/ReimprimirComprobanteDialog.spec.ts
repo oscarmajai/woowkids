@@ -30,7 +30,7 @@ const montar = () =>
     global: { stubs: { QDialog: { template: '<div><slot /></div>' } } },
   })
 
-describe('ReimprimirComprobanteDialog (N5)', () => {
+describe('ReimprimirComprobanteDialog', () => {
   beforeEach(() => {
     vi.mocked(reimprimirComprobanteEstancia).mockReset()
     vi.mocked(printTicketElement).mockReset()

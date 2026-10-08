@@ -16,7 +16,7 @@ class ReservacionExtrasCreate(BaseModel):
     """Agrega un extra a una reservación. El precio sale del catálogo y la
     cantidad de la unidad del extra (por persona = invitados, por hora = horas
     del evento, por evento = 1); `cantidad` y `precio_unitario` se aceptan por
-    compatibilidad pero se ignoran (N11/M15). El total de la reservación se
+    compatibilidad pero se ignoran. El total de la reservación se
     recalcula; si se manda `precio_total` (lo que espera el cliente) y no
     coincide, 409."""
 
@@ -29,7 +29,7 @@ class ReservacionExtrasCreate(BaseModel):
 
 class ReservacionExtrasUpdate(BaseModel):
     """Vuelve a tomar el precio del catálogo y la cantidad de la unidad del
-    extra; `cantidad` y `precio_unitario` se ignoran (N11). `precio_total`,
+    extra; `cantidad` y `precio_unitario` se ignoran. `precio_total`,
     igual que en el alta."""
 
     cantidad: int | None = Field(None, ge=1)

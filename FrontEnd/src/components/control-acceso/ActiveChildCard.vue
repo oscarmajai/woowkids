@@ -157,7 +157,7 @@ const showDetails = ref(false)
 const showFotos = ref(false)
 const showReimpresion = ref(false)
 
-// N5: reimprimir el comprobante (con un QR nuevo) pide el mismo permiso que el check-in.
+// Reimprimir el comprobante (con un QR nuevo) pide el mismo permiso que el check-in.
 const puedeReimprimir = computed(() => auth.hasPermission('estancias:checkin'))
 
 function abrirReimpresion() {
@@ -173,7 +173,7 @@ const STATUS = {
 
 const status = computed(() => STATUS[props.child.status])
 
-// M26: las notas / alergias se ven en la tarjeta, no solo en el detalle.
+// Las notas / alergias se ven en la tarjeta, no solo en el detalle.
 const nota = computed(() => notaVisible(props.child.notas))
 
 // Cifra principal: minutos excedidos (+) o restantes.
@@ -186,8 +186,8 @@ const tiempo = computed(() => {
   return props.child.status === 'excedido' ? `+${texto}` : texto
 })
 
-// El DTO ya trae la hora de entrada real (ver B2 #1); antes se derivaba de
-// minutosTranscurridos, una aproximación que se iba desviando con el tiempo.
+// El DTO ya trae la hora de entrada real; no se deriva de
+// minutosTranscurridos, una aproximación que se desvía con el tiempo.
 const horaEntrada = computed(() => {
   const d = new Date(props.child.horaEntrada)
   return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -203,7 +203,7 @@ function irACheckoutDesdeDetalle() {
 function handleCheckout() {
   if (!turno.estaOperando) {
     // Sin pos:acceder no puede abrir caja: mandarlo a Apertura y Cierre lo
-    // rebotaba a Inicio sin explicación (B21).
+    // rebotaría a Inicio sin explicación.
     if (auth.hasPermission('pos:acceder')) {
       router.push({ name: 'pos-cierre' })
     } else {

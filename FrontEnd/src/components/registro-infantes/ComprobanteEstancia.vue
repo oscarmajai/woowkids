@@ -33,7 +33,7 @@
         <span class="text-weight-bold text-ellipsis">{{ nino.nombre }}</span>
         <span>{{ nino.edad }} años</span>
       </div>
-      <!-- M26: las notas / alergias salen en el comprobante. -->
+      <!-- Las notas / alergias salen en el comprobante. -->
       <div v-if="notaVisible(nino.notas)" class="ticket-notes">
         * Notas / alergias: {{ notaVisible(nino.notas) }}
       </div>
@@ -68,8 +68,8 @@ import { notaVisible } from '@/utils/notasNino'
 
 /**
  * Ticket del comprobante de entrada de estancias. Solo pinta: lo usan el
- * registro completado (PrintVoucher) y la reimpresión desde Control de Acceso
- * (N5). `raiz` se expone para imprimirlo con printTicketElement.
+ * registro completado (PrintVoucher) y la reimpresión desde Control de Acceso.
+ * `raiz` se expone para imprimirlo con printTicketElement.
  */
 const props = defineProps<{ datos: DatosComprobanteEstancia }>()
 

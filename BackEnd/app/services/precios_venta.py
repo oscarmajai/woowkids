@@ -1,4 +1,4 @@
-"""Precios de venta del punto de venta calculados en el servidor (C2).
+"""Precios de venta del punto de venta calculados en el servidor.
 
 El navegador manda el pedido (producto, cantidad y lo que cree que cuesta),
 pero el precio que se cobra sale siempre del catálogo de la sucursal de la
@@ -28,7 +28,7 @@ CENTAVO = Decimal("0.01")
 # venir de una petición manipulada o de un error de captura.
 CANTIDAD_MAXIMA_POR_RENGLON = 999
 
-# Tipos que el POS vende sueltos (alimentos, bebidas y servicios, M14); los
+# Tipos que el POS vende sueltos (alimentos, bebidas y servicios); los
 # combos se aceptan por su bandera es_combo. Igual que
 # producto_repository.get_catalogo_venta_by_sucursal. Las estancias ('E') se
 # cobran en su propio flujo.

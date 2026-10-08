@@ -1,6 +1,6 @@
-"""C4: operaciones de caja que leen, validan y escriben el efectivo o el estado
-de un turno, lanzadas en paralelo con conexiones distintas del pool. Antes del
-arreglo, N retiros simultáneos pasaban todos la validación de efectivo
+"""Operaciones de caja que leen, validan y escriben el efectivo o el estado
+de un turno, lanzadas en paralelo con conexiones distintas del pool. Sin el
+bloqueo, N retiros simultáneos pasaban todos la validación de efectivo
 disponible (la caja quedaba en negativo) y N cierres simultáneos chocaban con
 el índice único de cierre_caja (500 en vez de 409)."""
 
@@ -182,7 +182,7 @@ async def test_confirmar_cierre_simultaneo_cierra_una_vez_y_el_resto_es_409(
     monkeypatch.setattr(settings, "exigir_pin_token", False)
     apertura_id = await crear_apertura(pool, escenario, Decimal("1000.00"), estado="EN_CORTE")
     async with pool.acquire() as conn:
-        # A16: la revisión la autoriza un administrador distinto del dueño.
+        # La revisión la autoriza un administrador distinto del dueño.
         admin_id = await conn.fetchval(
             """
             INSERT INTO public.usuarios (email, password_hash, nombre_completo, rol)

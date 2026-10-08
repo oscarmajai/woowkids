@@ -1,9 +1,9 @@
-"""Máquina de estados de reservación (A8/N12) y abonos parciales (A7) contra
-un PostgreSQL de verdad.
+"""Máquina de estados de reservación y abonos parciales contra un PostgreSQL
+de verdad.
 
-E2E: R-0008 pasó de cancelada a completada a las 01:51 para un evento de las
-16:00 y el cierre borró la nota de cancelación; los abonos parciales no movían
-el saldo. Requiere `TEST_DATABASE_URL` (BD desechable con
+Una reservación cancelada no pasa a completada ni pierde su nota de
+cancelación, ninguna se completa antes del evento y los abonos parciales
+mueven el saldo. Requiere `TEST_DATABASE_URL` (BD desechable con
 `sql/schema_maestro.sql`); sin ella se salta. Cada test crea y borra sus datos.
 """
 
@@ -46,7 +46,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO sucursales (id, nombre) VALUES ($1, $2)",
         ids["sucursal"],
-        f"QA estados {ids['sucursal']}",
+        f"Prueba estados {ids['sucursal']}",
     )
     await pg.execute(
         "INSERT INTO tipos_evento (id, nombre, sucursal_id) VALUES ($1, 'Cumpleaños', $2)",
@@ -62,9 +62,9 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     )
     await pg.execute(
         """INSERT INTO usuarios (id, email, password_hash, nombre_completo, rol)
-           VALUES ($1, $2, 'x', 'Cajera QA', 3)""",
+           VALUES ($1, $2, 'x', 'Cajera Prueba', 3)""",
         ids["usuario"],
-        f"{ids['usuario']}@qa.dev",
+        f"{ids['usuario']}@prueba.dev",
     )
     await pg.execute(
         "INSERT INTO cajas (id, sucursal_id, codigo, nombre) VALUES ($1, $2, 'C01', 'CAJA 01')",
@@ -74,7 +74,7 @@ async def escenario(pg: asyncpg.Connection) -> AsyncIterator[dict[str, Any]]:
     await pg.execute(
         "INSERT INTO turnos (id, nombre, hora_inicio, hora_fin) VALUES ($1, $2, '00:00', '23:59')",
         ids["turno"],
-        f"QA {ids['turno']}"[:50],
+        f"Prueba {ids['turno']}"[:50],
     )
     await pg.execute(
         """INSERT INTO apertura_caja (id, caja_id, cajero_id, turno_id, fondo_inicial, estado)
@@ -186,7 +186,7 @@ async def test_abono_parcial_actualiza_monto_pagado_y_bloquea_el_cierre_con_sald
     # El evento fue ayer y solo se dio el anticipo.
     rid = await _reservacion(pg, e, dias=-1, pagado=Decimal("2285"), notas="Sin nuez")
 
-    # Abono parcial de $2,000 (A7): monto_pagado y saldo se mueven.
+    # Abono parcial de $2,000: monto_pagado y saldo se mueven.
     await pagos_reservacion.crear(
         pg,
         PagosReservacionCreate(reservacion_id=rid, metodo_pago_id=e["efectivo"], monto=2000),
@@ -199,7 +199,7 @@ async def test_abono_parcial_actualiza_monto_pagado_y_bloquea_el_cierre_con_sald
     assert fila["monto_pagado"] == Decimal("2000.00")
     assert fila["saldo_pendiente"] == TOTAL - Decimal("2000.00")
 
-    # Con saldo no se cierra (A8).
+    # Con saldo no se cierra.
     with pytest.raises(HTTPException) as exc:
         await reservaciones.cerrar(pg, rid, None, e["usuario"])
     assert exc.value.status_code == 409

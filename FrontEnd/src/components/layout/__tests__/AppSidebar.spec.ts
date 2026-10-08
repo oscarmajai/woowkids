@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { computed } from 'vue'
 
-/** UX shell: debajo de la marca decía "Mercurio" (nombre interno del proyecto). */
+/** Debajo de la marca no aparece "Mercurio" (nombre interno del proyecto). */
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'home', path: '/home' }),

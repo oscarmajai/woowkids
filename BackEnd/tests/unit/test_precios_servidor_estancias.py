@@ -1,4 +1,4 @@
-"""C2 en estancias: el check-in, el checkout y el pago extra cobran lo que
+"""Precios del servidor en estancias: el check-in, el checkout y el pago extra cobran lo que
 calcula el servidor, no lo que diga el navegador.
 
 - Check-in (create_estancia): el precio sale de los tramos del producto de
@@ -36,7 +36,7 @@ TRAMOS = [
 ]
 
 
-# N8: los cobros de estancia validan el método de pago (referencia).
+# Los cobros de estancia validan el método de pago (referencia).
 METODO_EFECTIVO = {"nombre": "Efectivo", "requiere_referencia": False, "activo": True}
 
 
@@ -94,7 +94,7 @@ def checkin(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
     monkeypatch.setattr(m, "registro_update_total", AsyncMock())
     monkeypatch.setattr(m, "change_registro_estado", mocks["activar"])
     monkeypatch.setattr(m.manager, "broadcast", AsyncMock())
-    # A17: el check-in emite el código del portal de padres (fuera de este test).
+    # El check-in emite el código del portal de padres (fuera de este test).
     monkeypatch.setattr(m, "emitir_codigo_acceso", AsyncMock(return_value="codigo-prueba"))
     # El aviso de privacidad se prueba aparte (test_aviso_privacidad.py).
     monkeypatch.setattr(m.privacidad_service, "exigir_aceptacion", AsyncMock(return_value=1))
@@ -271,7 +271,7 @@ async def test_pago_extra_de_un_registro_de_otra_sucursal_da_404(
 def test_no_se_cobra_una_estancia_con_los_precios_de_otra_sucursal() -> None:
     from datetime import datetime as dt
 
-    # El check-in y el pago extra usan la regla única de C1 (core/scope.py).
+    # El check-in y el pago extra usan la regla única de aislamiento por sucursal (core/scope.py).
     from app.core.scope import resolver_sucursal_obligatoria
     from app.schemas.auth import TokenData
 

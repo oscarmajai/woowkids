@@ -1,6 +1,6 @@
 """Cada alta, edición o baja de un pago de reservación recalcula
 `reservaciones.monto_pagado` en la misma transacción, con la reservación
-bloqueada (C3). Sin BD: repositories simulados; el SQL real se prueba en
+bloqueada. Sin BD: repositories simulados; el SQL real se prueba en
 tests/db/test_reservaciones_saldo_pg.py."""
 
 from contextlib import asynccontextmanager
@@ -115,7 +115,7 @@ async def test_el_cambio_se_descuenta_despues_de_registrarlo(
 
 
 async def test_un_pago_registrado_no_cambia_de_monto_ni_se_borra(mocks: dict) -> None:
-    """N-A1 (prueba E2E de v1.2.0): cambiar el monto o borrar un pago recalculaba
+    """Antes, cambiar el monto o borrar un pago recalculaba
     el saldo, pero no revertía el movimiento de caja ni los puntos."""
     with pytest.raises(HTTPException) as editar:
         await pagos_reservacion.actualizar(
@@ -140,7 +140,7 @@ async def test_las_notas_de_un_pago_si_se_corrigen(mocks: dict) -> None:
 
 
 async def test_un_pago_mayor_al_saldo_se_rechaza(mocks: dict) -> None:
-    """N-A1: POST /pagos-reservacion aceptaba $999,999 sobre un saldo de $6,020."""
+    """POST /pagos-reservacion aceptaba $999,999 sobre un saldo de $6,020."""
     mocks["bloquear"].return_value = {
         **mocks["bloquear"].return_value,
         "saldo_pendiente": Decimal("6020.00"),

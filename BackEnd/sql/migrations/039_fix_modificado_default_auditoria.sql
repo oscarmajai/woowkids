@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 039_fix_modificado_default_auditoria.sql
--- Bug (QA 2026-08-17): `modificado` se llenaba automáticamente en el INSERT
+-- `modificado` se llenaba automáticamente en el INSERT
 -- porque las columnas tenían DEFAULT now(), aunque ningún endpoint de
 -- creación las incluye explícitamente en su lista de columnas. Esto rompe la
 -- semántica esperada: modificado/modificado_por deben quedar NULL hasta que

@@ -167,7 +167,7 @@ function parseLocalDate(str: string): Date {
   return new Date(y, m - 1, d)
 }
 
-// ── Filtros del lado del cliente (D1.5): periodo y estado, sobre lo que ya
+// ── Filtros del lado del cliente: periodo y estado, sobre lo que ya
 // carga el store. Se aplican a los KPIs y a la agenda de la semana.
 type PeriodoFiltro = 'hoy' | 'semana' | 'mes'
 type EstadoFiltro = 'todas' | 'confirmada' | 'pendientes' | 'cerrada' | 'cancelada'

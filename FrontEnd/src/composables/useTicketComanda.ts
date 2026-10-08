@@ -265,7 +265,7 @@ export function useTicketComanda() {
 
   /**
    * Alinea el pedido con el catálogo vigente después de que el backend rechazó
-   * el cobro porque un precio cambió o un producto ya no está (409, C2): cada
+   * el cobro porque un precio cambió o un producto ya no está (409): cada
    * producto toma el precio y los datos del catálogo, y los que ya no aparecen
    * se quitan junto con sus hijos de combo. Devuelve los nombres afectados
    * para avisarle al cajero antes de que vuelva a cobrar.

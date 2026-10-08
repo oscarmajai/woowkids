@@ -6,9 +6,9 @@ import MetodosPagoPage from '@/pages/MetodosPagoPage.vue'
 import { metodosPagoApi } from '@/api/metodosPagoApi'
 
 /**
- * B2: en "Todas las sucursales" (AdministradorSistema sin sucursal elegida)
- * los toggles se podían pulsar y respondían 422. Ahora quedan deshabilitados
- * y se pide elegir una sucursal.
+ * En "Todas las sucursales" (AdministradorSistema sin sucursal elegida) los
+ * toggles quedan deshabilitados (el backend respondería 422) y se pide elegir
+ * una sucursal.
  */
 
 const auth = vi.hoisted(() => ({
@@ -43,7 +43,7 @@ const montar = () =>
 
 const toggle = (wrapper: ReturnType<typeof montar>) => wrapper.find('[role="switch"]')
 
-describe('MetodosPagoPage (B2)', () => {
+describe('MetodosPagoPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(metodosPagoApi.activar).mockReset()

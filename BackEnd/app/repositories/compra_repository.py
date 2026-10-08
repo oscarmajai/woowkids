@@ -111,7 +111,7 @@ async def bloquear(conn: asyncpg.Connection, compra_id: UUID) -> dict[str, Any] 
     fin de la transacción en curso; el llamador DEBE estar dentro de
     `conn.transaction()`. Serializa recibir / cancelar / editar sobre la misma
     compra: la segunda petición espera y luego lee el estado y las cantidades
-    ya actualizados (C5). Solo bloquea la fila de compras, no la del proveedor."""
+    ya actualizados. Solo bloquea la fila de compras, no la del proveedor."""
     row = await conn.fetchrow(_SELECT + " WHERE c.id = $1 FOR UPDATE OF c", compra_id)
     return dict(row) if row else None
 
@@ -204,7 +204,7 @@ async def marcar_estado(
     estados_previos: tuple[str, ...],
 ) -> dict[str, Any] | None:
     """Cambia el estado solo si el actual es uno de `estados_previos` (guard
-    contra recepciones concurrentes, C5). Devuelve None si no transicionó."""
+    contra recepciones concurrentes). Devuelve None si no transicionó."""
     fecha = ", fecha_recepcion = NOW()" if estado == "R" else ""
     result = await conn.execute(
         f"UPDATE public.compras SET estado = $2{fecha}, modificado = NOW() "

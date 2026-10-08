@@ -1,4 +1,4 @@
-"""Pendiente B5 #2: el listado y el detalle de roles devuelven usuarios_count."""
+"""El listado y el detalle de roles devuelven usuarios_count."""
 
 from unittest.mock import AsyncMock, patch
 

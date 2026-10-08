@@ -40,7 +40,7 @@ export interface CreateBranchPayload {
 }
 
 /**
- * Datos operativos de la sucursal (B18): los puede leer quien gestiona
+ * Datos operativos de la sucursal: los puede leer quien gestiona
  * reservaciones, solo de su propia sucursal (`GET /sucursales/{id}/horario`).
  */
 export interface HorarioSucursal {

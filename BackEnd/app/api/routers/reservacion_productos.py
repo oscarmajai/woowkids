@@ -45,7 +45,7 @@ async def crear_reservacion_producto(
     conn: asyncpg.Connection = Depends(get_db),
     current_user: TokenData = Depends(require_permission("reservaciones:gestionar_productos")),
 ) -> ReservacionProductosOut:
-    # C1: la reservación y el producto deben ser de la sucursal de la sesión.
+    # La reservación y el producto deben ser de la sucursal de la sesión.
     await alcance_service.asegurar_recurso(conn, current_user, "reservacion", body.reservacion_id)
     await alcance_service.asegurar_recurso(conn, current_user, "producto", body.producto_id)
     return await svc.crear(conn, body, current_user)

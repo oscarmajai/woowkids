@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { tokenMemory } from '@/utils/tokenMemory'
 
-describe('tokenMemory (C3)', () => {
+describe('tokenMemory', () => {
   beforeEach(() => {
     tokenMemory.clear()
   })

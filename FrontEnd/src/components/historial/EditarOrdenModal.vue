@@ -131,7 +131,7 @@ const guardando = ref(false)
 const orden = ref<DetalleOrden | null>(null)
 const selectedKeys = ref<Set<string>>(new Set())
 
-// M13: un renglón por producto suelto o por combo, cada combo con sus propios
+// Un renglón por producto suelto o por combo, cada combo con sus propios
 // productos (por renglón, no por nombre): quitar un combo dividido no arrastra
 // los productos del otro.
 const itemsVisibles = computed<DisplayItem[]>(() => {
@@ -233,7 +233,7 @@ async function ejecutarEliminacion(motivoCancelacion?: string) {
       const cancelada = await cancelarComanda(props.comandaId, motivoCancelacion ?? '')
       if (!cancelada) return
     } else {
-      // B5: con la versión que se leyó; si la orden cambió en otra pestaña o
+      // Con la versión que se leyó; si la orden cambió en otra pestaña o
       // dispositivo, el backend responde 409 COMANDA_MODIFICADA sin tocar nada.
       await modificarDetallesComanda(props.comandaId, idsAEliminar.value, undefined, {
         modificadoEsperado: orden.value.modificado ?? undefined,
@@ -254,7 +254,7 @@ async function ejecutarEliminacion(motivoCancelacion?: string) {
     emit('close')
   } catch (err: unknown) {
     if (esOrdenModificada(err)) {
-      // B5: se recarga la orden y se limpia la selección para que el cajero
+      // Se recarga la orden y se limpia la selección para que el cajero
       // decida otra vez sobre lo que hay ahora.
       selectedKeys.value = new Set()
       await cargarOrden()

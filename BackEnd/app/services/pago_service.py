@@ -41,7 +41,7 @@ from app.services.validaciones_pago import validar_cambio
 
 def _hash_payload(body: PagoCompletoRequest) -> str:
     """Hash estable del payload para detectar reintentos con la misma
-    Idempotency-Key pero datos distintos (QA #20)."""
+    Idempotency-Key pero datos distintos."""
     payload_json = json.dumps(body.model_dump(mode="json"), sort_keys=True)
     return hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
 
@@ -58,7 +58,7 @@ async def _validar_metodos_pago(
     conn: asyncpg.Connection, sucursal_id: UUID, pagos: list[PaymentItem]
 ) -> None:
     """Cada pago debe usar un método que exista y esté activo en la sucursal,
-    y traer referencia (folio, autorización) si el método la exige (M11:
+    y traer referencia (folio, autorización) si el método la exige (
     antes solo lo validaba la UI)."""
     for pago in pagos:
         metodo = await metodos_pago_repository.obtener(conn, pago.metodo_pago_id, sucursal_id)
@@ -136,7 +136,7 @@ async def completar_pago(
     automático). Después del commit, expande los detalles de combos y
     notifica a cocina vía WebSocket.
 
-    Si viene `idempotency_key` (header Idempotency-Key, QA #20): si la clave
+    Si viene `idempotency_key` (header Idempotency-Key): si la clave
     ya existe con el mismo hash de payload, devuelve la comanda original sin
     volver a cobrar ni descontar inventario; si existe con un hash distinto,
     lanza 409 IDEMPOTENCIA_CONFLICTO. Sin header, el comportamiento es idéntico
@@ -154,7 +154,7 @@ async def completar_pago(
 
     await _validar_metodos_pago(conn, sucursal_id, body.pagos)
 
-    # C2: el precio, el importe y el total salen del catálogo de la sucursal de
+    # El precio, el importe y el total salen del catálogo de la sucursal de
     # la sesión, no del request. Si el cliente mandó otra cosa, 409 sin cobrar.
     venta = await precios_venta.calcular_venta(conn, sucursal_id, body.detalles_comanda)
     descuento_esperado = Decimal("0")
@@ -198,14 +198,14 @@ async def completar_pago(
         )
 
     async with conn.transaction():
-        # N1: bloqueo compartido de la apertura antes de nada (orden de
+        # Bloqueo compartido de la apertura antes de nada (orden de
         # bloqueo de caja: apertura_caja primero) y el turno debe seguir
         # ABIERTA: un cobro ya no entra a la mitad del inicio de un conteo o
         # de un cierre.
         await turnos_caja_service.bloquear_turno_para_cobro(conn, apertura_caja_id)
 
         if idempotency_key:
-            # M3: dos cobros simultáneos con la misma clave pasaban los dos la
+            # Dos cobros simultáneos con la misma clave pasaban los dos la
             # revisión de arriba y el segundo chocaba con la llave primaria de
             # pagos_idempotencia (500). Ahora el segundo espera aquí a que el
             # primero termine y devuelve su venta.
@@ -214,7 +214,7 @@ async def completar_pago(
             if original is not None:
                 return original
 
-        # Folio de ticket secuencial por sucursal (QA #21): el backend asigna
+        # Folio de ticket secuencial por sucursal: el backend asigna
         # ticket_numero de forma atómica dentro de esta transacción.
         # body.ticket_numero (lo que mande el front, si manda algo) queda solo
         # como fallback si por algún motivo siguiente_folio no devuelve nada;
@@ -327,7 +327,7 @@ async def completar_pago(
 
 def _calcular_desde(filtro: str, ahora: datetime) -> datetime:
     """Inicio del periodo hoy/semana/mes a partir de `ahora`, la hora local
-    de la sucursal sin zona (M4: antes era la hora del servidor, en UTC)."""
+    de la sucursal sin zona (antes era la hora del servidor, en UTC)."""
     if filtro == "hoy":
         return ahora.replace(hour=0, minute=0, second=0, microsecond=0)
     if filtro == "semana":

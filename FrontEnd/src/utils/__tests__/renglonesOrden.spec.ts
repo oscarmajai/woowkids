@@ -31,7 +31,7 @@ function hijo(id: string, nombre: string, extra: Partial<DetalleProducto> = {}):
   }
 }
 
-describe('agruparPorRenglon (M13)', () => {
+describe('agruparPorRenglon', () => {
   it('combo dividido: cada renglón lleva solo sus productos', () => {
     const detalles = [
       renglon('c1'),

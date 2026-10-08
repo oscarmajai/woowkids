@@ -1,13 +1,13 @@
-"""Errores de dominio de inventario y compras: recursos eliminados (M22), costo
-unitario no editable (B9) y cantidades que no caben en el inventario (M3)."""
+"""Errores de dominio de inventario y compras: recursos eliminados, costo
+unitario no editable y cantidades que no caben en el inventario."""
 
 from fastapi import HTTPException, status
 
 
 class RecursoInactivoError(HTTPException):
     """Operación sobre un insumo o proveedor eliminado (borrado lógico,
-    `activo = FALSE`). M22: antes se aceptaban compras, movimientos y
-    presentaciones sobre ellos."""
+    `activo = FALSE`): no admite compras, movimientos ni presentaciones
+    nuevas."""
 
     def __init__(self, mensaje: str) -> None:
         super().__init__(
@@ -17,7 +17,7 @@ class RecursoInactivoError(HTTPException):
 
 
 class CostoNoEditableError(HTTPException):
-    """B9: el costo unitario de un insumo es el promedio PEPS de sus capas de
+    """El costo unitario de un insumo es el promedio PEPS de sus capas de
     costo y se recalcula en cada movimiento; no se edita a mano."""
 
     def __init__(self) -> None:
@@ -35,7 +35,7 @@ class CostoNoEditableError(HTTPException):
 
 class CantidadFueraDeRangoError(HTTPException):
     """Una cantidad ya convertida a la unidad base del insumo no cabe en el
-    inventario: es menor a 0.001 o mayor al máximo (M3)."""
+    inventario: es menor a 0.001 o mayor al máximo."""
 
     def __init__(self, mensaje: str) -> None:
         super().__init__(

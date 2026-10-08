@@ -181,7 +181,7 @@ async def eliminar(
 async def get_catalogo_venta_by_sucursal(
     conn: asyncpg.Connection, sucursal_id: UUID
 ) -> list[dict[str, Any]]:
-    # disponible_estimado (C1 #3): el "rinde" ya existe para la pantalla de
+    # disponible_estimado: el "rinde" ya existe para la pantalla de
     # Insumos, pero esa consulta exige inventario:ver (el Cajero no lo tiene),
     # así que el catálogo de venta expone su propia estimación — el mínimo de
     # stock_actual / cantidad sobre los insumos de la receta, redondeado hacia
@@ -189,7 +189,7 @@ async def get_catalogo_venta_by_sucursal(
     # Un combo no tiene receta propia: su estimación suma, por insumo, lo que
     # consumen sus integrantes en una unidad de combo (un insumo compartido
     # por dos integrantes cuenta dos veces), igual que el descuento al vender.
-    # M14: los servicios ('S') también se venden en caja; no llevan receta.
+    # Los servicios ('S') también se venden en caja; no llevan receta.
     sql_catalogo = """
         SELECT
             p.id, p.nombre, p.precio_unitario, p.descripcion, p.tipo, p.imagen, p.es_combo,
@@ -259,7 +259,7 @@ async def get_producto_estancia_by_branch_id(
 ) -> asyncpg.Record | None:
     """Producto de estancia (tipo 'E') activo de la sucursal.
 
-    N7: crear/actualizar ya impiden dos productos de estancia activos en una
+    Crear/actualizar ya impiden dos productos de estancia activos en una
     sucursal, pero datos viejos o una carrera pueden dejar más de uno. Antes
     se tomaba uno cualquiera (`LIMIT 1` sin `ORDER BY`), y el check-in, la
     cotización del frontend (`GET /productos/estancia`) y el checkout podían
@@ -296,7 +296,7 @@ async def obtener_para_venta(
     conn: asyncpg.Connection, producto_ids: list[UUID]
 ) -> dict[UUID, dict[str, Any]]:
     """Datos de catálogo que el cobro necesita para recalcular precios en el
-    servidor (C2): precio vigente, tipo, si es combo, si está activo y su
+    servidor: precio vigente, tipo, si es combo, si está activo y su
     sucursal. Devuelve un dict por id; los ids que no existen no aparecen."""
     if not producto_ids:
         return {}

@@ -1,584 +1,139 @@
-# GUÍA DE DESARROLLO - MERCURIO FRONTEND
+# Guía de desarrollo — FrontEnd
 
-## Estándares de Codificación
+Convenciones del código y pasos para agregar funcionalidad. La arquitectura general está en [`SAD.md`](../SAD.md) (secciones 4, 6 y 11) y el entorno en [`SETUP.md`](SETUP.md).
 
-### Nombrado de Archivos y Componentes
+## Nombrado
 
-```
-✅ CORRECTO:
-- DashboardPage.vue
-- AdminLayout.vue
-- useReservaciones.ts (para composables)
-- reservaciones.ts (para stores de Pinia)
+| Qué                   | Convención                  | Ejemplo                                          |
+| --------------------- | --------------------------- | ------------------------------------------------ |
+| Componentes Vue       | PascalCase multi-palabra    | `InsumosPage.vue`, `VisorCocina.vue`             |
+| Páginas ruteadas      | sufijo `Page`               | `ProveedoresPage.vue`                            |
+| Composables           | `use` + camelCase           | `useAppNavigation.ts`                            |
+| Módulos de API        | camelCase + `Api`           | `proveedoresApi.ts`                              |
+| Services              | camelCase + `Service`       | `proveedorService.ts`                            |
+| Stores                | `use` + nombre + `Store`    | `useProveedoresStore` en `stores/proveedores.ts` |
+| Variables y funciones | camelCase                   | `cargarProveedores`                              |
+| Tipos e interfaces    | PascalCase, sin prefijo `I` | `Proveedor`, `ProveedorCreate`                   |
+| Constantes globales   | UPPER_SNAKE_CASE            | `INACTIVITY_MS`                                  |
 
-❌ INCORRECTO:
-- dashboard.vue
-- admin-layout.vue
-- Dashboard.ts
-```
+## Componentes
 
-### Estructura de Componentes Vue
-
-Todos los componentes deben seguir esta estructura:
+- Siempre `<script setup lang="ts">`. La Options API está prohibida (regla 11.8 del SAD).
+- Rutas con `useRoute()` / `useRouter()`, nunca `$route` / `$router` (regla 11.5).
+- Props y emits tipados con `defineProps<...>()` y `defineEmits<...>()`.
+- Estilos con `<style scoped>` y las variables CSS de `src/css/app.scss` (`--bg-card`, `--text-primary`, `--border-color`, `--tone-ok-bg`, `--shadow-md`, …) en lugar de colores fijos. La paleta de Quasar (`primary`, `secondary`, `accent`, …) está en `quasar.config.ts` y `app.scss`.
+- Antes de crear un componente base, revisa el kit de `src/components/ui/`: `PageHeader`, `DataTableCard`, `TablePager`, `BaseDialog`, `KpiCard`, `StatusBadge` y `StateBlock` (estados de carga, vacío y error).
 
 ```vue
-/**
- * NOMBRE DEL COMPONENTE
- * 
- * PROPÓSITO:
- * Descripción clara de qué hace este componente
- * 
- * CARACTERÍSTICAS PRINCIPALES:
- * - Feature 1
- * - Feature 2
- * - Feature 3
- */
-
-<template>
-  <!-- Contenido del template -->
-</template>
-
 <script setup lang="ts">
-// Importes
-import { ref, computed } from 'vue'
+import { computed, onMounted } from 'vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import { useProveedoresStore } from '@/stores/proveedores'
+import { useAuthStore } from '@/stores/auth'
 
-// Interfaces y tipos
-interface Datos {
-  id: number
-  nombre: string
-}
+const auth = useAuthStore()
+const store = useProveedoresStore()
+const activos = computed(() => store.proveedores.filter((p) => p.activo))
 
-// Estado reactivo (ref, reactive)
-const state = ref('')
-
-// Propiedades computadas
-const computed = computed(() => {
-  return state.value.toUpperCase()
+onMounted(() => {
+  if (auth.currentBranchId) store.cargar(auth.currentBranchId)
 })
-
-// Métodos
-const metodo = () => {
-  // Lógica
-}
 </script>
 
-<style lang="scss" scoped>
-// Estilos del componente
-</style>
-```
-
-### Organización de Métodos y Propiedades
-
-Dentro de `<script setup>`:
-
-```typescript
-// 1. Importes
-import { ref, computed, watch } from 'vue'
-
-// 2. Interfaces y tipos
-interface MiInterfaz {
-  propiedad: string
-}
-
-// 3. Estado reactivo
-const miVariable = ref('')
-
-// 4. Props computadas
-const miComputada = computed(() => {
-  return miVariable.value
-})
-
-// 5. Métodos
-const miMetodo = () => {
-  // Lógica
-}
-
-// 6. Watchers
-watch(miVariable, (valor) => {
-  // Reaccionar a cambios
-})
-```
-
----
-
-## Convenciones de CSS (SCSS)
-
-### Sistema BEM para clases
-
-```scss
-// Bloque principal
-.sidebar {
-  background: #1a237e;
-  
-  // Elemento dentro del bloque
-  &__logo {
-    padding: 24px 20px;
-  }
-  
-  // Modificador (variación del bloque)
-  &--active {
-    background: #blue;
-  }
-  
-  // Sub-elemento dentro de elemento
-  &__logo-title {
-    font-size: 1.2rem;
-  }
-}
-```
-
-### Variables CSS Globales
-
-Siempre usar variables CSS en lugar de valores hardcodeados:
-
-```scss
-// ✅ CORRECTO
-color: var(--text-primary);
-background: var(--bg-card);
-border-radius: var(--radius-md);
-box-shadow: var(--shadow-lg);
-
-// ❌ INCORRECTO
-color: #0F172A;
-background: #ffffff;
-border-radius: 16px;
-box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-```
-
-### Responsive Design
-
-Siempre considerar mobile-first:
-
-```scss
-.contenedor {
-  width: 100%; // Mobile
-  padding: 16px;
-  
-  @media (min-width: 768px) {
-    // Tablet
-    padding: 24px;
-  }
-  
-  @media (min-width: 1024px) {
-    // Desktop
-    width: 80%;
-    padding: 32px;
-  }
-}
-```
-
----
-
-## TypeScript - Tipos y Interfaces
-
-### Nombrado de Interfaces
-
-```typescript
-// ✅ CORRECTO - Singular, PascalCase
-interface Reservacion {
-  id: number
-  nombre: string
-}
-
-// ❌ INCORRECTO
-interface reservacion {}
-interface IReservacion {}
-interface Reservaciones {}
-```
-
-### Tipos de Datos Comunes
-
-```typescript
-// Booleanos
-const isActive = ref<boolean>(false)
-
-// Strings
-const nombre = ref<string>('')
-
-// Números
-const edad = ref<number>(0)
-
-// Unión de tipos
-const status = ref<'pending' | 'confirmed' | 'paid'>('pending')
-
-// Arrays
-const items = ref<Reservacion[]>([])
-
-// Objetos
-const user = ref<{ name: string; email: string }>({
-  name: '',
-  email: ''
-})
-```
-
----
-
-## Cómo Agregar Una Nueva Página
-
-### Paso 1: Crear el componente
-Crear archivo `src/pages/MiPaginaPage.vue`:
-
-```vue
-/**
- * PÁGINA: MI PÁGINA
- * 
- * PROPÓSITO:
- * Breve descripción de qué hace esta página
- */
-
 <template>
-  <q-page class="page-content">
-    <!-- Contenido -->
+  <q-page padding>
+    <PageHeader title="Proveedores" subtitle="Catálogo de la sucursal" />
+    <!-- … -->
   </q-page>
 </template>
-
-<script setup lang="ts">
-// Lógica
-</script>
-
-<style lang="scss" scoped>
-// Estilos
-</style>
 ```
 
-### Paso 2: Agregar la ruta
-En `src/router/index.ts`, agregar dentro del array `children`:
+## Agregar un recurso nuevo (API → service → store)
+
+1. **Tipos** en `src/types/<recurso>.ts`: la forma de las respuestas y de los payloads.
+2. **Módulo de API** en `src/api/<recurso>Api.ts`. Solo arma la request con `apiClient`; nunca importes axios directo (regla 11.6):
+
+   ```typescript
+   import { apiClient } from './axiosClient'
+   import type { Proveedor, ProveedorCreate } from '@/types/proveedor'
+
+   export const proveedoresApi = {
+     listar: (sucursalId: string) =>
+       apiClient
+         .get<Proveedor[]>('/proveedores', { params: { sucursal_id: sucursalId } })
+         .then((r) => r.data),
+     crear: (body: ProveedorCreate) =>
+       apiClient.post<Proveedor>('/proveedores', body).then((r) => r.data),
+   }
+   ```
+
+3. **Service** en `src/services/<recurso>Service.ts`: orquesta las llamadas y concentra la lógica que no es de presentación (mapeos, cálculos, combinaciones de varias llamadas).
+4. **Store** en `src/stores/<recurso>.ts` cuando el estado se comparte entre pantallas. Guarda `loading` y `error`, y convierte los errores con `mensajeDeError` de `@/utils/errorHandler`.
+
+`apiClient` ya adjunta el token, renueva la sesión ante un 401 y normaliza los errores a `ApiError { statusCode, code, message }`: no repitas ese manejo en los módulos.
+
+## Agregar una página
+
+1. Crea `src/pages/MiRecursoPage.vue`.
+2. Registra la ruta en `src/router/index.ts`, dentro del layout que corresponda (`AppShell` para el personal autenticado). Protégela con permisos en `meta`; el guard los valida solo:
+
+   ```typescript
+   {
+     path: '/mi-recurso',
+     component: () => import('@/layouts/AppShell.vue'),
+     meta: { requiresAuth: true },
+     children: [
+       {
+         path: '',
+         name: 'mi-recurso',
+         component: () => import('@/pages/MiRecursoPage.vue'),
+         meta: { permissions: ['mi_modulo:ver'], title: 'Mi recurso' },
+       },
+     ],
+   }
+   ```
+
+   Otros campos de `meta`: `roles` (solo para lo que el backend restringe por rol), `requiresTurno` (exige turno de caja abierto) y `section` (miga de pan cuando la ruta no está en el menú).
+
+3. Agrega la entrada al menú lateral en `src/composables/useAppNavigation.ts`, con el mismo `routeName` y el `permission` que la oculta a quien no lo tiene:
+
+   ```typescript
+   { label: 'Mi recurso', icon: 'inventory_2', routeName: 'mi-recurso', permission: 'mi_modulo:ver' }
+   ```
+
+El permiso debe existir en el backend (`GET /api/permisos/catalogo`); si es nuevo, se agrega con una migración en `BackEnd/sql/migrations/`.
+
+## Pruebas
+
+- Vitest + Vue Test Utils con jsdom. `vitest.setup.ts` instala Quasar y Pinia para todos los tests.
+- Los archivos van junto al código, en `__tests__/<Nombre>.spec.ts`.
+- Prueba la lógica en `utils/`, `services/` y `stores/` sin montar componentes; en componentes y páginas, simula los módulos de `api/` o `services/` con `vi.mock`.
 
 ```typescript
-{
-  path: '/mi-pagina',
-  name: 'mi-pagina',
-  component: () => import('../pages/MiPaginaPage.vue'),
-  meta: { title: 'Mi Página - FEC Admin' }
-}
-```
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+import { useProveedoresStore } from '@/stores/proveedores'
 
-### Paso 3: Agregar al menú
-En `src/layouts/AdminLayout.vue`, agregar item al sidebar:
+vi.mock('@/services/proveedorService', () => ({
+  listarProveedores: vi.fn().mockResolvedValue([{ id: '1', nombre: 'Proveedor' }]),
+}))
 
-```vue
-<div
-  class="sidebar__item"
-  :class="{ 'sidebar__item--active': $route.name === 'mi-pagina' }"
-  @click="$router.push({ name: 'mi-pagina' })"
->
-  <q-icon name="icon_name" />
-  Mi Página
-</div>
-```
+describe('useProveedoresStore', () => {
+  beforeEach(() => setActivePinia(createPinia()))
 
----
-
-## Cómo Usar Quasar Componentes
-
-### Botones
-```vue
-<!-- Botón primario -->
-<q-btn
-  unelevated
-  color="primary"
-  label="Guardar"
-  icon="save"
-  @click="guardar"
-/>
-
-<!-- Botón con outline -->
-<q-btn
-  outline
-  color="primary"
-  label="Cancelar"
-/>
-
-<!-- Botón plano -->
-<q-btn
-  flat
-  label="Más información"
-/>
-```
-
-### Tablas
-```vue
-<q-table
-  :rows="datos"
-  :columns="columnas"
-  row-key="id"
-  flat
-  hide-pagination
-/>
-```
-
-### Inputs
-```vue
-<!-- Input de texto -->
-<q-input
-  v-model="nombre"
-  dense
-  outlined
-  label="Nombre"
-  placeholder="Ingresa el nombre"
-/>
-
-<!-- Input de número -->
-<q-input
-  v-model.number="edad"
-  dense
-  outlined
-  type="number"
-  label="Edad"
-/>
-
-<!-- Select -->
-<q-select
-  v-model="opcion"
-  dense
-  outlined
-  :options="opciones"
-  label="Elige una opción"
-/>
-
-<!-- Checkbox -->
-<q-checkbox
-  v-model="aceptado"
-  label="Acepto términos y condiciones"
-/>
-
-<!-- Date picker -->
-<q-input
-  v-model="fecha"
-  dense
-  outlined
-  type="date"
-  label="Fecha"
-/>
-```
-
-### Dialogs y Modales
-```vue
-<q-dialog v-model="mostrarDialogo">
-  <q-card>
-    <q-card-section>
-      Contenido del diálogo
-    </q-card-section>
-    <q-card-actions align="right">
-      <q-btn flat label="Cancelar" v-close-dialog />
-      <q-btn unelevated color="primary" label="Confirmar" @click="confirmar" />
-    </q-card-actions>
-  </q-card>
-</q-dialog>
-```
-
-### Iconos Disponibles
-- Material Icons (ej: `save`, `delete`, `edit`, `add`, etc)
-- MDI v7 (ej: `mdi-github`)
-- Ver documentación oficial de Quasar
-
----
-
-## Estado Global con Pinia
-
-### Crear un Store
-
-Crear archivo `src/stores/miStore.ts`:
-
-```typescript
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-
-export const useMiStore = defineStore('miStore', () => {
-  // Estado
-  const contador = ref(0)
-  
-  // Propiedades computadas
-  const contadorDoble = computed(() => contador.value * 2)
-  
-  // Acciones (métodos)
-  const incrementar = () => {
-    contador.value++
-  }
-  
-  const decrementar = () => {
-    contador.value--
-  }
-  
-  return {
-    contador,
-    contadorDoble,
-    incrementar,
-    decrementar
-  }
-})
-```
-
-### Usar el Store en un componente
-
-```typescript
-import { useMiStore } from '@/stores/miStore'
-
-const miStore = useMiStore()
-
-// Acceder a estado
-console.log(miStore.contador)
-
-// Acceder a propiedades computadas
-console.log(miStore.contadorDoble)
-
-// Llamar acciones
-miStore.incrementar()
-```
-
----
-
-## Composables Reutilizables
-
-### Crear un composable
-
-Crear archivo `src/composables/useMiComposable.ts`:
-
-```typescript
-import { ref, computed } from 'vue'
-
-export function useMiComposable() {
-  // Estado local del composable
-  const estado = ref('')
-  
-  // Métodos
-  const metodo = () => {
-    // Lógica
-  }
-  
-  // Propiedades computadas
-  const propiedad = computed(() => {
-    return estado.value.toUpperCase()
-  })
-  
-  return {
-    estado,
-    metodo,
-    propiedad
-  }
-}
-```
-
-### Usar el composable
-
-```typescript
-import { useMiComposable } from '@/composables/useMiComposable'
-
-const { estado, metodo, propiedad } = useMiComposable()
-```
-
----
-
-## Testing (Próximo a Implementar)
-
-### Estructura de tests
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import MiComponente from '@/components/MiComponente.vue'
-
-describe('MiComponente', () => {
-  let wrapper
-
-  beforeEach(() => {
-    wrapper = mount(MiComponente)
-  })
-
-  it('Debe renderizar correctamente', () => {
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('Debe actualizar el texto al hacer clic', async () => {
-    await wrapper.find('button').trigger('click')
-    expect(wrapper.text()).toContain('Actualizado')
+  it('carga los proveedores de la sucursal', async () => {
+    const store = useProveedoresStore()
+    await store.cargar('sucursal-1')
+    expect(store.proveedores).toHaveLength(1)
+    expect(store.error).toBeNull()
   })
 })
 ```
 
----
+## Antes de cada commit
 
-## Debugging y Troubleshooting
-
-### Vue DevTools
-- Usar extensión Vue DevTools para Chrome/Firefox
-- Inspeccionar componentes, estado, rutas
-
-### Quasar Dev Tools
-- `Quasar Dev Tools` incluye inspector de componentes
-
-### Logging
-```typescript
-// Para debugging
-console.log('Variable:', miVariable.value)
-console.warn('Advertencia:', mensaje)
-console.error('Error:', error)
-
-// Breakpoints en DevTools
-debugger
+```bash
+npx eslint src && npm run type-check && npx vitest run --dir src
 ```
 
----
-
-## Performance Optimization
-
-### Lazy Loading de Componentes
-```typescript
-// Router - Carga perezosa automática con import()
-component: () => import('../pages/MiPaginaPage.vue')
-```
-
-### Computed vs Method
-```typescript
-// ✅ CORRECTO - Cached (más rápido si se usa múltiples veces)
-const resultado = computed(() => {
-  return datos.value.filter(x => x.activo)
-})
-
-// ❌ Evitar si se llama muchas veces - Se recalcula siempre
-const resultado = () => {
-  return datos.value.filter(x => x.activo)
-}
-```
-
-### Watch con opciones
-```typescript
-// Solo ejecutar cuando el usuario deja de escribir (debounce)
-watch(busqueda, (valor) => {
-  buscar(valor)
-}, { 
-  debounce: 500 
-})
-```
-
----
-
-## Buenas Prácticas
-
-1. **Mantener componentes pequeños** - Máximo 300 líneas
-2. **Reutilizar componentes** - Crear componentes genéricos
-3. **Documentar funciones complejas** - Especialmente en lógica de negocio
-4. **Usar TypeScript** - Evitar `any`
-5. **Evitar el prop drilling** - Usar store o composables
-6. **Usar scoped styles** - Para evitar conflictos de CSS
-7. **Nombrar eventos descriptivamente** - `@update:nombre` no `@click`
-8. **Comentar el "por qué"** - No el "qué" (el código lo dice)
-
----
-
-## Checklist Pre-Commit
-
-Antes de hacer commit, verificar:
-
-- [ ] Código formateado correctamente
-- [ ] Sin console.log de debug
-- [ ] Sin comentarios innecesarios
-- [ ] TypeScript sin errores
-- [ ] Componentes documentados
-- [ ] Responsive en mobile/tablet/desktop
-- [ ] Sin imports no utilizados
-- [ ] Nombres descriptivos de variables/funciones
-
----
-
-**Última actualización:** 10 de junio de 2026
+El hook de pre-commit corre lint-staged y `vue-tsc` sobre lo que está en stage; el CI corre además la suite completa y el build. Ver [`CONTRIBUTING.md`](../CONTRIBUTING.md).

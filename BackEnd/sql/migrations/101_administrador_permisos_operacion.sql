@@ -1,13 +1,13 @@
 -- =============================================================================
 -- 101_administrador_permisos_operacion.sql
--- Decisión del usuario (2026-10-03): el Administrador (rol_id=2) debe tener
+-- Decisión de negocio: el Administrador (rol_id=2) debe tener
 -- todos los permisos salvo los del sistema. Se le otorgan los que hasta ahora
 -- solo tenía el AdministradorSistema (rol_id=1) y que son de la operación de
 -- una sucursal:
---   - inventario:eliminar_producto (desde M20, desactivar un producto exige
+--   - inventario:eliminar_producto (desactivar un producto exige
 --     el mismo permiso que eliminarlo y el Administrador se había quedado sin
 --     ninguna vía para hacerlo);
---   - retiros_parciales:crear y turnos_caja:ingreso_efectivo (M10: el
+--   - retiros_parciales:crear y turnos_caja:ingreso_efectivo (el
 --     Administrador abre y cierra su turno desde la 073);
 --   - reportes:usuarios.
 -- Quedan solo para el AdministradorSistema los del sistema:

@@ -6,7 +6,7 @@ vi.mock('@/api/metodosPagoApi', () => ({ metodosPagoApi: { listar: vi.fn() } }))
 
 const { pagarExtra } = await import('@/api/onboardingClient')
 
-describe('pagarExtra (N9)', () => {
+describe('pagarExtra', () => {
   beforeEach(() => {
     post.mockReset()
     post.mockResolvedValue({ data: null })

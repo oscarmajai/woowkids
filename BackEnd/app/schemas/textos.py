@@ -1,8 +1,8 @@
 """Tipos de texto compartidos por los schemas.
 
 Un nombre editable no puede quedar vacío ni en espacios: con `""` el UPDATE se
-guardaba y luego la respuesta (que sí exige min_length=1) fallaba con 500, y
-el listado de esa sucursal dejaba de cargar (N-INV1, prueba E2E de v1.2.0).
+guardaría y luego la respuesta (que sí exige min_length=1) fallaría con 500,
+y el listado de esa sucursal dejaría de cargar.
 """
 
 from typing import Annotated

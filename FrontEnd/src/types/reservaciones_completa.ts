@@ -1,5 +1,5 @@
 /**
- * Shapes de POST /reservaciones/completa (QA #10): alta atómica de la
+ * Shapes de POST /reservaciones/completa: alta atómica de la
  * reservación junto con sus extras, productos y pagos en una sola
  * transacción. Sustituye al loop de requests sueltos que hacía
  * NuevaReservacionPage.vue (ver `confirmarReservacion`).

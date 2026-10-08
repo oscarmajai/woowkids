@@ -14,7 +14,7 @@ from app.schemas.tutores import TutorIn
 class DetalleIn(BaseModel):
     nino: NinoIn
     productoId: UUID | None = None  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
-    # N6: horas contratadas; con 0 se registraba una estancia de 0 h (y $0).
+    # Horas contratadas; con 0 se registraba una estancia de 0 h (y $0).
     # En modo evento el servidor toma las horas del evento y la ignora.
     cantidad: int = Field(default=1, ge=1)
     pulseraId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
@@ -47,7 +47,7 @@ class OnboardingResponse(BaseModel):
     pagado: float
     estado: str
     advertenciaEfectivo: str | None = None  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
-    # A17 — código opaco del QR del portal de padres, en claro solo en esta
+    # Código opaco del QR del portal de padres, en claro solo en esta
     # respuesta (en BD queda su sha256). Caduca a las 24 h o al checkout del
     # último niño del registro.
     codigoAccesoPadres: str  # noqa: N815 — camelCase requerido por el contrato JSON del frontend
@@ -56,7 +56,7 @@ class OnboardingResponse(BaseModel):
 class NinoComprobanteResponse(BaseModel):
     nombre: str
     edad: int
-    # M26: notas / alergias del niño, para que salgan en el comprobante.
+    # Notas / alergias del niño, para que salgan en el comprobante.
     notas: str | None = None
     pulsera: str
     horas: int
@@ -64,7 +64,7 @@ class NinoComprobanteResponse(BaseModel):
 
 
 class ComprobanteEstanciaResponse(BaseModel):
-    """N5 — datos para reimprimir el comprobante de un registro activo, con un
+    """Datos para reimprimir el comprobante de un registro activo, con un
     código nuevo del portal de padres (el anterior queda revocado)."""
 
     registroId: UUID  # noqa: N815 — camelCase requerido por el contrato JSON del frontend

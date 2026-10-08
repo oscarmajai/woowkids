@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
-/** B22: "¿Olvidaste tu contraseña?" no hacía nada (no hay recuperación por correo). */
+/** "¿Olvidaste tu contraseña?" explica qué hacer (no hay recuperación por correo). */
 
 vi.mock('@/composables/useAuthForm', () => ({
   useAuthForm: () => ({

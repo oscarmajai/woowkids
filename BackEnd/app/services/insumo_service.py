@@ -54,7 +54,7 @@ async def _validar_proveedor(
     proveedor = await proveedor_repository.obtener(conn, proveedor_id)
     if not proveedor or proveedor["sucursal_id"] != sucursal_id:
         raise DatosInvalidos("El proveedor indicado no pertenece a esta sucursal.")
-    # M22: no se asigna como proveedor principal uno eliminado.
+    # No se asigna como proveedor principal uno eliminado.
     if not proveedor["activo"]:
         raise RecursoInactivoError(
             f"El proveedor «{proveedor['nombre']}» está eliminado; elige otro proveedor principal."
@@ -118,7 +118,7 @@ async def crear(conn: asyncpg.Connection, body: InsumoCrear, current_user: Token
 async def _registrar_stock_inicial(
     conn: asyncpg.Connection, row: dict[str, Any], body: InsumoCrear, creado_por: UUID
 ) -> dict[str, Any]:
-    """A13: el stock con el que nace el insumo entra como cualquier otra entrada:
+    """El stock con el que nace el insumo entra como cualquier otra entrada:
     capa de costo PEPS (origen 'inicial', igual que el backfill de la 043) y
     movimiento 'E/inventario_inicial' en el kardex, en la misma transacción que
     el alta. Antes stock_actual nacía sin capa ni movimiento: el kardex no
@@ -158,7 +158,7 @@ async def actualizar(
 ) -> InsumoOut:
     actual = await obtener(conn, insumo_id)
     updates = body.model_dump(exclude_unset=True)
-    # B9: el costo unitario es el promedio PEPS de las capas (costeo_service lo
+    # El costo unitario es el promedio PEPS de las capas (costeo_service lo
     # recalcula en cada movimiento): un valor editado a mano se sobrescribía en
     # silencio con el siguiente movimiento. Se rechaza en lugar de ignorarlo.
     if "costo_unitario" in updates:

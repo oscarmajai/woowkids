@@ -5,7 +5,7 @@ dejar la caja en negativo y 'efectivo' se reconoce por metodos_pago.tipo='E'
 y no por su nombre editable.
 
 Migrados de tests/integration (que dependían de IDs fijos de la BD compartida
-de desarrollo, N16): cada prueba crea su propia sucursal, cajero, caja, turno
+de desarrollo): cada prueba crea su propia sucursal, cajero, caja, turno
 y apertura con fondo inicial de $1,000.
 """
 

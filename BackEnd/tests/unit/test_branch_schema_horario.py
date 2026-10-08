@@ -1,4 +1,4 @@
-"""Pendiente B9 A.2: el alta/edición de sucursal valida que la apertura sea
+"""El alta/edición de sucursal valida que la apertura sea
 menor que el cierre (no se soporta cruce de medianoche)."""
 
 from datetime import time

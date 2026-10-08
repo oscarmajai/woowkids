@@ -1,8 +1,8 @@
-"""Productos adicionales de una reservación ya levantada (N11).
+"""Productos adicionales de una reservación ya levantada.
 
 El precio sale del catálogo, nunca del request; cada alta, cambio o baja
-recalcula el total de la reservación con las reglas del alta (C2) y respeta la
-máquina de estados (A8) y el plazo de edición (N12)."""
+recalcula el total de la reservación con las reglas del alta y respeta la
+máquina de estados y el plazo de edición."""
 
 from uuid import UUID
 

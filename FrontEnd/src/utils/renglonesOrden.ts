@@ -7,7 +7,7 @@ export interface RenglonOrden {
 }
 
 /**
- * Agrupa los detalles de una orden por renglón (M13): cada producto de combo
+ * Agrupa los detalles de una orden por renglón: cada producto de combo
  * va bajo el renglón del combo al que pertenece, no bajo todos los combos con
  * el mismo nombre.
  *

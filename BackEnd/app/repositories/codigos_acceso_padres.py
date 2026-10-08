@@ -1,4 +1,4 @@
-"""Códigos de acceso del portal de padres (A17, migración 076). Solo se
+"""Códigos de acceso del portal de padres (migración 076). Solo se
 guarda el sha256 del código; el código en claro existe únicamente en la
 respuesta del registro de entrada y en el QR impreso."""
 

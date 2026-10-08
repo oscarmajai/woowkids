@@ -1,7 +1,7 @@
 """
 app/api/routers/horarios.py
 CRUD administrativo de horarios/turnos de trabajo (/api/horarios).
-Las reglas de alcance por sucursal (M19) viven en app/services/horarios_service.py.
+Las reglas de alcance por sucursal viven en app/services/horarios_service.py.
 """
 
 from __future__ import annotations

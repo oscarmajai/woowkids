@@ -18,10 +18,10 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _turno_abierto_para_cobros() -> Iterator[AsyncMock]:
-    """N1: cada cobro toma un bloqueo compartido de la apertura y vuelve a
+    """Cada cobro toma un bloqueo compartido de la apertura y vuelve a
     exigir que el turno esté ABIERTA (turnos_caja_service.bloquear_turno_para_cobro).
     Los tests unitarios usan conexiones falsas que no responden a ese SELECT,
-    así que por defecto el turno está abierto. Los tests de N1 lo vuelven a
+    así que por defecto el turno está abierto. Los tests de ese bloqueo lo vuelven a
     parchear con el estado que quieren probar."""
     with patch(
         "app.services.turnos_caja_service.bloquear_apertura_para_cobro",

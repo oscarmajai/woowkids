@@ -46,7 +46,7 @@ from app.utils.csv_export import csv_streaming_response
 
 router = APIRouter(prefix="/api/turnos-caja", tags=["Turnos de Caja"])
 
-# A16: los pasos del cierre que validan PIN/contraseña (revisión, PIN de cajero
+# Los pasos del cierre que validan PIN/contraseña (revisión, PIN de cajero
 # y de administrador, confirmación) los ejecuta la sesión del cajero que cierra
 # su turno. Antes solo pedían sesión (cocina o inventario los alcanzaban); ahora
 # piden el permiso de contar caja. Quién AUTORIZA (el administrador cuyas
@@ -55,20 +55,19 @@ _PERMISO_CIERRE = "turnos_caja:conteo"
 
 
 def _sucursal_filtro(current_user: TokenData, sucursal_id: str | None) -> str | None:
-    """C1: la sucursal de la sesión para roles con sucursal fija (403 si piden
+    """La sucursal de la sesión para roles con sucursal fija (403 si piden
     otra); AdministradorSistema usa el parámetro, el selector o todas."""
     sucursal = resolver_sucursal(current_user, sucursal_id)
     return str(sucursal) if sucursal is not None else None
 
 
 def _conteo_a_ciegas(turno: TurnoActivoResponse, current_user: TokenData) -> TurnoActivoResponse:
-    """B9: el conteo del cierre es a ciegas. El efectivo esperado y el desglose
-    por método (M7) solo los ve quien puede revisar el arqueo.
+    """El conteo del cierre es a ciegas. El efectivo esperado y el desglose
+    por método solo los ve quien puede revisar el arqueo.
 
-    R1 (prueba E2E de v1.2.0): solo GET /activo los quitaba; /abrir,
-    /iniciar-conteo, /conteo y /cancelar los devolvían al cajero, y el hub los
-    mostraba justo después de abrir caja o de cancelar un conteo. Toda
-    respuesta con el turno pasa por aquí."""
+    Toda respuesta con el turno pasa por aquí (GET /activo, /abrir,
+    /iniciar-conteo, /conteo y /cancelar), para que el hub no los muestre al
+    cajero justo después de abrir caja o de cancelar un conteo."""
     if has_permission(current_user.role, "turnos_caja:revision_admin"):
         return turno
     return turno.model_copy(update={"efectivo_esperado": None, "ventas_por_metodo": None})
@@ -100,8 +99,8 @@ async def listar_turnos(
     current_user: TokenData = Depends(require_permission("turnos_caja:ver_activo")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[TurnoResponse]:
-    # M19: los horarios de la sucursal de la sesión (o la del selector, para
-    # AdministradorSistema) más los globales. M8: `vigente` se calcula con la
+    # Los horarios de la sucursal de la sesión (o la del selector, para
+    # AdministradorSistema) más los globales. `vigente` se calcula con la
     # hora local de esa sucursal; sin sucursal, con la hora de México.
     sucursal = _sucursal_filtro(current_user, sucursal_id)
     ahora = None
@@ -122,8 +121,8 @@ async def listar_cajas(
     current_user: TokenData = Depends(require_permission("cajas:listar")),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> list[CajaResponse]:
-    # C1 (adm B1, caj2 B19): sin sucursal_id devolvía las cajas de todas las
-    # sucursales.
+    # Sin sucursal_id, los roles con sucursal fija ven solo las cajas de su
+    # sucursal (ver _sucursal_filtro).
     return await turnos_caja_service.obtener_cajas(
         conn, _sucursal_filtro(current_user, sucursal_id)
     )
@@ -160,7 +159,7 @@ async def obtener_activo(
     opcional: bool = Query(
         False,
         description=(
-            "B4: con true, si no hay turno activo responde 200 con null en vez de "
+            "Con true, si no hay turno activo responde 200 con null en vez de "
             "404 (para consultas de fondo que no son un error)."
         ),
     ),
@@ -283,8 +282,8 @@ async def validar_pin_admin(
     current_user: TokenData = Depends(require_permission(_PERMISO_CIERRE)),
     conn: asyncpg.Connection = Depends(get_db),
 ) -> dict[str, Any]:
-    """Devuelve un `token_pin` de un solo uso que solo sirve para `proposito`
-    (A16): `"cerrar"` (POST /confirmar) o `"cancelar"` (cancelar o devolver
+    """Devuelve un `token_pin` de un solo uso que solo sirve para `proposito`:
+    `"cerrar"` (POST /confirmar) o `"cancelar"` (cancelar o devolver
     una orden cobrada). Sin `proposito` se emite para `"cancelar"`."""
     turno_id = body.get("turno_id", "")
     admin_email = str(body.get("admin_email", "") or "")

@@ -1,10 +1,10 @@
-"""M21 y M3 contra PostgreSQL real.
+"""Precisión y rangos de inventario contra PostgreSQL real.
 
-M21: el costo unitario se guardaba con 2 decimales (insumos) o 4 (capas): en
-insumos por gramo o mililitro el error era de ±6 %. Ahora 6 decimales en
-insumos, capas y líneas de compra (migración 097).
-M3: una línea válida en su unidad que, convertida a la unidad base, no cabe en
-el stock respondía 500 al recibir; ahora 422 al crear la compra."""
+- El costo unitario se guarda con 6 decimales en insumos, capas y líneas de
+  compra (migración 097): con 2 (insumos) o 4 (capas), en insumos por gramo o
+  mililitro el error llegaba a ±6 %.
+- Una línea válida en su unidad que, convertida a la unidad base, no cabe en el
+  stock responde 422 al crear la compra, en vez de 500 al recibir."""
 
 from decimal import Decimal
 
@@ -18,7 +18,7 @@ from tests.db.conftest import Escenario
 from tests.db.inventario_datos import crear_compra, crear_insumo, linea, unidad
 
 
-async def test_m21_costo_unitario_conserva_seis_decimales(
+async def test_costo_unitario_conserva_seis_decimales(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:
@@ -49,7 +49,7 @@ async def test_m21_costo_unitario_conserva_seis_decimales(
         ) == Decimal("0.083074")
 
 
-async def test_m3_linea_que_desborda_al_convertir_a_unidad_base_responde_422(
+async def test_linea_que_desborda_al_convertir_a_unidad_base_responde_422(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
     async with pool.acquire() as conn:

@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 /**
- * UX administración: el administrador de sucursal (sin sucursales:eliminar
- * ni sucursales:editar) veía "Desactivar sucursal" en su propia sucursal.
+ * El administrador de sucursal (sin sucursales:eliminar ni sucursales:editar)
+ * no ve "Desactivar sucursal" en su propia sucursal.
  */
 
 const permisos = new Set<string>()

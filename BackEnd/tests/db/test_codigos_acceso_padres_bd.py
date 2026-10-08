@@ -1,5 +1,6 @@
-"""A17 / C6 contra PostgreSQL real (migración 076). Usa TEST_DATABASE_URL (una
-BD desechable con sql/schema_maestro.sql cargado) y se salta si no existe.
+"""Código de acceso del portal de padres y permisos de documentos contra
+PostgreSQL real (migración 076). Usa TEST_DATABASE_URL (una BD desechable con
+sql/schema_maestro.sql cargado) y se salta si no existe.
 Todo corre dentro de una transacción que se revierte al terminar."""
 
 import os
@@ -34,7 +35,7 @@ async def _registro(conn: asyncpg.Connection, estado: str = "A"):
     sucursal_id = await conn.fetchval(
         """
         INSERT INTO sucursales (nombre, direccion, telefono, correo, clave)
-        VALUES ('Prueba A17', 'x', '3310000099', $1, $2) RETURNING id
+        VALUES ('Prueba Codigos Padres', 'x', '3310000099', $1, $2) RETURNING id
         """,
         f"{uuid4().hex[:8]}@prueba.dev",
         uuid4().hex[:6].upper(),

@@ -1,4 +1,4 @@
-"""M12 / M13 / M14 / M3 / B5 / N10 contra PostgreSQL real, por HTTP: datos del
+"""Contra PostgreSQL real, por HTTP: datos del
 ticket, hijos de combo enlazados a su renglón, servicios vendibles en caja,
 cobros concurrentes con la misma Idempotency-Key, control optimista al editar
 una orden y POST /comandas sin movimiento de caja.
@@ -121,7 +121,7 @@ async def _detalle(e: Escenario, comanda_id: str) -> dict[str, Any]:
     return r.json()
 
 
-# ── M12: datos del ticket ────────────────────────────────────────────────────
+# ── Datos del ticket ─────────────────────────────────────────────────────────
 
 
 async def test_ticket_trae_cliente_cambio_y_sucursal_de_la_venta(esc: Escenario) -> None:
@@ -159,7 +159,7 @@ async def test_ticket_sin_cambio_trae_cero(esc: Escenario) -> None:
     assert (await _detalle(e, r.json()["id"]))["cambio"] == 0.0
 
 
-# ── M13: hijos de combo enlazados a su renglón ───────────────────────────────
+# ── Hijos de combo enlazados a su renglón ────────────────────────────────────
 
 
 async def test_combo_dividido_cada_hijo_apunta_a_su_renglon(esc: Escenario) -> None:
@@ -321,7 +321,7 @@ async def test_migracion_093_enlaza_filas_viejas_sin_ambiguedad(esc: Escenario) 
     assert {f["detalle_padre_id"] for f in filas if f["comanda_id"] == ids[1]} == {None}
 
 
-# ── M14: servicios ───────────────────────────────────────────────────────────
+# ── Servicios ────────────────────────────────────────────────────────────────
 
 
 async def test_servicio_aparece_en_catalogo_y_se_vende_sin_inventario(esc: Escenario) -> None:
@@ -377,7 +377,7 @@ async def test_combo_trae_disponible_estimado_de_sus_integrantes(esc: Escenario)
     assert por_id[str(e.productos["hotdog"])]["disponible_estimado"] == 10
 
 
-# ── M3: cobros concurrentes con la misma Idempotency-Key ─────────────────────
+# ── Cobros concurrentes con la misma Idempotency-Key ─────────────────────────
 
 
 async def test_cobros_concurrentes_misma_clave_devuelven_la_misma_venta(esc: Escenario) -> None:
@@ -402,7 +402,7 @@ async def test_cobros_concurrentes_misma_clave_devuelven_la_misma_venta(esc: Esc
     assert (comandas, pagos, caja) == (1, 1, 1)
 
 
-# ── B5: control optimista al editar una orden ────────────────────────────────
+# ── Control optimista al editar una orden ────────────────────────────────────
 
 
 async def test_editar_orden_con_version_vieja_409(esc: Escenario) -> None:
@@ -437,7 +437,7 @@ async def test_editar_orden_con_version_vieja_409(esc: Escenario) -> None:
     assert [x["id"] for x in d2["detalles"]] == [agua["id"]]
 
     # Con la versión nueva sí se aplica (aquí: quitar lo último cancela; se
-    # prueba con la cancelación de cobradas → 409 de A4, no de versión).
+    # prueba con la cancelación de cobradas → 409 por estar cobrada, no por versión).
     nueva = await e.client.patch(
         f"/api/comandas/{comanda_id}/detalles",
         json={"detalles_ids_a_eliminar": [agua["id"]], "modificado_esperado": d2["modificado"]},
@@ -462,7 +462,7 @@ async def test_editar_orden_sin_version_sigue_funcionando(esc: Escenario) -> Non
     assert p.status_code == 200, p.text
 
 
-# ── N10: POST /comandas sin movimiento de caja ───────────────────────────────
+# ── POST /comandas sin movimiento de caja ────────────────────────────────────
 
 
 async def test_post_comandas_no_registra_venta_en_caja(esc: Escenario) -> None:

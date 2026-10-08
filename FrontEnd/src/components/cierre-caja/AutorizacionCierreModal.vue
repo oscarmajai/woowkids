@@ -313,7 +313,7 @@ function claseDiferencia(diferencia: number): string {
 // sobre efectivo (ver comentario arriba). Este total es el que pidió el negocio
 // para ver de un vistazo si el cajero tiene una diferencia grande en algún
 // método que no sea efectivo (ej. tarjeta).
-// A4: lo devuelto a clientes en el turno (cancelaciones y órdenes entregadas
+// Lo devuelto a clientes en el turno (cancelaciones y órdenes entregadas
 // devueltas), ya restado del esperado de cada método.
 const devolucionesTotales = computed(() => totalDevoluciones(turno.balancePorMetodo))
 

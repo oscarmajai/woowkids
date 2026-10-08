@@ -1,9 +1,7 @@
 -- =============================================================================
 -- 028_lealtad_puntos.sql
 -- Módulo de puntos de lealtad: cashback en puntos por celular, scopeado por
--- sucursal (sin migración de puntos entre sucursales). Ver
--- PUNTOS_LEALTAD_DISENO.md y el plan de implementación en
--- /home/oscarmajai/.claude/plans/warm-jumping-hippo.md.
+-- sucursal (sin migración de puntos entre sucursales).
 --
 -- configuracion_lealtad es un "singleton" por sucursal (PK = sucursal_id,
 -- se maneja con upsert). lotes_puntos es un lote por venta que otorga

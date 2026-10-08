@@ -81,7 +81,7 @@ async function intentarAutenticar() {
     return
   }
 
-  // 2. Validar PIN no vacío (A16: con PIN configurado no se acepta la contraseña)
+  // 2. Validar PIN no vacío (con PIN configurado no se acepta la contraseña)
   if (!password) {
     $q.notify({
       type: 'negative',

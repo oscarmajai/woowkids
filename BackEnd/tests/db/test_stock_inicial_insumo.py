@@ -1,6 +1,6 @@
-"""A13: el stock inicial de un insumo entra con movimiento en el kardex y capa
-de costo PEPS, contra PostgreSQL real. Antes nacía sin ninguno de los dos: el
-kardex no cuadraba con stock_actual y esas unidades quedaban sin costo."""
+"""El stock inicial de un insumo entra con movimiento en el kardex y capa de
+costo PEPS, contra PostgreSQL real. Sin ninguno de los dos, el kardex no
+cuadraría con stock_actual y esas unidades quedarían sin costo."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -110,7 +110,7 @@ async def test_stock_inicial_crea_movimiento_y_capa_y_el_kardex_cuadra(
 async def test_stock_inicial_y_compra_posterior_siguen_cuadrando(
     pool: asyncpg.Pool, escenario: Escenario
 ) -> None:
-    # El caso de la prueba E2E: 50 iniciales + compra de 100 → kardex 150, capas 150.
+    # 50 iniciales + compra de 100 → kardex 150, capas 150.
     async with pool.acquire() as conn:
         insumo_id = await _crear_insumo(conn, escenario, "50", "0.50")
         pza = await conn.fetchval("SELECT id FROM public.unidades_medida WHERE codigo = 'pza'")

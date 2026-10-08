@@ -1,7 +1,7 @@
-"""N1 contra PostgreSQL real: un cobro ya no entra a la mitad del inicio de
-un conteo o de un cierre. Antes, el cobro validaba el turno ABIERTA fuera
-de cualquier bloqueo (dependencia apertura_operando_id) y registraba la
-venta aunque el turno ya estuviera EN_CORTE; ahora la transacción del cobro
+"""Contra PostgreSQL real: un cobro no entra a la mitad del inicio de
+un conteo o de un cierre. Validar el turno ABIERTA fuera de cualquier
+bloqueo (dependencia apertura_operando_id) dejaría registrar la venta
+aunque el turno ya estuviera EN_CORTE; por eso la transacción del cobro
 toma un FOR SHARE de la apertura y vuelve a validar."""
 
 import asyncio
@@ -30,9 +30,6 @@ from tests.db.pos_fixtures import (
 @pytest_asyncio.fixture
 async def pos(pool: asyncpg.Pool) -> Pos:
     return await crear_pos(pool)
-
-
-# ── N1 ────────────────────────────────────────────────────────────────────────
 
 
 async def test_el_conteo_espera_a_que_termine_un_cobro_en_curso(

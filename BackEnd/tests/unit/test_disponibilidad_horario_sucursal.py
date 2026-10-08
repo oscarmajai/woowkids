@@ -1,4 +1,4 @@
-"""Pendiente B9 A: los bloques de disponibilidad respetan el horario de
+"""Los bloques de disponibilidad respetan el horario de
 operación de la sucursal (hora_apertura / hora_cierre), no un horario fijo."""
 
 from datetime import time

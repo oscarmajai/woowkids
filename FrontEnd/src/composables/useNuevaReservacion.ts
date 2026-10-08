@@ -29,7 +29,7 @@ export function useNuevaReservacion() {
       return
     }
 
-    // M10: quien puede abrir caja (Cajero, y también el Administrador de sucursal
+    // Quien puede abrir caja (Cajero, y también el Administrador de sucursal
     // desde la migración 073: abre y cierra su propio turno en /pos/cierre) va a
     // abrirla. Solo a un rol que no abre caja se le explica qué falta en vez de
     // navegarlo a una pantalla que no puede usar.
