@@ -538,7 +538,7 @@
             outlined
             type="number"
             min="0"
-            step="0.001"
+            :step="pasoCantidadReceta(unidadRecetaSeleccionada)"
             :suffix="unidadRecetaSeleccionada?.codigo"
           />
         </label>
@@ -617,6 +617,7 @@ import {
 import { apiClient } from '@/api/axiosClient.ts'
 import { getProductoImagenUrl } from '@/api/productosApi'
 import { recortarImagenCuadrada } from '@/utils/imageCrop'
+import { pasoCantidadReceta } from '@/utils/inventario'
 import { validarTramoNuevo } from '@/utils/tramosEstancia'
 
 interface TramoEstancia {
@@ -1100,6 +1101,12 @@ const unidadRecetaSeleccionada = computed(() => {
   const insumo = insumosStore.insumos.find((i) => i.id === formReceta.value.insumo_id)
   if (!insumo) return null
   return unidadesStore.unidades.find((u) => u.id === insumo.unidad_base_id) ?? null
+})
+
+// Al elegir un insumo por pieza con la cantidad vacía se propone 1: es el caso
+// común (1 vaso, 1 pan) y evita capturar desde 0.
+watch(unidadRecetaSeleccionada, (u) => {
+  if (u?.tipo === 'pieza' && !formReceta.value.cantidad) formReceta.value.cantidad = 1
 })
 
 // Aviso suave: 1000+ g/ml por unidad de producto casi siempre es un error de
