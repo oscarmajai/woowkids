@@ -4,6 +4,7 @@ import {
   compraPorRecibir,
   diferenciaConteo,
   formatCostoUnitario,
+  pasoCantidadReceta,
   sumarBadgesGrupo,
   tituloAlertasStock,
   totalConIva,
@@ -74,5 +75,22 @@ describe('sumarBadgesGrupo (B7)', () => {
         { count: 1, tone: 'warn' },
       ]),
     ).toBe(6)
+  })
+})
+
+describe('pasoCantidadReceta', () => {
+  it('sube de 1 en 1 los insumos por pieza', () => {
+    expect(pasoCantidadReceta({ tipo: 'pieza', factor_a_base: '1.000000' })).toBe(1)
+  })
+
+  it('sube de 0.5 en 0.5 los insumos en kg o l', () => {
+    expect(pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1000.000000' })).toBe(0.5)
+    expect(pasoCantidadReceta({ tipo: 'volumen', factor_a_base: '1000.000000' })).toBe(0.5)
+  })
+
+  it('deja el paso fino en g, ml o sin insumo elegido', () => {
+    expect(pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1.000000' })).toBe(0.001)
+    expect(pasoCantidadReceta({ tipo: 'volumen', factor_a_base: '1.000000' })).toBe(0.001)
+    expect(pasoCantidadReceta(null)).toBe(0.001)
   })
 })

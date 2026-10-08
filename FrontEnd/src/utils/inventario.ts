@@ -6,6 +6,7 @@
  */
 import type { EstadoCompra } from '@/types/compra'
 import type { NavBadge } from '@/types/navigation'
+import type { UnidadMedida } from '@/types/unidadMedida'
 
 const formateadorCostoUnitario = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -85,4 +86,20 @@ export function sumarBadgesGrupo(badges: Array<NavBadge | null | undefined>): nu
     total += badge.count
   }
   return total
+}
+
+/**
+ * Paso del campo de cantidad en una línea de receta según la unidad base del
+ * insumo: las piezas van de 1 en 1, kg/l (factor 1000) de 0.5 en 0.5 y g/ml
+ * aceptan fracciones finas. Sin insumo elegido se deja el paso fino.
+ * @example pasoCantidadReceta({ tipo: 'pieza', factor_a_base: '1' }) → 1
+ * @example pasoCantidadReceta({ tipo: 'masa', factor_a_base: '1000' }) → 0.5
+ */
+export function pasoCantidadReceta(
+  unidad: Pick<UnidadMedida, 'tipo' | 'factor_a_base'> | null | undefined,
+): number {
+  if (!unidad) return 0.001
+  if (unidad.tipo === 'pieza') return 1
+  if (Number(unidad.factor_a_base) >= 1000) return 0.5
+  return 0.001
 }
