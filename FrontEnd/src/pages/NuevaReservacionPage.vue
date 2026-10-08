@@ -400,15 +400,15 @@
                   <div class="col-12 col-sm-5">
                     <div class="field-label">Producto</div>
                     <!--
-                      behavior="dialog": el desplegable normal se ancla a la
-                      posición del campo y, como este vive al fondo de una página
-                      larga, al hacer scroll quedaba flotando sobre las tarjetas de
-                      paquetes, despegado de su input. El selector en diálogo no
-                      depende del scroll y además da más espacio en pantallas
-                      chicas. use-input permite filtrar cuando la sucursal tiene
-                      muchos productos.
+                      En pantallas chicas el selector va en diálogo: no depende del
+                      scroll de una página larga y da más espacio. En escritorio el
+                      diálogo se pega al borde superior de la ventana y a todo el
+                      ancho, lejos del campo, así que ahí se usa el menú anclado.
+                      use-input permite filtrar cuando la sucursal tiene muchos
+                      productos.
                     -->
                     <q-select
+                      ref="productoSelectRef"
                       v-model="productoAdicionalTemporal.producto_id"
                       dense
                       outlined
@@ -417,12 +417,14 @@
                       option-value="id"
                       option-label="nombre"
                       :options="opcionesProductoFiltradas"
-                      behavior="dialog"
+                      :behavior="$q.screen.lt.sm ? 'dialog' : 'menu'"
                       use-input
                       input-debounce="0"
                       placeholder="Elige un producto"
                       no-options-label="No hay más productos disponibles"
                       @filter="filtrarProductosAdicionales"
+                      @popup-show="vigilarScrollDelDesplegable"
+                      @popup-hide="soltarScrollDelDesplegable"
                     >
                       <template #option="scope">
                         <q-item v-bind="scope.itemProps">
@@ -977,7 +979,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { QSelect } from 'quasar'
 import { useRouter } from 'vue-router'
 import { format as formatDate, parseISO, startOfDay, isBefore } from 'date-fns'
 import { useQuasar } from 'quasar'
@@ -1307,6 +1310,20 @@ const productosDisponiblesParaAdicionales = computed(() => {
 // Lista que realmente pinta el q-select. Se mantiene aparte del computed porque
 // use-input exige entregar las opciones desde el callback de @filter.
 const opcionesProductoFiltradas = ref<ProductoAdmin[]>([])
+
+const productoSelectRef = ref<QSelect | null>(null)
+
+// El menú anclado no sigue al campo cuando la página hace scroll y quedaba
+// flotando sobre otras tarjetas. Se cierra al hacer scroll fuera de la lista.
+const cerrarDesplegableAlScroll = (e: Event): void => {
+  if (e.target instanceof Element && e.target.closest('.q-menu')) return
+  productoSelectRef.value?.hidePopup()
+}
+const vigilarScrollDelDesplegable = (): void =>
+  window.addEventListener('scroll', cerrarDesplegableAlScroll, true)
+const soltarScrollDelDesplegable = (): void =>
+  window.removeEventListener('scroll', cerrarDesplegableAlScroll, true)
+onBeforeUnmount(soltarScrollDelDesplegable)
 
 const filtrarProductosAdicionales = (texto: string, update: (fn: () => void) => void): void => {
   update(() => {
