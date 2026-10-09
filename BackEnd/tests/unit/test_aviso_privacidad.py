@@ -404,8 +404,19 @@ async def test_checkin_de_evento_aceptado_guarda_la_version(
     monkeypatch.setattr(
         estancias, "get_precio_pulsera_by_reserva_id", AsyncMock(return_value=Decimal("0"))
     )
+    monkeypatch.setattr(
+        estancias,
+        "get_datos_operativos",
+        AsyncMock(return_value={"zona_horaria": "America/Mexico_City"}),
+    )
+    insert_detalle = AsyncMock()
+    monkeypatch.setattr(estancias, "insert_detalle_registro", insert_detalle)
     data = _onboarding(aceptaAvisoPrivacidad=True, versionAvisoPrivacidad=3)
     data.reservacionId = evento["id"]
     data.pagos = []
     await _registrar(data)
     assert checkin["registro_create"].await_args.kwargs["aviso_privacidad_version"] == 3
+    # El evento de las 16:00 en México se guarda como 22:00 UTC, no como 16:00 UTC.
+    entrada, salida_esperada = insert_detalle.await_args.args[6:8]
+    assert entrada.astimezone(UTC).hour == 22
+    assert salida_esperada.astimezone(UTC).hour == 0  # 18:00 en México
