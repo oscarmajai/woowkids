@@ -6,6 +6,7 @@ import { obtenerDetalleOrden } from '@/services/historialService'
 import type { DetalleOrden } from '@/api/historialApi'
 import { printTicketElement } from '@/utils/ticketPrinting'
 import TicketReceipt from '@/components/shared/TicketReceipt.vue'
+import { useAuthStore } from '@/stores/auth'
 const props = withDefaults(
   defineProps<{
     tipoOrigen?: 'comanda' | 'estancia' | 'reservacion'
@@ -16,9 +17,10 @@ const props = withDefaults(
   }>(),
   { tipoOrigen: 'comanda', referenciaId: '', comandaId: '', posMode: false, autoPrint: false },
 )
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ close: []; 'imprimir-qr': [registroId: string] }>()
 
 const $q = useQuasar()
+const auth = useAuthStore()
 
 const isLoading = ref(true)
 const orden = ref<DetalleOrden | null>(null)
@@ -63,6 +65,14 @@ const esCancelado = computed(() => {
 
 const referenciaLabel = computed(() =>
   orden.value?.tipo_origen === 'comanda' ? 'TICKET' : 'CLIENTE',
+)
+
+// El ticket con QR es el comprobante de entrada: solo existe con niños dentro.
+const puedeImprimirConQr = computed(
+  () =>
+    orden.value?.tipo_origen === 'estancia' &&
+    orden.value.estado_actual?.toUpperCase() === 'A' &&
+    auth.hasPermission('estancias:checkin'),
 )
 
 const puntosGanados = computed(() => orden.value?.puntos_ganados ?? null)
@@ -158,7 +168,16 @@ async function ejecutarImpresion() {
             icon="print"
             :label="isPrinting ? 'Imprimiendo…' : 'Imprimir'"
             :loading="isPrinting"
+            data-test="imprimir-normal"
             @click="ejecutarImpresion()"
+          />
+          <q-btn
+            v-if="puedeImprimirConQr"
+            outline
+            icon="qr_code_2"
+            label="Imprimir con QR"
+            data-test="imprimir-con-qr"
+            @click="emit('imprimir-qr', props.referenciaId)"
           />
           <q-btn
             unelevated
@@ -298,6 +317,11 @@ async function ejecutarImpresion() {
 
     :deep(.q-btn) {
       min-height: 46px;
+    }
+
+    // Con tres botones (imprimir, imprimir con QR, cerrar) el último ocupa toda la fila.
+    > :last-child:nth-child(odd) {
+      grid-column: 1 / -1;
     }
   }
 

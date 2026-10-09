@@ -196,6 +196,50 @@
                   @click="verDetalleOrden(tx.tipo_origen, tx.referencia_id, tx.estado_actual)"
                 />
                 <q-btn
+                  v-if="tx.tipo_origen !== 'comanda'"
+                  flat
+                  round
+                  dense
+                  icon="print"
+                  class="action-btn"
+                  aria-label="Imprimir"
+                  data-test="imprimir-no-comanda"
+                >
+                  <q-menu anchor="bottom right" self="top right">
+                    <q-list dense style="min-width: 230px">
+                      <q-item
+                        v-close-popup
+                        clickable
+                        data-test="imprimir-ticket-normal"
+                        @click="imprimirDirecto(tx.tipo_origen, tx.referencia_id)"
+                      >
+                        <q-item-section avatar
+                          ><q-icon name="receipt" size="19px"
+                        /></q-item-section>
+                        <q-item-section>Imprimir ticket</q-item-section>
+                      </q-item>
+                      <q-item
+                        v-if="tx.tipo_origen === 'estancia'"
+                        v-close-popup
+                        clickable
+                        :disable="!puedeImprimirConQr(tx.estado_actual)"
+                        data-test="imprimir-ticket-qr"
+                        @click="abrirTicketConQr(tx.referencia_id, tx.titulo)"
+                      >
+                        <q-item-section avatar>
+                          <q-icon name="qr_code_2" size="19px" />
+                        </q-item-section>
+                        <q-item-section>
+                          Imprimir ticket con QR
+                          <q-item-label v-if="!puedeImprimirConQr(tx.estado_actual)" caption>
+                            {{ motivoSinQr(tx.estado_actual) }}
+                          </q-item-label>
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+                <q-btn
                   v-if="tx.tipo_origen === 'comanda'"
                   flat
                   round
@@ -269,6 +313,14 @@
       :referencia-id="detalleReferenciaId"
       :auto-print="modoImpresion"
       @close="onCerrarDetallePagado"
+      @imprimir-qr="onImprimirQrDesdeDetalle"
+    />
+    <ReimprimirComprobanteDialog
+      v-if="registroQrId"
+      v-model="mostrarTicketQr"
+      :registro-id="registroQrId"
+      :subtitulo="registroQrTitulo"
+      @update:model-value="(abierto) => !abierto && (registroQrId = null)"
     />
     <EditarOrdenModal
       v-if="mostrarModalEditar"
@@ -283,6 +335,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import DetalleOrdenPagada from './DetalleOrdenPagada.vue'
+import ReimprimirComprobanteDialog from '@/components/control-acceso/ReimprimirComprobanteDialog.vue'
 import EditarOrdenModal from './EditarOrdenModal.vue'
 import MotivoCancelacionDialog from './MotivoCancelacionDialog.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -688,6 +741,33 @@ function abrirEditar(comandaId: string) {
 
 function onOrdenActualizada() {
   void cargarDatos()
+}
+
+// Ticket con QR: reimprime el comprobante de entrada. Pide un QR nuevo al
+// backend (revoca el anterior) y solo existe mientras haya niños dentro.
+const registroQrId = ref<string | null>(null)
+const registroQrTitulo = ref('')
+const mostrarTicketQr = ref(false)
+
+function puedeImprimirConQr(estado: string): boolean {
+  return estado.toUpperCase() === 'A' && authStore.hasPermission('estancias:checkin')
+}
+
+function motivoSinQr(estado: string): string {
+  if (!authStore.hasPermission('estancias:checkin')) return 'Sin permiso para reimprimir entradas'
+  return estado.toUpperCase() === 'A' ? '' : 'Solo con niños dentro'
+}
+
+function abrirTicketConQr(registroId: string, titulo: string) {
+  registroQrId.value = registroId
+  registroQrTitulo.value = titulo
+  mostrarTicketQr.value = true
+}
+
+function onImprimirQrDesdeDetalle(registroId: string) {
+  const fila = transacciones.value.find((t) => t.referencia_id === registroId)
+  onCerrarDetallePagado()
+  abrirTicketConQr(registroId, fila?.titulo ?? '')
 }
 
 function onCerrarDetallePagado() {
