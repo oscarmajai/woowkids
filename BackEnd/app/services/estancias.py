@@ -1,15 +1,17 @@
 import unicodedata
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 import asyncpg
+import pytz
 from fastapi import HTTPException, UploadFile
 
 from app.core.object_storage import PREFIJOS, delete_objects, upload_bytes, validar_y_leer
 from app.core.ws_manager import manager
 from app.repositories import metodos_pago_repository
+from app.repositories.branch_repository import get_datos_operativos
 from app.repositories.caja_repository import registrar_cambio_caja, registrar_movimiento_caja
 from app.repositories.detalles_registro import insert_detalle_registro
 from app.repositories.estancias import get_activos_by_sucursal_id
@@ -171,6 +173,15 @@ async def create_estancia(
     return resultado
 
 
+def instante_del_evento(fecha: date, hora: time, zona_horaria: str) -> datetime:
+    """Fecha y hora del evento (hora local de la sucursal) como instante con zona.
+
+    Un datetime sin zona se guarda en timestamptz como UTC: un evento de las
+    09:00 en México quedaba a las 03:00 locales y las estancias salían
+    excedidas desde el primer minuto."""
+    return pytz.timezone(zona_horaria).localize(datetime.combine(fecha, hora))
+
+
 async def _crear_estancia_tx(
     conn: asyncpg.Connection,
     data: OnboardingRequest,
@@ -232,8 +243,13 @@ async def _crear_estancia_tx(
 
             fecha_base = evento.fecha_evento
 
-            entrada = datetime.combine(fecha_base, evento.hora_inicio)
-            salida_esperada = datetime.combine(fecha_base, evento.hora_fin)
+            sucursal = await get_datos_operativos(conn, data.sucursalId)
+            if sucursal is None:
+                raise HTTPException(404, "Sucursal no encontrada")
+            entrada = instante_del_evento(fecha_base, evento.hora_inicio, sucursal["zona_horaria"])
+            salida_esperada = instante_del_evento(
+                fecha_base, evento.hora_fin, sucursal["zona_horaria"]
+            )
 
             # Calcular cantidad de horas segun el evento
             cantidad_horas = int((salida_esperada - entrada).total_seconds() / 3600)

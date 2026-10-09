@@ -1,6 +1,11 @@
 <template>
   <q-page class="page-content cierre-ev">
     <div ref="resumenRef">
+      <!-- Logo del resumen impreso: no se ve en pantalla (ver data-print-only). -->
+      <div data-print-only class="cierre-ev__logo-impreso" style="display: none">
+        <TicketLogo :ancho-mm="210" />
+      </div>
+
       <div v-if="error" class="list-page__note list-page__note--bad">
         <q-icon name="error" size="19px" />{{ error }}
         <q-btn flat dense label="Reintentar" class="q-ml-auto" @click="cargarTodo" />
@@ -232,6 +237,7 @@ import PaymentModal from '@/components/shared/payments/PaymentModal.vue'
 import { horasFacturables } from '@/utils/horario'
 import { detallePulseras } from '@/utils/reservacionPrecio'
 import { printTicketElement } from '@/utils/ticketPrinting'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
 import { descontarCambio } from '@/utils/pagos'
 
 const route = useRoute()

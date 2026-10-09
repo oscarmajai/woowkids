@@ -31,5 +31,10 @@ export async function reimprimirComprobanteEstancia(
   registroId: string,
 ): Promise<DatosComprobanteEstancia> {
   const dto = await reimprimirComprobante(registroId)
+  // Sin la lista de niños o sin código no hay comprobante que imprimir: se
+  // avisa con un mensaje claro en vez de fallar al armar el ticket.
+  if (!Array.isArray(dto?.ninos) || !dto.codigoAccesoPadres) {
+    throw new Error('El servidor devolvió un comprobante incompleto. Intenta de nuevo.')
+  }
   return datosDeReimpresion(dto, await qrPortalPadres(dto.codigoAccesoPadres))
 }

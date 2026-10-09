@@ -74,4 +74,20 @@ describe('reimpresión del comprobante', () => {
     expect(url).not.toContain(DTO.registroId)
     expect(datos.qrCodeUrl).toBe('data:image/png;base64,qr')
   })
+
+  it('si el servidor responde sin la lista de niños, avisa con un mensaje claro', async () => {
+    vi.mocked(reimprimirComprobante).mockResolvedValue({} as ComprobanteEstanciaDto)
+    await expect(reimprimirComprobanteEstancia('reg-1')).rejects.toThrow(
+      'El servidor devolvió un comprobante incompleto',
+    )
+    expect(QRCode.toDataURL).not.toHaveBeenCalled()
+  })
+
+  it('si falta el código del portal de padres tampoco arma el comprobante', async () => {
+    vi.mocked(reimprimirComprobante).mockResolvedValue({
+      ...DTO,
+      codigoAccesoPadres: '',
+    })
+    await expect(reimprimirComprobanteEstancia('reg-1')).rejects.toThrow('incompleto')
+  })
 })

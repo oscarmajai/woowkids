@@ -103,4 +103,21 @@ describe('TicketReceipt', () => {
     expect(filas[1]).toContain('2x Hot dog')
     expect(filas[2]).toContain('2x Refresco')
   })
+
+  it('una estancia cerrada no sale como cancelada: C es "cerrada", no "cancelada"', () => {
+    const texto = mount(TicketReceipt, {
+      props: { orden: orden({ tipo_origen: 'estancia', estado_actual: 'C' }), anchoMm: 80 },
+    }).text()
+    expect(texto).not.toContain('TICKET CANCELADO')
+  })
+
+  it('una comanda cancelada sí lleva la marca de cancelado', () => {
+    const texto = mount(TicketReceipt, {
+      props: {
+        orden: orden({ tipo_origen: 'comanda', estado_actual: 'C', motivo_cancelacion: 'Error' }),
+        anchoMm: 80,
+      },
+    }).text()
+    expect(texto).toContain('TICKET CANCELADO')
+  })
 })

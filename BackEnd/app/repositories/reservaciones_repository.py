@@ -168,7 +168,12 @@ async def listar_pendientes_de_comanda(
         WHERE activo = TRUE
           AND estado = 'confirmada'
           AND comanda_enviada = FALSE
-          AND (fecha_evento + hora_inicio) - (make_interval(mins => $1)) <= NOW()
+          -- fecha_evento + hora_inicio es la hora LOCAL de la sucursal (sin zona):
+          -- se convierte con su zona antes de compararla con NOW(), que es un
+          -- instante. Sin esto se leía como UTC y la comanda salía 6 h antes.
+          AND ((fecha_evento + hora_inicio) AT TIME ZONE (
+                SELECT s.zona_horaria FROM sucursales s WHERE s.id = reservaciones.sucursal_id
+              )) - (make_interval(mins => $1)) <= NOW()
         """,
         minutos_anticipacion,
     )

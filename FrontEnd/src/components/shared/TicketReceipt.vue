@@ -3,14 +3,13 @@ import { computed } from 'vue'
 import type { DetalleOrden, DetalleProducto } from '@/api/historialApi'
 import { agruparPorRenglon, resumirHijos } from '@/utils/renglonesOrden'
 import { ticketContentWidth, type TicketWidth } from '@/utils/ticketPrinting'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
+import { ordenCancelada } from '@/utils/estadoOrden'
 
 const props = defineProps<{ orden: DetalleOrden; anchoMm: TicketWidth }>()
-const esCancelado = computed(() => {
-  const estado = props.orden?.estado_actual
-  if (!estado) return false
-  if (props.orden?.tipo_origen === 'reservacion') return estado === 'cancelada'
-  return estado === 'C'
-})
+const esCancelado = computed(() =>
+  ordenCancelada(props.orden?.tipo_origen, props.orden?.estado_actual),
+)
 
 // Cada combo lleva solo sus productos (por renglón, no por nombre), con
 // los iguales sumados ("2x Hot dog" en un 2x combo).
@@ -50,7 +49,7 @@ function formatearFecha(iso: string | null): string {
   <div class="ticket-receipt" :style="{ width: ticketContentWidth(anchoMm) }">
     <!-- Encabezado: WOOW KIDS y la sucursal de la venta -->
     <div class="ticket-header">
-      <h1>WOOW KIDS</h1>
+      <TicketLogo :ancho-mm="anchoMm" />
       <p v-if="sucursal?.nombre">{{ sucursal.nombre }}</p>
       <p v-if="sucursal?.direccion">{{ sucursal.direccion }}</p>
       <p v-if="lineaCiudad">{{ lineaCiudad }}</p>
@@ -163,12 +162,6 @@ function formatearFecha(iso: string | null): string {
   text-align: center;
   margin-bottom: 4px;
 } /* Reducido para evitar el doble espacio */
-.ticket-header h1 {
-  font-size: 22px;
-  font-weight: 900;
-  margin: 0 0 4px 0;
-  letter-spacing: 1px;
-}
 .ticket-header p {
   margin: 3px 0;
   font-size: 11px;

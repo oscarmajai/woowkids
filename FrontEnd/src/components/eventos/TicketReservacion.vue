@@ -11,9 +11,13 @@
  * depender de estado que ya podría haber cambiado.
  */
 
+import { ref } from 'vue'
+import { useQuasar } from 'quasar'
 import type { TicketReservacionProps } from '@/types/ticketReservacion'
 
 import { avisoLiquidacion } from '@/utils/reservacionPrecio'
+import { printTicketElement } from '@/utils/ticketPrinting'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
 
 const props = defineProps<TicketReservacionProps>()
 
@@ -34,21 +38,30 @@ function fechaEmision(): string {
   )
 }
 
-function imprimir() {
-  const titulo = document.title
-  // El navegador usa document.title como nombre sugerido al guardar como PDF.
-  document.title = `Reservacion_${folioCorto()}`
-  window.print()
-  document.title = titulo
+const $q = useQuasar()
+const ticketRef = ref<HTMLElement | null>(null)
+const imprimiendo = ref(false)
+
+async function imprimir() {
+  if (imprimiendo.value) return
+  imprimiendo.value = true
+  try {
+    // El título es el nombre que sugiere el navegador al guardar como PDF.
+    await printTicketElement(ticketRef.value, null, `Reservacion_${folioCorto()}`)
+  } catch (error) {
+    $q.notify({ type: 'negative', message: (error as Error).message })
+  } finally {
+    imprimiendo.value = false
+  }
 }
 </script>
 
 <template>
   <div class="ticket-wrapper">
-    <div class="ticket">
+    <div ref="ticketRef" class="ticket" data-print-compact>
       <!-- Encabezado -->
       <div class="text-center q-mb-md">
-        <div class="text-h6 text-weight-bold">Woow Kids</div>
+        <TicketLogo :ancho-mm="58" />
         <div class="text-caption text-grey-7">{{ sucursal }}</div>
       </div>
 
@@ -141,9 +154,10 @@ function imprimir() {
         unelevated
         no-caps
         color="primary"
-        label="Imprimir ticket"
+        :label="imprimiendo ? 'Imprimiendo…' : 'Imprimir ticket'"
+        :loading="imprimiendo"
         icon="print"
-        class="full-width ticket-print-hide"
+        class="full-width"
         style="border-radius: 8px; font-weight: 600"
         @click="imprimir"
       />
@@ -247,56 +261,5 @@ function imprimir() {
   font-size: 0.7rem;
   color: var(--text-muted);
   text-align: center;
-}
-</style>
-
-<style>
-/* Sin `scoped`: al imprimir hay que ocultar TODO lo demás de la app (menú lateral,
-   encabezado, asistente), y eso exige alcanzar elementos fuera de este componente. */
-@media print {
-  @page {
-    margin: 0;
-  }
-
-  body,
-  #q-app,
-  .q-layout,
-  .q-page-container,
-  .q-page {
-    background: none !important;
-    background-color: white !important;
-  }
-
-  body * {
-    visibility: hidden !important;
-  }
-
-  .ticket-wrapper,
-  .ticket-wrapper * {
-    visibility: visible !important;
-  }
-
-  .ticket-wrapper {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    display: flex !important;
-    justify-content: center !important;
-    background: none !important;
-  }
-
-  .ticket {
-    box-shadow: none !important;
-    border: none !important;
-    padding: 24px !important;
-    max-width: 100% !important;
-  }
-
-  .ticket-print-hide {
-    display: none !important;
-  }
 }
 </style>
