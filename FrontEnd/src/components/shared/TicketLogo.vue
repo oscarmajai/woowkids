@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 /**
  * Logo de Woow Kids para el encabezado de todos los tickets.
@@ -15,11 +15,15 @@ const props = withDefaults(defineProps<{ anchoMm?: 58 | 80 | 210 }>(), { anchoMm
 const chico = computed(() => props.anchoMm === 58)
 const src = computed(() => (chico.value ? '/ticket-logo-58.png' : '/ticket-logo-80.png'))
 const anchoLogo = computed(() => (chico.value ? '34mm' : '46mm'))
+
+// Si el archivo no carga se oculta: una imagen rota detendría la impresión de
+// todo el ticket y es preferible imprimirlo sin logo.
+const fallo = ref(false)
 </script>
 
 <template>
-  <div class="ticket-logo">
-    <img :src="src" alt="Woow Kids" :style="{ width: anchoLogo }" />
+  <div v-if="!fallo" class="ticket-logo">
+    <img :src="src" alt="Woow Kids" :style="{ width: anchoLogo }" @error="fallo = true" />
   </div>
 </template>
 

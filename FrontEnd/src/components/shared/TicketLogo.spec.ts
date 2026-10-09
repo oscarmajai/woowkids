@@ -24,4 +24,10 @@ describe('TicketLogo', () => {
         .attributes('src'),
     ).toBe('/ticket-logo-80.png')
   })
+
+  it('si el archivo del logo no carga, se oculta para no bloquear la impresión', async () => {
+    const wrapper = mount(TicketLogo)
+    await wrapper.get('img').trigger('error')
+    expect(wrapper.find('img').exists()).toBe(false)
+  })
 })
