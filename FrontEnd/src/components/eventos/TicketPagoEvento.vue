@@ -8,13 +8,17 @@
  * componente haría que ambas hojas de impresión (inyectadas globalmente por
  * Vue sin importar cuál esté montada) se pisaran entre sí.
  *
- * Se imprime a 2 pulgadas de ancho porque así está calibrada la impresora de
- * tickets del sistema.
+ * Se imprime con printTicketElement: toma el ancho del papel de la impresora
+ * (58 u 80 mm) en vez de fijarlo.
  */
 
+import { ref } from 'vue'
+import { useQuasar } from 'quasar'
 import type { TicketPagoEventoProps } from '@/types/ticketPagoEvento'
 
 import { avisoLiquidacion } from '@/utils/reservacionPrecio'
+import { printTicketElement } from '@/utils/ticketPrinting'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
 
 const props = defineProps<TicketPagoEventoProps>()
 defineEmits<{ close: [] }>()
@@ -35,21 +39,30 @@ function fechaEmision(): string {
   )
 }
 
-function imprimir() {
-  const titulo = document.title
-  // El navegador usa document.title como nombre sugerido al guardar como PDF.
-  document.title = `Pago_${folioCorto()}`
-  window.print()
-  document.title = titulo
+const $q = useQuasar()
+const ticketRef = ref<HTMLElement | null>(null)
+const imprimiendo = ref(false)
+
+async function imprimir() {
+  if (imprimiendo.value) return
+  imprimiendo.value = true
+  try {
+    // El título es el nombre que sugiere el navegador al guardar como PDF.
+    await printTicketElement(ticketRef.value, null, `Pago_${folioCorto()}`)
+  } catch (error) {
+    $q.notify({ type: 'negative', message: (error as Error).message })
+  } finally {
+    imprimiendo.value = false
+  }
 }
 </script>
 
 <template>
   <div class="tpe-wrapper">
-    <div class="tpe-ticket">
+    <div ref="ticketRef" class="tpe-ticket" data-print-compact>
       <!-- Encabezado -->
       <div class="text-center q-mb-md">
-        <div class="text-h6 text-weight-bold">Woow Kids</div>
+        <TicketLogo :ancho-mm="58" />
         <div class="text-caption text-grey-7">{{ sucursal }}</div>
         <div class="ticket-tipo q-mt-xs">Comprobante de pago</div>
       </div>
@@ -124,7 +137,8 @@ function imprimir() {
           unelevated
           no-caps
           color="primary"
-          label="Imprimir ticket"
+          :label="imprimiendo ? 'Imprimiendo…' : 'Imprimir ticket'"
+          :loading="imprimiendo"
           icon="print"
           class="col"
           style="border-radius: 8px; font-weight: 600"
@@ -237,81 +251,5 @@ function imprimir() {
   font-size: 0.7rem;
   color: var(--text-muted);
   text-align: center;
-}
-</style>
-
-<style>
-/* Sin `scoped`: al imprimir hay que ocultar TODO lo demás de la app (menú lateral,
-   encabezado, diálogo), y eso exige alcanzar elementos fuera de este componente.
-   Las clases de este bloque llevan el prefijo `tpe-` para no chocar con el
-   bloque global equivalente de TicketReservacion.vue. */
-@media print {
-  /* Impresora de tickets del sistema: rollo de 2". */
-  @page {
-    size: 2in auto;
-    margin: 0;
-  }
-
-  body,
-  #q-app,
-  .q-layout,
-  .q-page-container,
-  .q-page,
-  .q-dialog__backdrop {
-    background: none !important;
-    background-color: white !important;
-  }
-
-  body * {
-    visibility: hidden !important;
-  }
-
-  .tpe-wrapper,
-  .tpe-wrapper * {
-    visibility: visible !important;
-  }
-
-  .tpe-wrapper {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 2in !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    display: block !important;
-    background: none !important;
-  }
-
-  .tpe-ticket {
-    box-shadow: none !important;
-    border: none !important;
-    padding: 6px 8px !important;
-    max-width: 2in !important;
-    width: 2in !important;
-    border-radius: 0 !important;
-    font-size: 9px !important;
-  }
-
-  .tpe-ticket .text-h6 {
-    font-size: 13px !important;
-  }
-
-  .tpe-ticket .ticket-row,
-  .tpe-ticket .ticket-saldo,
-  .tpe-ticket .ticket-label,
-  .tpe-ticket .ticket-value,
-  .tpe-ticket .ticket-section-title,
-  .tpe-ticket .ticket-tipo,
-  .tpe-ticket .text-caption {
-    font-size: 8px !important;
-  }
-
-  .tpe-ticket .ticket-folio {
-    font-size: 11px !important;
-  }
-
-  .tpe-print-hide {
-    display: none !important;
-  }
 }
 </style>

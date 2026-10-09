@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePadresAuthStore } from '@/stores/padres/padresAuthStore'
-import { RUTA_AVISO_PRIVACIDAD } from '@/utils/avisoPrivacidad'
+import AvisoPrivacidadPadres from '@/components/padres/AvisoPrivacidadPadres.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -66,9 +66,7 @@ onUnmounted(() => {
       <p class="access-padre__text">Pide un enlace nuevo en recepción al registrar a tu hijo.</p>
     </div>
 
-    <router-link :to="RUTA_AVISO_PRIVACIDAD" class="access-padre__aviso">
-      Aviso de privacidad
-    </router-link>
+    <AvisoPrivacidadPadres />
   </q-page>
 </template>
 
@@ -82,12 +80,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 28px;
-
-  &__aviso {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--text-secondary);
-  }
 
   &__state {
     max-width: 340px;
