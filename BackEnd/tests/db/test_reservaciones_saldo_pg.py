@@ -473,3 +473,37 @@ async def test_checkin_liga_el_evento_elegido_y_no_otro_simultaneo(
         pg, e["sucursal"], uuid.uuid4()
     )
     assert ajeno is None
+
+
+async def _evento_que_empieza_en(
+    pg: asyncpg.Connection, e: dict[str, Any], minutos: int
+) -> uuid.UUID:
+    """Evento confirmado que empieza dentro de `minutos`, medidos en la hora
+    LOCAL de la sucursal (la que se captura al reservar), no en UTC."""
+    ahora_local = await pg.fetchval(
+        "SELECT (NOW() AT TIME ZONE zona_horaria) FROM sucursales WHERE id = $1", e["sucursal"]
+    )
+    inicio = ahora_local + timedelta(minutes=minutos)
+    hora_inicio = inicio.time().replace(microsecond=0)
+    fin = time(23, 59, 59)
+    if hora_inicio >= fin:
+        pytest.skip("Muy cerca de la medianoche: el evento cruzaría de día.")
+    return await _evento_liquidado(pg, e, inicio.date(), hora_inicio, fin)
+
+
+async def test_comanda_de_evento_no_sale_a_cocina_antes_de_tiempo(
+    pg: asyncpg.Connection, escenario: dict[str, Any]
+) -> None:
+    """La comanda sale 2 h antes del evento. El horario es local: comparado
+    contra NOW() (UTC) sin convertir, un evento de dentro de 3 h ya salía."""
+    rid = await _evento_que_empieza_en(pg, escenario, 180)
+    pendientes = await reservaciones_repository.listar_pendientes_de_comanda(pg, 120)
+    assert rid not in {p["id"] for p in pendientes}
+
+
+async def test_comanda_de_evento_sale_cuando_entra_a_la_ventana(
+    pg: asyncpg.Connection, escenario: dict[str, Any]
+) -> None:
+    rid = await _evento_que_empieza_en(pg, escenario, 90)
+    pendientes = await reservaciones_repository.listar_pendientes_de_comanda(pg, 120)
+    assert rid in {p["id"] for p in pendientes}
