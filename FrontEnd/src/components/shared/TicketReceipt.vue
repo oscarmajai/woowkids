@@ -4,14 +4,12 @@ import type { DetalleOrden, DetalleProducto } from '@/api/historialApi'
 import { agruparPorRenglon, resumirHijos } from '@/utils/renglonesOrden'
 import { ticketContentWidth, type TicketWidth } from '@/utils/ticketPrinting'
 import TicketLogo from '@/components/shared/TicketLogo.vue'
+import { ordenCancelada } from '@/utils/estadoOrden'
 
 const props = defineProps<{ orden: DetalleOrden; anchoMm: TicketWidth }>()
-const esCancelado = computed(() => {
-  const estado = props.orden?.estado_actual
-  if (!estado) return false
-  if (props.orden?.tipo_origen === 'reservacion') return estado === 'cancelada'
-  return estado === 'C'
-})
+const esCancelado = computed(() =>
+  ordenCancelada(props.orden?.tipo_origen, props.orden?.estado_actual),
+)
 
 // Cada combo lleva solo sus productos (por renglón, no por nombre), con
 // los iguales sumados ("2x Hot dog" en un 2x combo).

@@ -7,6 +7,7 @@ import type { DetalleOrden } from '@/api/historialApi'
 import { printTicketElement } from '@/utils/ticketPrinting'
 import TicketReceipt from '@/components/shared/TicketReceipt.vue'
 import { useAuthStore } from '@/stores/auth'
+import { ordenCancelada } from '@/utils/estadoOrden'
 const props = withDefaults(
   defineProps<{
     tipoOrigen?: 'comanda' | 'estancia' | 'reservacion'
@@ -56,12 +57,9 @@ onBeforeUnmount(() => {
   document.body.style.overflow = ''
 })
 
-const esCancelado = computed(() => {
-  const estado = orden.value?.estado_actual
-  if (!estado) return false
-  if (orden.value?.tipo_origen === 'reservacion') return estado === 'cancelada'
-  return estado === 'C'
-})
+const esCancelado = computed(() =>
+  ordenCancelada(orden.value?.tipo_origen, orden.value?.estado_actual),
+)
 
 const referenciaLabel = computed(() =>
   orden.value?.tipo_origen === 'comanda' ? 'TICKET' : 'CLIENTE',
