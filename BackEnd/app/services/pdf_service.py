@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -18,6 +19,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     HRFlowable,
+    Image,
     KeepTogether,
     Paragraph,
     SimpleDocTemplate,
@@ -29,6 +31,10 @@ from reportlab.platypus import (
 from app.schemas.caja import DetalleArqueoResponse
 
 _MEXICO_TZ = pytz.timezone("America/Mexico_City")
+
+_LOGO = Path(__file__).resolve().parent.parent / "assets" / "woow-kids-logo.png"
+_LOGO_ANCHO = 42 * mm
+_LOGO_PROPORCION = 647 / 1454  # alto / ancho del archivo
 
 _MARGIN = 20 * mm
 _PAGE_WIDTH, _PAGE_HEIGHT = letter
@@ -133,6 +139,16 @@ def _dibujar_pie(c: Any, doc: Any) -> None:
     )
     c.drawRightString(_PAGE_WIDTH - _MARGIN, _MARGIN * 0.5, f"Página {doc.page}")
     c.restoreState()
+
+
+def _logo() -> Image | None:
+    """Logo de Woow Kids para el encabezado. Si el archivo falta no se rompe el
+    comprobante: sale sin logo."""
+    if not _LOGO.is_file():
+        return None
+    logo = Image(str(_LOGO), width=_LOGO_ANCHO, height=_LOGO_ANCHO * _LOGO_PROPORCION)
+    logo.hAlign = "LEFT"
+    return logo
 
 
 def _separador() -> HRFlowable:
@@ -304,6 +320,10 @@ def generar_pdf_arqueo(detalle: DetalleArqueoResponse) -> bytes:
     story: list[Any] = []
 
     # ── Encabezado ──────────────────────────────────────────────────────
+    logo = _logo()
+    if logo is not None:
+        story.append(logo)
+        story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("Comprobante de Cierre de Caja", _ESTILO_TITULO))
     story.append(Spacer(1, 2 * mm))
     story.append(

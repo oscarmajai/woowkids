@@ -148,6 +148,9 @@ export function createTicketDocument(
     }
     copy.style.maxHeight = 'none'
     copy.style.contentVisibility = 'visible'
+    // Elementos que solo existen en el papel (p. ej. el logo de un reporte):
+    // se ocultan en pantalla y el snapshot los muestra.
+    if (node.hasAttribute('data-print-only')) copy.style.setProperty('display', 'block')
     if (termico && !['IMG', 'CANVAS', 'SVG'].includes(node.tagName)) {
       const ajustes = ajustesTermicos(computed)
       for (const [name, value] of Object.entries(ajustes)) copy.style.setProperty(name, value)
