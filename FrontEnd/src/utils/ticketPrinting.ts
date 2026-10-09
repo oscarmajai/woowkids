@@ -20,7 +20,14 @@ interface EstiloTinta {
  * manchas. Devuelve solo las propiedades que hay que cambiar.
  */
 export function ajustesTermicos(estilo: EstiloTinta): Record<string, string> {
-  const cambios: Record<string, string> = { color: '#000' }
+  // Chromium pinta el texto con -webkit-text-fill-color, que el snapshot copia
+  // con el color original: sin esto el gris sigue saliendo gris aunque `color`
+  // diga negro.
+  const cambios: Record<string, string> = {
+    color: '#000',
+    '-webkit-text-fill-color': '#000',
+    'text-decoration-color': '#000',
+  }
   const tamano = parseFloat(estilo.fontSize)
   if (Number.isFinite(tamano) && tamano < TAMANO_MINIMO_TERMICO_PX) {
     cambios['font-size'] = `${TAMANO_MINIMO_TERMICO_PX}px`

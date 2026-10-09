@@ -14,6 +14,14 @@ describe('ajustesTermicos', () => {
     expect(ajustesTermicos({ ...base, color: 'rgb(102, 102, 102)' }).color).toBe('#000')
   })
 
+  it('también fuerza el color con el que Chromium pinta el texto', () => {
+    // Si solo cambia `color`, el -webkit-text-fill-color copiado del original
+    // (gris) gana al pintar y el texto sale tenue en el papel.
+    const cambios = ajustesTermicos({ ...base, color: 'rgb(148, 163, 184)' })
+    expect(cambios['-webkit-text-fill-color']).toBe('#000')
+    expect(cambios['text-decoration-color']).toBe('#000')
+  })
+
   it('sube el texto menor al mínimo legible', () => {
     const cambios = ajustesTermicos({ ...base, fontSize: '9px' })
     expect(cambios['font-size']).toBe(`${TAMANO_MINIMO_TERMICO_PX}px`)
