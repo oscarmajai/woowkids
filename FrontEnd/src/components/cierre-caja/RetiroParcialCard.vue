@@ -96,7 +96,7 @@
       </div>
       <div class="retiro-receipt__scroll">
         <div ref="comprobanteRef" class="retiro-receipt__ticket" style="width: 80mm">
-          <h2>WOOW KIDS</h2>
+          <TicketLogo :ancho-mm="80" />
           <p>{{ turno.sucursalNombre }}</p>
           <h3>COMPROBANTE DE RETIRO PARCIAL</h3>
           <p><strong>Folio:</strong> {{ comprobante.id }}</p>
@@ -133,6 +133,7 @@ import { useTurnoCajaStore } from '@/stores/turnoCaja'
 import { filtrarTeclaDecimal, reglaDecimal } from '@/utils/validacionNumerica'
 import type { ConceptoRetiro, TipoDestinatario, RetiroParcialResponse } from '@/types/turnoCaja'
 import { printTicketElement } from '@/utils/ticketPrinting'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
 
 const emit = defineEmits<{
   (e: 'volver'): void

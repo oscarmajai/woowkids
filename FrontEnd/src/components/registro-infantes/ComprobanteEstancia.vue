@@ -2,7 +2,7 @@
   <div id="printable-voucher" ref="raiz" class="voucher">
     <!-- Encabezado -->
     <div class="text-center">
-      <div class="ticket-brand">Woow Kids</div>
+      <TicketLogo :ancho-mm="80" />
       <div class="ticket-sub">{{ datos.sucursal }}</div>
       <div class="ticket-sub">Cajero: {{ datos.cajero }}</div>
       <div v-if="datos.reimpresion" class="ticket-reprint">REIMPRESIÓN</div>
@@ -65,6 +65,7 @@
 import { computed, ref } from 'vue'
 import type { DatosComprobanteEstancia } from '@/types/comprobanteEstancia'
 import { notaVisible } from '@/utils/notasNino'
+import TicketLogo from '@/components/shared/TicketLogo.vue'
 
 /**
  * Ticket del comprobante de entrada de estancias. Solo pinta: lo usan el
@@ -103,12 +104,6 @@ const fecha = computed(
   color: #000;
   font-size: 11px;
   line-height: 1.25;
-}
-
-.ticket-brand {
-  font-size: 16px;
-  font-weight: bold;
-  letter-spacing: 0.5px;
 }
 
 .ticket-sub {

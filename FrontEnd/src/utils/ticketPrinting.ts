@@ -4,6 +4,43 @@ export function ticketContentWidth(width: TicketWidth): string {
   return `${width === 210 ? 190 : width}mm`
 }
 
+/** Texto mínimo legible en papel térmico: por debajo de esto la tinta se empasta. */
+export const TAMANO_MINIMO_TERMICO_PX = 11
+
+interface EstiloTinta {
+  fontSize: string
+  fontWeight: string
+  color: string
+  backgroundColor: string
+}
+
+/**
+ * Ajustes de tinta para papel térmico (un solo tono): el gris sale tenue o
+ * punteado, el texto de 9-10 px se empasta y los fondos de color salen como
+ * manchas. Devuelve solo las propiedades que hay que cambiar.
+ */
+export function ajustesTermicos(estilo: EstiloTinta): Record<string, string> {
+  const cambios: Record<string, string> = { color: '#000' }
+  const tamano = parseFloat(estilo.fontSize)
+  if (Number.isFinite(tamano) && tamano < TAMANO_MINIMO_TERMICO_PX) {
+    cambios['font-size'] = `${TAMANO_MINIMO_TERMICO_PX}px`
+  }
+  // El peso normal de un texto chico se adelgaza al imprimir: se refuerza.
+  const peso = parseInt(estilo.fontWeight, 10)
+  if (Number.isFinite(peso) && peso < 600 && (!Number.isFinite(tamano) || tamano <= 13)) {
+    cambios['font-weight'] = '600'
+  }
+  const fondo = estilo.backgroundColor.replace(/\s/g, '')
+  const sinFondo = fondo === 'transparent' || fondo === 'rgba(0,0,0,0)' || fondo === ''
+  const blanco = fondo === 'rgb(255,255,255)' || fondo === 'rgba(255,255,255,1)'
+  if (!sinFondo && !blanco) {
+    cambios['background-color'] = 'transparent'
+    cambios['outline'] = '1px solid #000'
+    cambios['outline-offset'] = '-1px'
+  }
+  return cambios
+}
+
 const excluded = '.print-hide, [data-no-print], button, script, iframe, object, embed'
 
 function fontRules(doc: Document): string {
@@ -36,11 +73,12 @@ function fontRules(doc: Document): string {
 export function createTicketDocument(
   element: HTMLElement,
   width: TicketWidth | null = null,
+  titulo = 'Comprobante',
 ): Document {
   const source = element.ownerDocument
   const view = source.defaultView
   if (!view || !element.isConnected) throw new Error('El comprobante no está disponible.')
-  const doc = source.implementation.createHTMLDocument('Comprobante')
+  const doc = source.implementation.createHTMLDocument(titulo)
   doc.documentElement.lang = 'es-MX'
   const base = doc.createElement('base')
   base.href = source.baseURI
@@ -55,6 +93,14 @@ export function createTicketDocument(
     [data-print-root] * { overflow: visible !important; }
     .ticket-row, .ticket-info, .ticket-header, .ticket-totals-row, .ticket-grand-total,
     .ticket-footer, .ticket-cancelado, [data-print-keep] { break-inside: avoid; }
+    [data-print-root] * { box-shadow: none !important; text-shadow: none !important; }
+    [data-print-root] img { image-rendering: pixelated; filter: none !important; }
+  `
+  if (width !== 210)
+    styles.textContent += `
+    [data-print-root] { border-radius: 0 !important; box-shadow: none !important;
+      border: 0 !important; background: white !important; }
+    [data-print-root][data-print-compact] { padding: 2mm 3mm !important; }
   `
   if (width === null)
     styles.textContent += `
@@ -65,6 +111,8 @@ export function createTicketDocument(
     }
   `
   doc.head.append(styles)
+  // A4 (reportes) conserva sus colores; el resto sale en papel térmico.
+  const termico = width !== 210
   const clone = element.cloneNode(true) as HTMLElement
   const originals = [element, ...Array.from(element.querySelectorAll<HTMLElement>('*'))]
   const copies = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))]
@@ -93,6 +141,11 @@ export function createTicketDocument(
     }
     copy.style.maxHeight = 'none'
     copy.style.contentVisibility = 'visible'
+    if (termico && !['IMG', 'CANVAS', 'SVG'].includes(node.tagName)) {
+      const ajustes = ajustesTermicos(computed)
+      for (const [name, value] of Object.entries(ajustes)) copy.style.setProperty(name, value)
+      copy.style.setProperty('border-color', '#000')
+    }
     for (const attr of Array.from(copy.attributes)) {
       if (attr.name.startsWith('on')) copy.removeAttribute(attr.name)
     }
@@ -152,6 +205,7 @@ let printing = false
 export async function printTicketElement(
   element: HTMLElement | null,
   width: TicketWidth | null = null,
+  titulo = 'Comprobante',
 ): Promise<void> {
   if (!element) throw new Error('El comprobante todavía no está listo para imprimir.')
   if (printing) throw new Error('Ya hay un comprobante en preparación para imprimir.')
@@ -165,7 +219,7 @@ export async function printTicketElement(
     try {
       element.style.setProperty('width', ticketContentWidth(width ?? 80), 'important')
       element.style.setProperty('max-width', 'none', 'important')
-      snapshot = createTicketDocument(element, width)
+      snapshot = createTicketDocument(element, width, titulo)
     } finally {
       if (originalStyle === null) element.removeAttribute('style')
       else element.setAttribute('style', originalStyle)
